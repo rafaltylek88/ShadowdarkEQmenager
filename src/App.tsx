@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import {
+  ArrowRightLeft,
   Backpack,
   Beef,
   Building2,
@@ -58,7 +59,7 @@ import {
   transferCampaignLight,
 } from './lib/light'
 import type { CampaignLight } from './lib/light'
-import { feedExpedition } from './lib/rations'
+import { feedExpedition, transferRation } from './lib/rations'
 
 const initialCampaigns: Campaign[] = [
   {
@@ -179,6 +180,9 @@ function App() {
   const [lightTransferCharacterId, setLightTransferCharacterId] = useState('')
   const [lightNow, setLightNow] = useState(() => Date.now())
   const [feedingExpedition, setFeedingExpedition] = useState(false)
+  const [transferringRation, setTransferringRation] = useState(false)
+  const [rationTransferFromId, setRationTransferFromId] = useState('')
+  const [rationTransferToId, setRationTransferToId] = useState('')
 
   const isCloudMode = Boolean(supabaseEnabled && session)
 
@@ -647,6 +651,96 @@ function App() {
       ...characters.map(character => rationCounts.get(character.id) ?? 0)
     )
   }, [characters, rationCounts])
+
+
+  const charactersMissingRations = useMemo(
+    () =>
+      characters.filter(
+        character => (rationCounts.get(character.id) ?? 0) < 1
+      ),
+    [characters, rationCounts]
+  )
+
+  const rationDonors = useMemo(
+    () =>
+      characters
+        .filter(character => (rationCounts.get(character.id) ?? 0) > 1)
+        .sort(
+          (a, b) =>
+            (rationCounts.get(b.id) ?? 0) -
+            (rationCounts.get(a.id) ?? 0)
+        ),
+    [characters, rationCounts]
+  )
+
+  useEffect(() => {
+    if (
+      !charactersMissingRations.some(
+        character => character.id === rationTransferToId
+      )
+    ) {
+      setRationTransferToId(charactersMissingRations[0]?.id ?? '')
+    }
+
+    if (
+      !rationDonors.some(
+        character => character.id === rationTransferFromId
+      )
+    ) {
+      setRationTransferFromId(rationDonors[0]?.id ?? '')
+    }
+  }, [
+    charactersMissingRations,
+    rationDonors,
+    rationTransferFromId,
+    rationTransferToId,
+  ])
+
+  async function handleTransferRation() {
+    if (!activeId || !rationTransferFromId || !rationTransferToId) {
+      setError('Wybierz dawcę i odbiorcę racji.')
+      return
+    }
+
+    if (rationTransferFromId === rationTransferToId) {
+      setError('Dawca i odbiorca muszą być różnymi postaciami.')
+      return
+    }
+
+    setTransferringRation(true)
+
+    try {
+      await transferRation(
+        activeId,
+        rationTransferFromId,
+        rationTransferToId
+      )
+
+      await Promise.all([refreshItems(), refreshCharacters()])
+
+      const from = characters.find(
+        character => character.id === rationTransferFromId
+      )
+      const to = characters.find(
+        character => character.id === rationTransferToId
+      )
+
+      flash(
+        `Przekazano 1 rację: ${from?.name ?? 'dawca'} → ${
+          to?.name ?? 'odbiorca'
+        }.`
+      )
+    } catch (e: any) {
+      console.error('TRANSFER RATION ERROR:', e)
+      setError(
+        e?.message ||
+          e?.details ||
+          'Nie udało się przekazać racji.'
+      )
+    } finally {
+      setTransferringRation(false)
+    }
+  }
 
   function formatLastFed(value: string | null) {
     if (!value) return 'Nigdy'
@@ -1578,7 +1672,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 2G • racje i karmienie</span>
+              Etap 2G.1 • przekazywanie racji</span>
           </div>
 
         </aside>
@@ -1914,10 +2008,113 @@ function App() {
                 całej ekspedycji.
               </p>
 
+              {charactersMissingRations.length > 0 ? (
+                <div className="setup-banner" style={{ marginBottom: 14 }}>
+                  <Beef size={18} />
+                  <div>
+                    <strong>Brakuje racji</strong>
+                    <span>
+                      {charactersMissingRations
+                        .map(character => character.name)
+                        .join(', ')}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="setup-banner" style={{ marginBottom: 14 }}>
+                  <Beef size={18} />
+                  <div>
+                    <strong>Racje rozdzielone</strong>
+                    <span>Każda postać ma co najmniej 1 własną rację.</span>
+                  </div>
+                </div>
+              )}
+
+              {charactersMissingRations.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <p className="muted">
+                    Przekaż 1 rację od postaci, która ma zapas. Dawcy po
+                    przekazaniu musi pozostać co najmniej 1 racja. Pojemność
+                    ekwipunku odbiorcy jest sprawdzana przed zatwierdzeniem.
+                  </p>
+
+                  {rationDonors.length > 0 ? (
+                    <>
+                      <label>
+                        Dawca
+                        <select
+                          value={rationTransferFromId}
+                          onChange={e =>
+                            setRationTransferFromId(e.target.value)
+                          }
+                        >
+                          {rationDonors.map(character => (
+                            <option key={character.id} value={character.id}>
+                              {character.name} • racje:{' '}
+                              {rationCounts.get(character.id) ?? 0} • sloty:{' '}
+                              {Number(
+                                usedSlotsForCharacter(character.id).toFixed(2)
+                              )}
+                              /{Math.max(10, character.strength)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label>
+                        Odbiorca
+                        <select
+                          value={rationTransferToId}
+                          onChange={e =>
+                            setRationTransferToId(e.target.value)
+                          }
+                        >
+                          {charactersMissingRations.map(character => (
+                            <option key={character.id} value={character.id}>
+                              {character.name} • racje:{' '}
+                              {rationCounts.get(character.id) ?? 0} • sloty:{' '}
+                              {Number(
+                                usedSlotsForCharacter(character.id).toFixed(2)
+                              )}
+                              /{Math.max(10, character.strength)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <button
+                        className="secondary full"
+                        onClick={handleTransferRation}
+                        disabled={
+                          transferringRation ||
+                          !rationTransferFromId ||
+                          !rationTransferToId
+                        }
+                      >
+                        <ArrowRightLeft size={16} />
+                        {transferringRation
+                          ? 'Przekazywanie…'
+                          : 'Przekaż 1 rację'}
+                      </button>
+                    </>
+                  ) : (
+                    <div className="setup-banner">
+                      <Beef size={18} />
+                      <div>
+                        <strong>Brak nadmiarowej racji</strong>
+                        <span>
+                          Żadna postać nie ma więcej niż 1 racji do
+                          przekazania.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <p className="muted">
-                Każda postać zużywa 1 rację wyłącznie ze swojego ekwipunku.
-                Jeśli choć jedna postać nie ma racji, karmienie całej
-                ekspedycji nie zostanie wykonane.
+                Nakarmienie ekspedycji zużywa 1 rację wyłącznie z własnego
+                ekwipunku każdej postaci.
               </p>
 
               <button
@@ -1926,7 +2123,7 @@ function App() {
                 disabled={
                   feedingExpedition ||
                   characters.length === 0 ||
-                  expeditionFeedsAvailable < 1
+                  charactersMissingRations.length > 0
                 }
               >
                 <Utensils size={16} />
