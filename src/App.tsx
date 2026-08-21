@@ -386,13 +386,16 @@ function App() {
       flash(
         'Kampania została utworzona.'
       )
-    } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : 'Nie udało się utworzyć kampanii.'
-      )
-    }
+    } catch (e: any) {
+  console.error('CREATE CAMPAIGN ERROR:', e)
+
+  setError(
+    e?.message ||
+    e?.details ||
+    e?.hint ||
+    JSON.stringify(e)
+  )
+}
   }
 
   async function handleJoin() {
