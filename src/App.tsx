@@ -47,7 +47,7 @@ import {
   updateItem,
 } from './lib/items'
 import type { CharacterItem, ItemCategory } from './lib/items'
-import { createCatalogItem, loadCatalog } from './lib/catalog'
+import { createCatalogItem, deleteCatalogItem, loadCatalog } from './lib/catalog'
 import type { CatalogItem, CatalogItemCategory } from './lib/catalog'
 
 const initialCampaigns: Campaign[] = [
@@ -77,6 +77,7 @@ const nav = [
   ['Wozy', Truck],
   ['Siedziby', Castle],
   ['Ekwipunek wspólny', Backpack],
+  ['Biblioteka', Package],
   ['Podsumowanie', Coins],
 ] as const
 
@@ -154,6 +155,8 @@ function App() {
   const [catalogWeaponProperties, setCatalogWeaponProperties] = useState('')
   const [catalogArmorClass, setCatalogArmorClass] = useState('')
   const [catalogArmorProperties, setCatalogArmorProperties] = useState('')
+  const [showCatalogImport, setShowCatalogImport] = useState(false)
+  const [catalogImportText, setCatalogImportText] = useState('')
 
   const isCloudMode = Boolean(supabaseEnabled && session)
 
@@ -862,6 +865,149 @@ function App() {
     }
   }
 
+
+  function catalogCategoryLabel(category: CatalogItemCategory) {
+    switch (category) {
+      case 'food': return 'Żywność'
+      case 'light': return 'Światło'
+      case 'weapon': return 'Broń'
+      case 'armor': return 'Pancerz'
+      default: return 'Przedmiot'
+    }
+  }
+
+  function catalogItemDetails(entry: CatalogItem) {
+    const parts = [`${entry.slotsPerUnit} slot./szt.`]
+    if (entry.category === 'light' && entry.lightMinutes) parts.push(`${entry.lightMinutes} min światła`)
+    if (entry.category === 'weapon') {
+      if (entry.weaponDamage) parts.push(`obrażenia ${entry.weaponDamage}`)
+      if (entry.weaponRange) parts.push(`zasięg ${entry.weaponRange}`)
+      if (entry.weaponProperties) parts.push(entry.weaponProperties)
+    }
+    if (entry.category === 'armor') {
+      if (entry.armorClass) parts.push(`KP/AC ${entry.armorClass}`)
+      if (entry.armorProperties) parts.push(entry.armorProperties)
+    }
+    return parts.join(' • ')
+  }
+
+  async function addStarterCatalog() {
+    if (!activeId) return
+    const existing = new Set(catalog.map(item => item.name.trim().toLowerCase()))
+    const starter: Array<{
+      name: string
+      slotsPerUnit: number
+      category: CatalogItemCategory
+      lightMinutes?: number | null
+    }> = [
+      { name: 'Pochodnia', slotsPerUnit: 1, category: 'light', lightMinutes: 60 },
+      { name: 'Racje', slotsPerUnit: 0.33, category: 'food', lightMinutes: null },
+    ]
+
+    try {
+      for (const item of starter) {
+        if (existing.has(item.name.toLowerCase())) continue
+        await createCatalogItem({ campaignId: activeId, ...item })
+      }
+      await refreshCatalog()
+      flash('Dodano bazowe pozycje do biblioteki.')
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się dodać bazowej biblioteki.')
+    }
+  }
+
+  async function removeCatalogEntry(entry: CatalogItem) {
+    if (!window.confirm(`Usunąć "${entry.name}" z biblioteki kampanii? Przedmioty już w ekwipunku pozostaną.`)) return
+    try {
+      await deleteCatalogItem(entry.id)
+      await refreshCatalog()
+      flash('Usunięto pozycję z biblioteki.')
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się usunąć pozycji.')
+    }
+  }
+
+  function parseCatalogCsv(text: string) {
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+    if (!lines.length) return []
+    const start = lines[0].toLowerCase().startsWith('name;') ? 1 : 0
+
+    return lines.slice(start).map((line, index) => {
+      const cols = line.split(';').map(value => value.trim())
+      const [name, categoryRaw = 'normal', slotsRaw = '1', lightRaw = '',
+        weaponDamage = '', weaponRange = '', weaponProperties = '',
+        armorClass = '', armorProperties = ''] = cols
+
+      if (!name) throw new Error(`Brak nazwy przedmiotu w wierszu ${index + 1 + start}.`)
+
+      const allowed: CatalogItemCategory[] = ['normal', 'food', 'light', 'weapon', 'armor']
+      const category = allowed.includes(categoryRaw as CatalogItemCategory)
+        ? (categoryRaw as CatalogItemCategory) : 'normal'
+
+      const slotsPerUnit = Number(slotsRaw.replace(',', '.'))
+      if (!Number.isFinite(slotsPerUnit) || slotsPerUnit < 0) {
+        throw new Error(`Nieprawidłowa liczba slotów dla "${name}".`)
+      }
+
+      const lightParsed = lightRaw === '' ? null : Number(lightRaw.replace(',', '.'))
+
+      return {
+        name, category, slotsPerUnit,
+        lightMinutes: category === 'light' && lightParsed != null && Number.isFinite(lightParsed) ? lightParsed : null,
+        weaponDamage: category === 'weapon' ? weaponDamage || null : null,
+        weaponRange: category === 'weapon' ? weaponRange || null : null,
+        weaponProperties: category === 'weapon' ? weaponProperties || null : null,
+        armorClass: category === 'armor' ? armorClass || null : null,
+        armorProperties: category === 'armor' ? armorProperties || null : null,
+      }
+    })
+  }
+
+  async function importCatalogCsv() {
+    if (!activeId) return
+    try {
+      const rows = parseCatalogCsv(catalogImportText)
+      const existing = new Set(catalog.map(item => item.name.trim().toLowerCase()))
+      let added = 0
+      let skipped = 0
+
+      for (const row of rows) {
+        if (existing.has(row.name.trim().toLowerCase())) {
+          skipped += 1
+          continue
+        }
+        await createCatalogItem({ campaignId: activeId, ...row })
+        existing.add(row.name.trim().toLowerCase())
+        added += 1
+      }
+
+      await refreshCatalog()
+      setShowCatalogImport(false)
+      setCatalogImportText('')
+      flash(`Import zakończony: dodano ${added}, pominięto ${skipped}.`)
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zaimportować biblioteki.')
+    }
+  }
+
+  function exportCatalogCsv() {
+    const header = 'name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties'
+    const rows = catalog.map(entry =>
+      [entry.name, entry.category, entry.slotsPerUnit, entry.lightMinutes ?? '',
+       entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '',
+       entry.armorClass ?? '', entry.armorProperties ?? '']
+        .map(value => String(value).replaceAll(';', ',')).join(';')
+    )
+
+    const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `shadowdark-biblioteka-${active?.name ?? 'kampania'}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -1550,7 +1696,69 @@ function App() {
             </>
           )}
 
-          {activeView !== 'Dashboard' && activeView !== 'Postacie' && (
+
+          {activeView === 'Biblioteka' && (
+            <>
+              <section className="hero parchment-panel">
+                <div>
+                  <p className="eyebrow">BIBLIOTEKA PRZEDMIOTÓW</p>
+                  <h1>{active?.name ?? 'Brak aktywnej kampanii'}</h1>
+                  <p>Wspólny katalog przedmiotów kampanii. Pozycje z tej biblioteki pojawiają się na liście rozwijanej przy dodawaniu ekwipunku.</p>
+                </div>
+
+                <div className="hero-tools">
+                  <button className="secondary" onClick={exportCatalogCsv} disabled={!catalog.length}>Eksport CSV</button>
+                  <button className="secondary" onClick={() => setShowCatalogImport(true)}>Import CSV</button>
+                  <button className="primary" onClick={openNewCatalogItem}><Plus size={16} />Nowy przedmiot</button>
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="panel-title">
+                  <Package size={18} />
+                  Biblioteka kampanii
+                  <span style={{ marginLeft: 'auto' }}>{catalog.length} pozycji</span>
+                </div>
+
+                {catalogLoading ? (
+                  <p className="muted">Ładowanie biblioteki…</p>
+                ) : catalog.length === 0 ? (
+                  <div className="empty-state">
+                    <p>Biblioteka jest jeszcze pusta.</p>
+                    <div className="button-row">
+                      <button className="secondary" onClick={addStarterCatalog}>Dodaj bazowe pozycje</button>
+                      <button className="primary" onClick={openNewCatalogItem}><Plus size={16} />Dodaj pierwszy przedmiot</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="button-row" style={{ marginBottom: 16 }}>
+                      <button className="secondary" onClick={addStarterCatalog}>Uzupełnij bazowe pozycje</button>
+                    </div>
+
+                    <div className="entity-grid">
+                      {catalog.map(entry => (
+                        <article className="entity-card" key={entry.id}>
+                          <div className="entity-head">
+                            <strong>{entry.name}</strong>
+                            <span>{catalogCategoryLabel(entry.category)}</span>
+                          </div>
+                          <p className="muted" style={{ marginTop: 10 }}>{catalogItemDetails(entry)}</p>
+                          <div className="button-row">
+                            <button className="danger" onClick={() => removeCatalogEntry(entry)}>
+                              <Trash2 size={15} />Usuń z biblioteki
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </section>
+            </>
+          )}
+
+          {activeView !== 'Dashboard' && activeView !== 'Postacie' && activeView !== 'Biblioteka' && (
             <section className="hero parchment-panel">
               <div>
                 <p className="eyebrow">{activeView.toUpperCase()}</p>
@@ -1757,6 +1965,29 @@ function App() {
             Dodaj do katalogu
           </button>
           <p className="muted">Przedmiot będzie dostępny wszystkim użytkownikom tej kampanii.</p>
+        </Modal>
+      )}
+
+
+      {showCatalogImport && (
+        <Modal onClose={() => setShowCatalogImport(false)}>
+          <p className="eyebrow">IMPORT BIBLIOTEKI</p>
+          <h2>Importuj przedmioty z CSV</h2>
+          <p className="muted">
+            Każdy wiersz: nazwa;typ;sloty;czas światła;obrażenia;zasięg;właściwości broni;KP/AC;właściwości pancerza.
+          </p>
+          <textarea
+            rows={12}
+            value={catalogImportText}
+            onChange={e => setCatalogImportText(e.target.value)}
+            placeholder={`name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties
+Pochodnia;light;1;60;;;;;
+Racje;food;0.33;;;;;;`}
+          />
+          <button className="primary full" onClick={importCatalogCsv} disabled={!catalogImportText.trim()}>
+            Importuj do kampanii
+          </button>
+          <p className="muted">Dozwolone typy: normal, food, light, weapon, armor. Nazwy już istniejące zostaną pominięte.</p>
         </Modal>
       )}
 
