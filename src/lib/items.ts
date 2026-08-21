@@ -17,6 +17,7 @@ export type CharacterItem = {
   slotsPerUnit: number
   slotGroupSize: number
   freeQuantity: number
+  isActiveLight: boolean
   category: ItemCategory
   lightMinutes: number | null
   weaponDamage: string | null
@@ -39,6 +40,7 @@ function mapItem(row: any): CharacterItem {
     slotsPerUnit: Number(row.slots_per_unit),
     slotGroupSize: Math.max(1, Number(row.slot_group_size ?? 1)),
     freeQuantity: Math.max(0, Number(row.free_quantity ?? 0)),
+    isActiveLight: Boolean(row.is_active_light),
     category: row.category as ItemCategory,
     lightMinutes: row.light_minutes == null ? null : Number(row.light_minutes),
     weaponDamage: row.weapon_damage ?? null,
@@ -119,6 +121,7 @@ export async function createItem(input: {
       slots_per_unit: input.slotsPerUnit,
       slot_group_size: Math.max(1, input.slotGroupSize ?? 1),
       free_quantity: Math.max(0, input.freeQuantity ?? 0),
+      is_active_light: false,
       category: input.category,
       light_minutes: input.category === 'light' ? input.lightMinutes ?? 60 : null,
       weapon_damage:
