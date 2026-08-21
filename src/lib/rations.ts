@@ -1,8 +1,10 @@
 import { supabase } from './supabase'
 
+export type MemberType = 'character' | 'npc'
+
 export type FeedExpeditionResult = {
   fedAt: string
-  charactersFed: number
+  membersFed: number
 }
 
 export async function feedExpedition(
@@ -20,38 +22,26 @@ export async function feedExpedition(
 
   return {
     fedAt: row.fed_at ?? new Date().toISOString(),
-    charactersFed: Number(row.characters_fed ?? 0),
+    membersFed: Number(row.members_fed ?? row.characters_fed ?? 0),
   }
 }
 
-export type TransferRationResult = {
-  fromCharacterId: string
-  toCharacterId: string
-  fromQuantity: number
-  toQuantity: number
-}
-
-export async function transferRation(
+export async function transferMemberRation(
   campaignId: string,
-  fromCharacterId: string,
-  toCharacterId: string
-): Promise<TransferRationResult> {
+  fromType: MemberType,
+  fromId: string,
+  toType: MemberType,
+  toId: string
+): Promise<void> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
 
-  const { data, error } = await supabase.rpc('transfer_ration', {
+  const { error } = await supabase.rpc('transfer_member_ration', {
     p_campaign_id: campaignId,
-    p_from_character_id: fromCharacterId,
-    p_to_character_id: toCharacterId,
+    p_from_type: fromType,
+    p_from_id: fromId,
+    p_to_type: toType,
+    p_to_id: toId,
   })
 
   if (error) throw error
-
-  const row = (data ?? {}) as any
-
-  return {
-    fromCharacterId: row.from_character_id ?? fromCharacterId,
-    toCharacterId: row.to_character_id ?? toCharacterId,
-    fromQuantity: Number(row.from_quantity ?? 0),
-    toQuantity: Number(row.to_quantity ?? 0),
-  }
 }
