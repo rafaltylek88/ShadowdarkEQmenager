@@ -992,13 +992,11 @@ function App() {
 
   function exportCatalogCsv() {
     const header = 'name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties'
-    const rows = catalog.map(entry =>
-      [entry.name, entry.category, entry.slotsPerUnit, entry.lightMinutes ?? '',
-       entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '',
-       entry.armorClass ?? '', entry.armorProperties ?? '']
-        .map(value => String(value).split(';').join(',')
-  );
-
+   const rows = catalog.map(entry =>
+  [entry.name, entry.category, entry.slotsPerUnit, entry.lightMinutes ?? '', entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '', entry.armorClass ?? '', entry.armorProperties ?? '']
+    .map(value => String(value).split(';').join(','))
+    .join(';')
+);
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
