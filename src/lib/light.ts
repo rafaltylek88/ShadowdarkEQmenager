@@ -93,3 +93,14 @@ export function extinguishCampaignLight(
     p_campaign_id: campaignId,
   })
 }
+
+
+export function transferCampaignLight(
+  campaignId: string,
+  characterId: string
+): Promise<CampaignLight> {
+  return callLightRpc('transfer_campaign_light', {
+    p_campaign_id: campaignId,
+    p_character_id: characterId,
+  })
+}

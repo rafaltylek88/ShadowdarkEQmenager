@@ -14,6 +14,9 @@ export type CatalogItem = {
   slotsPerUnit: number
   category: CatalogItemCategory
   lightMinutes: number | null
+  lightConsumesSource: boolean
+  lightFuelItemName: string | null
+  lightFuelQuantity: number
   weaponDamage: string | null
   weaponRange: string | null
   weaponProperties: string | null
@@ -32,6 +35,9 @@ function mapCatalogItem(row: any): CatalogItem {
     slotsPerUnit: Number(row.slots_per_unit),
     category: row.category as CatalogItemCategory,
     lightMinutes: row.light_minutes == null ? null : Number(row.light_minutes),
+    lightConsumesSource: row.light_consumes_source !== false,
+    lightFuelItemName: row.light_fuel_item_name ?? null,
+    lightFuelQuantity: Number(row.light_fuel_quantity ?? 0),
     weaponDamage: row.weapon_damage ?? null,
     weaponRange: row.weapon_range ?? null,
     weaponProperties: row.weapon_properties ?? null,
@@ -62,6 +68,9 @@ export async function createCatalogItem(input: {
   slotsPerUnit: number
   category: CatalogItemCategory
   lightMinutes?: number | null
+  lightConsumesSource?: boolean
+  lightFuelItemName?: string | null
+  lightFuelQuantity?: number
   weaponDamage?: string | null
   weaponRange?: string | null
   weaponProperties?: string | null
@@ -83,6 +92,12 @@ export async function createCatalogItem(input: {
       slots_per_unit: input.slotsPerUnit,
       category: input.category,
       light_minutes: input.category === 'light' ? input.lightMinutes ?? 60 : null,
+      light_consumes_source:
+        input.category === 'light' ? input.lightConsumesSource ?? true : true,
+      light_fuel_item_name:
+        input.category === 'light' ? input.lightFuelItemName?.trim() || null : null,
+      light_fuel_quantity:
+        input.category === 'light' ? Math.max(0, input.lightFuelQuantity ?? 0) : 0,
       weapon_damage:
         input.category === 'weapon' ? input.weaponDamage?.trim() || null : null,
       weapon_range:
