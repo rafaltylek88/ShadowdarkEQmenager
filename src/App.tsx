@@ -646,11 +646,8 @@ function App() {
 
   const expeditionFeedsAvailable = useMemo(() => {
     if (!characters.length) return 0
-
-    return Math.min(
-      ...characters.map(character => rationCounts.get(character.id) ?? 0)
-    )
-  }, [characters, rationCounts])
+    return Math.floor(totalRations / characters.length)
+  }, [characters.length, totalRations])
 
 
   const charactersMissingRations = useMemo(
