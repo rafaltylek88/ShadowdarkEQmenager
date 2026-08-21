@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Backpack, Beef, Building2, Castle, Coins, Flame, Gauge, Home, Menu, Plus, Shield, Users, Truck X } from 'lucide-react'
+import { Backpack, Beef, Building2, Castle, Coins, Flame, Gauge, Home, Menu, Plus, Shield, Users, Truck, X } from 'lucide-react'
 import { supabaseEnabled } from './lib/supabase'
 import type { Campaign, CharacterSummary } from './types'
 
