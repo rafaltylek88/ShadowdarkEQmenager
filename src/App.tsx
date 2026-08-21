@@ -592,6 +592,7 @@ function App() {
       items.filter(
         item =>
           item.category === 'light' &&
+          !item.isActiveLight &&
           item.quantity > 0 &&
           (item.lightMinutes ?? 0) > 0
       ),
@@ -699,9 +700,12 @@ function App() {
     }
 
     extinguishCampaignLight(activeId)
-      .then(next => setLightState(next))
+      .then(async next => {
+        setLightState(next)
+        await Promise.all([refreshItems(), refreshCharacters()])
+      })
       .catch(() => undefined)
-  }, [activeId, lightState?.status, lightRemainingSeconds])
+  }, [activeId, lightState?.status, lightRemainingSeconds, refreshItems, refreshCharacters])
 
   useEffect(() => {
     if (lightState?.status === 'running' || lightState?.status === 'paused') return
@@ -785,6 +789,7 @@ function App() {
       setLightLoading(true)
       setLightState(await extinguishCampaignLight(activeId))
       setLightNow(Date.now())
+      await Promise.all([refreshItems(), refreshCharacters()])
       flash('Światło zgaszone.')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zgasić światła.')
@@ -802,8 +807,9 @@ function App() {
       const next = await transferCampaignLight(activeId, lightTransferCharacterId)
       setLightState(next)
       setLightNow(Date.now())
+      await Promise.all([refreshItems(), refreshCharacters()])
       const target = characters.find(c => c.id === lightTransferCharacterId)
-      flash(`Przekazano światło: ${target?.name ?? 'inna postać'}.`)
+      flash(`Przekazano światło i przedmiot: ${target?.name ?? 'inna postać'}.`)
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się przekazać światła.')
     } finally {
@@ -1449,7 +1455,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 2F.1 • paliwo i reguły slotów
+              Etap 2F.2.1 • paliwo i reguły slotów
             </span>
           </div>
 
@@ -2063,6 +2069,7 @@ function App() {
                                           ` • ${item.weaponProperties}`}
                                         {item.category === 'armor' && item.armorProperties &&
                                           ` • ${item.armorProperties}`}
+                                        {item.isActiveLight && ' • AKTYWNE ŚWIATŁO'}
                                       </span>
 
                                       <span className="button-row">
