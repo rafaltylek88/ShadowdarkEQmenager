@@ -1129,6 +1129,8 @@ function App() {
                 <div className="entity-grid">
                   {characters.map(character => {
                     const maxSlots = Math.max(10, character.strength)
+                    const usedSlots = usedSlotsForCharacter(character.id)
+                    const displayedUsedSlots = Number(usedSlots.toFixed(2))
 
                     return (
                       <article className="entity-card" key={character.id}>
@@ -1139,7 +1141,7 @@ function App() {
 
                         <div className="slot-line">
                           <span>SIŁA {character.strength}</span>
-                          <b>{character.usedSlots}/{maxSlots}</b>
+                          <b>{displayedUsedSlots}/{maxSlots}</b>
                         </div>
 
                         <div className="progress small">
@@ -1148,7 +1150,7 @@ function App() {
                               width: `${Math.min(
                                 100,
                                 maxSlots > 0
-                                  ? (character.usedSlots / maxSlots) * 100
+                                  ? (usedSlots / maxSlots) * 100
                                   : 0
                               )}%`,
                             }}
