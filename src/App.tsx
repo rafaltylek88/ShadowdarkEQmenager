@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import {
   Backpack, Beef, Building2, Castle, Coins, Copy, Flame, Gauge, Home, KeyRound,
-  LogIn, LogOut, Menu, Plus, Shield, UserPlus, Users, Wagon, X,
+  LogIn, LogOut, Menu, Plus, Shield, UserPlus, Users, Truck, X,
 } from 'lucide-react'
 import { supabase, supabaseEnabled } from './lib/supabase'
 import { createRemoteCampaign, joinCampaign, loadRemoteCampaigns } from './lib/campaigns'
