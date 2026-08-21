@@ -101,3 +101,9 @@ export async function createCatalogItem(input: {
   if (error) throw error
   return mapCatalogItem(data)
 }
+
+export async function deleteCatalogItem(id: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
+  const { error } = await supabase.from('item_catalog').delete().eq('id', id)
+  if (error) throw error
+}
