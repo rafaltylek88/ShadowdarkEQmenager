@@ -24,7 +24,7 @@ const summaries: CharacterSummary[] = [
 ]
 
 const nav = [
-  ['Dashboard', Gauge], ['Postacie', Users], ['NPC', Shield], ['Zwierzęta', Beef], ['Wozy', Wagon],
+  ['Dashboard', Gauge], ['Postacie', Users], ['NPC', Shield], ['Zwierzęta', Beef], ['Wozy', Truck],
   ['Siedziby', Castle], ['Ekwipunek wspólny', Backpack], ['Podsumowanie', Coins],
 ] as const
 
