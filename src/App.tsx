@@ -997,7 +997,7 @@ function App() {
        entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '',
        entry.armorClass ?? '', entry.armorProperties ?? '']
         .map(value => String(value).split(';').join(',')
-    )
+  );
 
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
