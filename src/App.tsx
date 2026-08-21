@@ -55,6 +55,7 @@ import {
   pauseCampaignLight,
   resumeCampaignLight,
   startCampaignLight,
+  transferCampaignLight,
 } from './lib/light'
 import type { CampaignLight } from './lib/light'
 
@@ -170,6 +171,7 @@ function App() {
   const [lightLoading, setLightLoading] = useState(false)
   const [lightCharacterId, setLightCharacterId] = useState('')
   const [lightItemId, setLightItemId] = useState('')
+  const [lightTransferCharacterId, setLightTransferCharacterId] = useState('')
   const [lightNow, setLightNow] = useState(() => Date.now())
 
   const isCloudMode = Boolean(supabaseEnabled && session)
@@ -619,6 +621,36 @@ function App() {
     availableLightItems.find(item => item.id === lightItemId)?.name ||
     '—'
 
+
+  const lightRuleForItem = useCallback(
+    (item: CharacterItem) =>
+      catalog.find(entry => entry.id === item.catalogItemId) ?? null,
+    [catalog]
+  )
+
+  const lightFuelStatus = useCallback(
+    (item: CharacterItem) => {
+      const rule = lightRuleForItem(item)
+      if (!rule || rule.lightConsumesSource || !rule.lightFuelItemName) return null
+
+      const available = items
+        .filter(
+          candidate =>
+            candidate.characterId === item.characterId &&
+            candidate.name.trim().toLowerCase() ===
+              rule.lightFuelItemName!.trim().toLowerCase()
+        )
+        .reduce((sum, candidate) => sum + candidate.quantity, 0)
+
+      return {
+        name: rule.lightFuelItemName,
+        required: Math.max(1, rule.lightFuelQuantity || 1),
+        available,
+      }
+    },
+    [items, lightRuleForItem]
+  )
+
   function formatTimer(totalSeconds: number) {
     const safe = Math.max(0, Math.floor(totalSeconds))
     const hours = Math.floor(safe / 3600)
@@ -668,6 +700,21 @@ function App() {
       return lightItemsForSelectedCharacter[0]?.id ?? ''
     })
   }, [lightItemsForSelectedCharacter, lightState?.status])
+
+
+  useEffect(() => {
+    if (!lightState || lightState.status === 'off') {
+      setLightTransferCharacterId('')
+      return
+    }
+
+    setLightTransferCharacterId(current => {
+      if (current && current !== lightState.characterId && characters.some(c => c.id === current)) {
+        return current
+      }
+      return characters.find(c => c.id !== lightState.characterId)?.id ?? ''
+    })
+  }, [characters, lightState?.characterId, lightState?.status])
 
   async function handleLightStartOrResume() {
     if (!activeId) return
@@ -721,6 +768,24 @@ function App() {
       flash('Światło zgaszone.')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zgasić światła.')
+    } finally {
+      setLightLoading(false)
+    }
+  }
+
+
+  async function handleLightTransfer() {
+    if (!activeId || !lightTransferCharacterId || !lightState || lightState.status === 'off') return
+
+    try {
+      setLightLoading(true)
+      const next = await transferCampaignLight(activeId, lightTransferCharacterId)
+      setLightState(next)
+      setLightNow(Date.now())
+      const target = characters.find(c => c.id === lightTransferCharacterId)
+      flash(`Przekazano światło: ${target?.name ?? 'inna postać'}.`)
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się przekazać światła.')
     } finally {
       setLightLoading(false)
     }
@@ -1346,7 +1411,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 2E • wspólny licznik światła
+              Etap 2F • przekazywanie światła i paliwo
             </span>
           </div>
 
@@ -1519,13 +1584,45 @@ function App() {
               </div>
 
               {lightState?.status === 'running' || lightState?.status === 'paused' ? (
-                <div className="light-row">
-                  <span>Niosący</span>
-                  <strong>{lightCarrierName}</strong>
+                <>
+                  <div className="light-row">
+                    <span>Niosący</span>
+                    <strong>{lightCarrierName}</strong>
 
-                  <span>Źródło</span>
-                  <strong>{lightSourceName}</strong>
-                </div>
+                    <span>Źródło</span>
+                    <strong>{lightSourceName}</strong>
+                  </div>
+
+                  <div className="light-row">
+                    <label>
+                      Przekaż światło
+                      <select
+                        value={lightTransferCharacterId}
+                        onChange={e => setLightTransferCharacterId(e.target.value)}
+                        disabled={lightLoading || characters.length < 2}
+                      >
+                        {characters.length < 2 && (
+                          <option value="">Brak innej postaci</option>
+                        )}
+                        {characters
+                          .filter(character => character.id !== lightState.characterId)
+                          .map(character => (
+                            <option key={character.id} value={character.id}>
+                              {character.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+
+                    <button
+                      className="secondary"
+                      onClick={handleLightTransfer}
+                      disabled={lightLoading || !lightTransferCharacterId}
+                    >
+                      PRZEKAŻ
+                    </button>
+                  </div>
+                </>
               ) : (
                 <div className="light-row">
                   <label>
@@ -1560,11 +1657,15 @@ function App() {
                       {lightItemsForSelectedCharacter.length === 0 && (
                         <option value="">Brak źródła</option>
                       )}
-                      {lightItemsForSelectedCharacter.map(item => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} × {item.quantity} • {item.lightMinutes} min
-                        </option>
-                      ))}
+                      {lightItemsForSelectedCharacter.map(item => {
+                        const fuel = lightFuelStatus(item)
+                        return (
+                          <option key={item.id} value={item.id}>
+                            {item.name} × {item.quantity} • {item.lightMinutes} min
+                            {fuel ? ` • paliwo: ${fuel.name} ${fuel.available}/${fuel.required}` : ''}
+                          </option>
+                        )
+                      })}
                     </select>
                   </label>
                 </div>
@@ -1608,9 +1709,12 @@ function App() {
               </div>
 
               <p className="muted">
-                START zużywa 1 sztukę wybranego źródła z ekwipunku postaci.
-                PAUZA i WZNÓW nie zużywają kolejnej sztuki. Licznik jest wspólny
-                dla wszystkich użytkowników kampanii.
+                START zużywa źródło jednorazowe albo wymagane paliwo. Latarnia
+                pozostaje w ekwipunku i przy zapaleniu zużywa 1 × Oil, flask; bez
+                paliwa nie można jej zapalić. PRZEKAŻ zmienia niosącego bez
+                zatrzymywania ani zerowania licznika. PAUZA i WZNÓW nie zużywają
+                kolejnego źródła ani paliwa. Licznik jest wspólny dla wszystkich
+                użytkowników kampanii.
               </p>
 
             </div>
