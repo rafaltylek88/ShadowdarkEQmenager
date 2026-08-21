@@ -49,6 +49,14 @@ import {
 import type { CharacterItem, ItemCategory } from './lib/items'
 import { createCatalogItem, deleteCatalogItem, loadCatalog } from './lib/catalog'
 import type { CatalogItem, CatalogItemCategory } from './lib/catalog'
+import {
+  extinguishCampaignLight,
+  loadCampaignLight,
+  pauseCampaignLight,
+  resumeCampaignLight,
+  startCampaignLight,
+} from './lib/light'
+import type { CampaignLight } from './lib/light'
 
 const initialCampaigns: Campaign[] = [
   {
@@ -158,6 +166,12 @@ function App() {
   const [showCatalogImport, setShowCatalogImport] = useState(false)
   const [catalogImportText, setCatalogImportText] = useState('')
 
+  const [lightState, setLightState] = useState<CampaignLight | null>(null)
+  const [lightLoading, setLightLoading] = useState(false)
+  const [lightCharacterId, setLightCharacterId] = useState('')
+  const [lightItemId, setLightItemId] = useState('')
+  const [lightNow, setLightNow] = useState(() => Date.now())
+
   const isCloudMode = Boolean(supabaseEnabled && session)
 
   const refreshCampaigns = useCallback(async () => {
@@ -239,6 +253,22 @@ function App() {
       setError(e?.message || e?.details || 'Nie udało się pobrać katalogu.')
     } finally {
       setCatalogLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
+  const refreshLight = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setLightState(null)
+      return
+    }
+
+    setLightLoading(true)
+    try {
+      setLightState(await loadCampaignLight(activeId))
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się pobrać stanu światła.')
+    } finally {
+      setLightLoading(false)
     }
   }, [activeId, isCloudMode])
 
@@ -403,6 +433,10 @@ function App() {
   }, [refreshCatalog])
 
   useEffect(() => {
+    refreshLight()
+  }, [refreshLight])
+
+  useEffect(() => {
     if (!supabase || !session || !activeId) return
 
     const sb = supabase
@@ -478,6 +512,29 @@ function App() {
     }
   }, [session, activeId, refreshCatalog])
 
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+
+    const sb = supabase
+    const channel = sb
+      .channel(`light-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'campaign_light',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        refreshLight
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshLight])
+
 
   const active =
     campaigns.find(c => c.id === activeId) ??
@@ -518,6 +575,156 @@ function App() {
     () => characters.reduce((sum, character) => sum + character.gold, 0),
     [characters]
   )
+
+  const availableLightItems = useMemo(
+    () =>
+      items.filter(
+        item =>
+          item.category === 'light' &&
+          item.quantity > 0 &&
+          (item.lightMinutes ?? 0) > 0
+      ),
+    [items]
+  )
+
+  const lightItemsForSelectedCharacter = useMemo(
+    () => availableLightItems.filter(item => item.characterId === lightCharacterId),
+    [availableLightItems, lightCharacterId]
+  )
+
+  const lightRemainingSeconds = useMemo(() => {
+    if (!lightState || lightState.status === 'off') return 0
+    if (lightState.status === 'paused' || !lightState.startedAt) {
+      return Math.max(0, lightState.remainingSeconds)
+    }
+
+    const elapsed = Math.floor(
+      (lightNow - new Date(lightState.startedAt).getTime()) / 1000
+    )
+
+    return Math.max(0, lightState.remainingSeconds - elapsed)
+  }, [lightState, lightNow])
+
+  const lightIsActive = Boolean(
+    lightState && lightState.status !== 'off' && lightRemainingSeconds > 0
+  )
+
+  const lightCarrierName =
+    lightState?.carrierName ||
+    characters.find(character => character.id === lightCharacterId)?.name ||
+    '—'
+
+  const lightSourceName =
+    lightState?.sourceName ||
+    availableLightItems.find(item => item.id === lightItemId)?.name ||
+    '—'
+
+  function formatTimer(totalSeconds: number) {
+    const safe = Math.max(0, Math.floor(totalSeconds))
+    const hours = Math.floor(safe / 3600)
+    const minutes = Math.floor((safe % 3600) / 60)
+    const seconds = safe % 60
+
+    return [hours, minutes, seconds]
+      .map(value => String(value).padStart(2, '0'))
+      .join(':')
+  }
+
+  useEffect(() => {
+    if (lightState?.status === 'running') {
+      const id = window.setInterval(() => setLightNow(Date.now()), 1000)
+      return () => window.clearInterval(id)
+    }
+  }, [lightState?.status, lightState?.startedAt])
+
+  useEffect(() => {
+    if (
+      !activeId ||
+      lightState?.status !== 'running' ||
+      lightRemainingSeconds > 0
+    ) {
+      return
+    }
+
+    extinguishCampaignLight(activeId)
+      .then(next => setLightState(next))
+      .catch(() => undefined)
+  }, [activeId, lightState?.status, lightRemainingSeconds])
+
+  useEffect(() => {
+    if (lightState?.status === 'running' || lightState?.status === 'paused') return
+
+    setLightCharacterId(current => {
+      if (availableLightItems.some(item => item.characterId === current)) return current
+      return availableLightItems[0]?.characterId ?? ''
+    })
+  }, [availableLightItems, lightState?.status])
+
+  useEffect(() => {
+    if (lightState?.status === 'running' || lightState?.status === 'paused') return
+
+    setLightItemId(current => {
+      if (lightItemsForSelectedCharacter.some(item => item.id === current)) return current
+      return lightItemsForSelectedCharacter[0]?.id ?? ''
+    })
+  }, [lightItemsForSelectedCharacter, lightState?.status])
+
+  async function handleLightStartOrResume() {
+    if (!activeId) return
+
+    try {
+      setLightLoading(true)
+
+      if (lightState?.status === 'paused') {
+        setLightState(await resumeCampaignLight(activeId))
+        setLightNow(Date.now())
+        return
+      }
+
+      if (!lightItemId) {
+        setError('Wybierz postać i źródło światła z jej ekwipunku.')
+        return
+      }
+
+      setLightState(await startCampaignLight(activeId, lightItemId))
+      setLightNow(Date.now())
+      await Promise.all([refreshItems(), refreshCharacters()])
+      flash('Źródło światła zostało zapalone. Zużyto 1 sztukę.')
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się uruchomić światła.')
+    } finally {
+      setLightLoading(false)
+    }
+  }
+
+  async function handleLightPause() {
+    if (!activeId || lightState?.status !== 'running') return
+
+    try {
+      setLightLoading(true)
+      setLightState(await pauseCampaignLight(activeId))
+      setLightNow(Date.now())
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zatrzymać licznika.')
+    } finally {
+      setLightLoading(false)
+    }
+  }
+
+  async function handleLightExtinguish() {
+    if (!activeId) return
+
+    try {
+      setLightLoading(true)
+      setLightState(await extinguishCampaignLight(activeId))
+      setLightNow(Date.now())
+      flash('Światło zgaszone.')
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zgasić światła.')
+    } finally {
+      setLightLoading(false)
+    }
+  }
 
   async function createCampaign() {
     const name = newCampaign.trim()
@@ -992,11 +1199,13 @@ function App() {
 
   function exportCatalogCsv() {
     const header = 'name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties'
-   const rows = catalog.map(entry =>
-  [entry.name, entry.category, entry.slotsPerUnit, entry.lightMinutes ?? '', entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '', entry.armorClass ?? '', entry.armorProperties ?? '']
-    .map(value => String(value).split(';').join(','))
-    .join(';')
-);
+    const rows = catalog.map(entry =>
+      [entry.name, entry.category, entry.slotsPerUnit, entry.lightMinutes ?? '',
+       entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '',
+       entry.armorClass ?? '', entry.armorProperties ?? '']
+        .map(value => String(value).split(';').join(',')).join(';')
+    )
+
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -1137,7 +1346,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 2A • postacie online
+              Etap 2E • wspólny licznik światła
             </span>
           </div>
 
@@ -1280,8 +1489,12 @@ function App() {
             <Metric
               icon={<Flame />}
               label="Światło"
-              value="00:43:27"
-              sub="Aric • pochodnia"
+              value={formatTimer(lightRemainingSeconds)}
+              sub={
+                lightIsActive || lightState?.status === 'paused'
+                  ? `${lightCarrierName} • ${lightSourceName}`
+                  : 'brak aktywnego światła'
+              }
               accent
             />
 
@@ -1305,40 +1518,99 @@ function App() {
                 Aktywne źródło światła
               </div>
 
-              <div className="light-row">
+              {lightState?.status === 'running' || lightState?.status === 'paused' ? (
+                <div className="light-row">
+                  <span>Niosący</span>
+                  <strong>{lightCarrierName}</strong>
 
-                <span>Niosący</span>
-                <strong>Aric</strong>
+                  <span>Źródło</span>
+                  <strong>{lightSourceName}</strong>
+                </div>
+              ) : (
+                <div className="light-row">
+                  <label>
+                    Niosący
+                    <select
+                      value={lightCharacterId}
+                      onChange={e => setLightCharacterId(e.target.value)}
+                      disabled={lightLoading || availableLightItems.length === 0}
+                    >
+                      {availableLightItems.length === 0 && (
+                        <option value="">Brak źródeł światła</option>
+                      )}
+                      {characters
+                        .filter(character =>
+                          availableLightItems.some(item => item.characterId === character.id)
+                        )
+                        .map(character => (
+                          <option key={character.id} value={character.id}>
+                            {character.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
 
-                <span>Źródło</span>
-                <strong>Pochodnia</strong>
-
-              </div>
+                  <label>
+                    Źródło
+                    <select
+                      value={lightItemId}
+                      onChange={e => setLightItemId(e.target.value)}
+                      disabled={lightLoading || lightItemsForSelectedCharacter.length === 0}
+                    >
+                      {lightItemsForSelectedCharacter.length === 0 && (
+                        <option value="">Brak źródła</option>
+                      )}
+                      {lightItemsForSelectedCharacter.map(item => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} × {item.quantity} • {item.lightMinutes} min
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
 
               <div className="timer">
-                00:43:27
+                {formatTimer(lightRemainingSeconds)}
               </div>
 
               <div className="button-row">
-
-                <button className="primary">
-                  START / WZNÓW
+                <button
+                  className="primary"
+                  onClick={handleLightStartOrResume}
+                  disabled={
+                    lightLoading ||
+                    lightState?.status === 'running' ||
+                    (lightState?.status !== 'paused' && !lightItemId)
+                  }
+                >
+                  {lightState?.status === 'paused' ? 'WZNÓW' : 'START'}
                 </button>
 
-                <button className="secondary">
+                <button
+                  className="secondary"
+                  onClick={handleLightPause}
+                  disabled={lightLoading || lightState?.status !== 'running'}
+                >
                   PAUZA
                 </button>
 
-                <button className="danger">
+                <button
+                  className="danger"
+                  onClick={handleLightExtinguish}
+                  disabled={
+                    lightLoading ||
+                    (!lightState || lightState.status === 'off')
+                  }
+                >
                   ZGAŚ
                 </button>
-
               </div>
 
               <p className="muted">
-                Stan licznika będzie zapisany
-                w bazie i wspólny dla wszystkich
-                członków kampanii w etapie światła.
+                START zużywa 1 sztukę wybranego źródła z ekwipunku postaci.
+                PAUZA i WZNÓW nie zużywają kolejnej sztuki. Licznik jest wspólny
+                dla wszystkich użytkowników kampanii.
               </p>
 
             </div>
