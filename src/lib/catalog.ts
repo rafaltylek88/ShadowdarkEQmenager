@@ -12,6 +12,8 @@ export type CatalogItem = {
   campaignId: string
   name: string
   slotsPerUnit: number
+  slotGroupSize: number
+  freeQuantity: number
   category: CatalogItemCategory
   lightMinutes: number | null
   lightConsumesSource: boolean
@@ -33,6 +35,8 @@ function mapCatalogItem(row: any): CatalogItem {
     campaignId: row.campaign_id,
     name: row.name,
     slotsPerUnit: Number(row.slots_per_unit),
+    slotGroupSize: Math.max(1, Number(row.slot_group_size ?? 1)),
+    freeQuantity: Math.max(0, Number(row.free_quantity ?? 0)),
     category: row.category as CatalogItemCategory,
     lightMinutes: row.light_minutes == null ? null : Number(row.light_minutes),
     lightConsumesSource: row.light_consumes_source !== false,
@@ -66,6 +70,8 @@ export async function createCatalogItem(input: {
   campaignId: string
   name: string
   slotsPerUnit: number
+  slotGroupSize?: number
+  freeQuantity?: number
   category: CatalogItemCategory
   lightMinutes?: number | null
   lightConsumesSource?: boolean
@@ -90,6 +96,8 @@ export async function createCatalogItem(input: {
       campaign_id: input.campaignId,
       name: input.name.trim(),
       slots_per_unit: input.slotsPerUnit,
+      slot_group_size: Math.max(1, input.slotGroupSize ?? 1),
+      free_quantity: Math.max(0, input.freeQuantity ?? 0),
       category: input.category,
       light_minutes: input.category === 'light' ? input.lightMinutes ?? 60 : null,
       light_consumes_source:

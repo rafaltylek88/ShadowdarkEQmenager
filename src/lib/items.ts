@@ -15,6 +15,8 @@ export type CharacterItem = {
   name: string
   quantity: number
   slotsPerUnit: number
+  slotGroupSize: number
+  freeQuantity: number
   category: ItemCategory
   lightMinutes: number | null
   weaponDamage: string | null
@@ -35,6 +37,8 @@ function mapItem(row: any): CharacterItem {
     name: row.name,
     quantity: Number(row.quantity),
     slotsPerUnit: Number(row.slots_per_unit),
+    slotGroupSize: Math.max(1, Number(row.slot_group_size ?? 1)),
+    freeQuantity: Math.max(0, Number(row.free_quantity ?? 0)),
     category: row.category as ItemCategory,
     lightMinutes: row.light_minutes == null ? null : Number(row.light_minutes),
     weaponDamage: row.weapon_damage ?? null,
@@ -65,15 +69,17 @@ async function syncCharacterUsedSlots(characterId: string): Promise<void> {
 
   const { data, error } = await supabase
     .from('character_items')
-    .select('quantity, slots_per_unit')
+    .select('quantity, slots_per_unit, slot_group_size, free_quantity')
     .eq('character_id', characterId)
 
   if (error) throw error
 
-  const usedSlots = (data ?? []).reduce(
-    (sum, row) => sum + Number(row.quantity) * Number(row.slots_per_unit),
-    0
-  )
+  const usedSlots = (data ?? []).reduce((sum, row) => {
+    const quantity = Math.max(0, Number(row.quantity) - Number(row.free_quantity ?? 0))
+    const groupSize = Math.max(1, Number(row.slot_group_size ?? 1))
+    const groups = quantity > 0 ? Math.ceil(quantity / groupSize) : 0
+    return sum + groups * Number(row.slots_per_unit)
+  }, 0)
 
   const { error: updateError } = await supabase
     .from('characters')
@@ -90,6 +96,8 @@ export async function createItem(input: {
   name: string
   quantity: number
   slotsPerUnit: number
+  slotGroupSize?: number
+  freeQuantity?: number
   category: ItemCategory
   lightMinutes?: number | null
   weaponDamage?: string | null
@@ -109,6 +117,8 @@ export async function createItem(input: {
       name: input.name.trim(),
       quantity: input.quantity,
       slots_per_unit: input.slotsPerUnit,
+      slot_group_size: Math.max(1, input.slotGroupSize ?? 1),
+      free_quantity: Math.max(0, input.freeQuantity ?? 0),
       category: input.category,
       light_minutes: input.category === 'light' ? input.lightMinutes ?? 60 : null,
       weapon_damage:
@@ -138,6 +148,8 @@ export async function updateItem(
     name: string
     quantity: number
     slotsPerUnit: number
+    slotGroupSize?: number
+    freeQuantity?: number
     category: ItemCategory
     lightMinutes?: number | null
     weaponDamage?: string | null
@@ -156,6 +168,8 @@ export async function updateItem(
       name: changes.name.trim(),
       quantity: changes.quantity,
       slots_per_unit: changes.slotsPerUnit,
+      slot_group_size: Math.max(1, changes.slotGroupSize ?? 1),
+      free_quantity: Math.max(0, changes.freeQuantity ?? 0),
       category: changes.category,
       light_minutes: changes.category === 'light' ? changes.lightMinutes ?? 60 : null,
       weapon_damage:
