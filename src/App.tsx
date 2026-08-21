@@ -102,14 +102,20 @@ function App() {
   }, [activeId])
 
   useEffect(() => {
-    if (!supabase || !session) return
-    const channel = supabase
-      .channel(`campaign-list-${session.user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns' }, refreshCampaigns)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'campaign_members' }, refreshCampaigns)
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [session, refreshCampaigns])
+  if (!supabase || !session) return
+
+  const sb = supabase
+
+  const channel = sb
+    .channel(`campaign-list-${session.user.id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns' }, refreshCampaigns)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'campaign_members' }, refreshCampaigns)
+    .subscribe()
+
+  return () => {
+    sb.removeChannel(channel)
+  }
+}, [session, refreshCampaigns])
 
   const active = campaigns.find(c => c.id === activeId) ?? campaigns[0]
   const people = useMemo(() => summaries.filter(s => s.kind === 'Postać'), [])
