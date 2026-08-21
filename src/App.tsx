@@ -996,7 +996,7 @@ function App() {
       [entry.name, entry.category, entry.slotsPerUnit, entry.lightMinutes ?? '',
        entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '',
        entry.armorClass ?? '', entry.armorProperties ?? '']
-        .map(value => String(value).replaceAll(';', ',')).join(';')
+        .map(value => String(value).split(';').join(',')
     )
 
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' })
