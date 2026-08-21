@@ -58,6 +58,7 @@ import {
   transferCampaignLight,
 } from './lib/light'
 import type { CampaignLight } from './lib/light'
+import { feedExpedition } from './lib/rations'
 
 const initialCampaigns: Campaign[] = [
   {
@@ -177,6 +178,7 @@ function App() {
   const [lightItemId, setLightItemId] = useState('')
   const [lightTransferCharacterId, setLightTransferCharacterId] = useState('')
   const [lightNow, setLightNow] = useState(() => Date.now())
+  const [feedingExpedition, setFeedingExpedition] = useState(false)
 
   const isCloudMode = Boolean(supabaseEnabled && session)
 
@@ -586,6 +588,113 @@ function App() {
     () => characters.reduce((sum, character) => sum + character.gold, 0),
     [characters]
   )
+
+
+  function normalizeInventoryName(value: string) {
+    return value
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '')
+  }
+
+  function isRationItem(item: CharacterItem) {
+    const itemName = normalizeInventoryName(item.name)
+    const catalogName = normalizeInventoryName(
+      catalog.find(entry => entry.id === item.catalogItemId)?.name ?? ''
+    )
+
+    return (
+      item.category === 'food' &&
+      ['ration', 'rations', 'racja', 'racje'].includes(
+        itemName || catalogName
+      )
+    )
+  }
+
+  const rationCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+
+    for (const character of characters) {
+      counts.set(character.id, 0)
+    }
+
+    for (const item of items) {
+      if (!isRationItem(item)) continue
+      counts.set(
+        item.characterId,
+        (counts.get(item.characterId) ?? 0) + item.quantity
+      )
+    }
+
+    return counts
+  }, [characters, items, catalog])
+
+  const totalRations = useMemo(
+    () =>
+      Array.from(rationCounts.values()).reduce(
+        (sum, quantity) => sum + quantity,
+        0
+      ),
+    [rationCounts]
+  )
+
+  const expeditionFeedsAvailable = useMemo(() => {
+    if (!characters.length) return 0
+
+    return Math.min(
+      ...characters.map(character => rationCounts.get(character.id) ?? 0)
+    )
+  }, [characters, rationCounts])
+
+  function formatLastFed(value: string | null) {
+    if (!value) return 'Nigdy'
+
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return 'Brak danych'
+
+    return date.toLocaleString('pl-PL', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  async function handleFeedExpedition() {
+    if (!activeId) {
+      setError('Najpierw wybierz kampanię.')
+      return
+    }
+
+    if (!characters.length) {
+      setError('W kampanii nie ma postaci do nakarmienia.')
+      return
+    }
+
+    setFeedingExpedition(true)
+
+    try {
+      const result = await feedExpedition(activeId)
+      await Promise.all([refreshItems(), refreshCharacters()])
+      flash(
+        `Nakarmiono ekspedycję: ${result.charactersFed} ${
+          result.charactersFed === 1 ? 'postać' : 'postaci'
+        }.`
+      )
+    } catch (e: any) {
+      console.error('FEED EXPEDITION ERROR:', e)
+      setError(
+        e?.message ||
+          e?.details ||
+          'Nie udało się nakarmić całej ekspedycji.'
+      )
+    } finally {
+      setFeedingExpedition(false)
+    }
+  }
 
   const availableLightItems = useMemo(
     () =>
@@ -1469,8 +1578,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 2F.2.2.1 • paliwo i reguły slotów
-            </span>
+              Etap 2G • racje i karmienie</span>
           </div>
 
         </aside>
@@ -1792,27 +1900,37 @@ function App() {
               </div>
 
               <div className="ration-big">
-                <strong>30</strong>
+                <strong>{totalRations}</strong>
                 <span>
-                  racji dostępnych
+                  racji w ekwipunkach postaci
                 </span>
               </div>
 
-              <div className="progress">
-                <i
-                  style={{
-                    width: '66%',
-                  }}
-                />
-              </div>
-
               <p>
-                <b>5 dni</b> dla obecnej
-                ekspedycji.
+                <b>{expeditionFeedsAvailable}</b>{' '}
+                {expeditionFeedsAvailable === 1
+                  ? 'pełne karmienie'
+                  : 'pełnych karmień'}{' '}
+                całej ekspedycji.
               </p>
 
-              <button className="secondary full">
-                Nakarm ekspedycję
+              <p className="muted">
+                Każda postać zużywa 1 rację wyłącznie ze swojego ekwipunku.
+                Jeśli choć jedna postać nie ma racji, karmienie całej
+                ekspedycji nie zostanie wykonane.
+              </p>
+
+              <button
+                className="secondary full"
+                onClick={handleFeedExpedition}
+                disabled={
+                  feedingExpedition ||
+                  characters.length === 0 ||
+                  expeditionFeedsAvailable < 1
+                }
+              >
+                <Utensils size={16} />
+                {feedingExpedition ? 'Karmienie…' : 'Nakarm ekspedycję'}
               </button>
 
             </div>
@@ -1878,6 +1996,11 @@ function App() {
                         <div className="slot-line" style={{ marginTop: 12 }}>
                           <span>Złoto</span>
                           <b>{character.gold} gp</b>
+                        </div>
+
+                        <div className="slot-line" style={{ marginTop: 8 }}>
+                          <span>Ostatnio nakarmiona</span>
+                          <b>{formatLastFed(character.lastFedAt)}</b>
                         </div>
 
                         <div className="button-row">
@@ -2008,6 +2131,10 @@ function App() {
                                 <strong>{character.name}</strong>
                                 <span style={{ display: 'block', marginTop: 4 }}>
                                   SIŁA {character.strength} • {character.gold} gp
+                                </span>
+                                <span style={{ display: 'block', marginTop: 4 }}>
+                                  Ostatnio nakarmiona: {formatLastFed(character.lastFedAt)}
+                                  {' • '}Racje: {rationCounts.get(character.id) ?? 0}
                                 </span>
                               </div>
 
