@@ -41,6 +41,10 @@ import {
   updateCharacter,
 } from './lib/characters'
 import type { Character } from './lib/characters'
+import { createNpc, deleteNpc, loadNpcs, updateNpc } from './lib/npcs'
+import type { Npc } from './lib/npcs'
+import { createNpcItem, deleteNpcItem, loadNpcItems, updateNpcItem } from './lib/npcItems'
+import type { NpcItem } from './lib/npcItems'
 import {
   createItem,
   deleteItem,
@@ -59,7 +63,8 @@ import {
   transferCampaignLight,
 } from './lib/light'
 import type { CampaignLight } from './lib/light'
-import { feedExpedition, transferRation } from './lib/rations'
+import { feedExpedition, transferMemberRation } from './lib/rations'
+import type { MemberType } from './lib/rations'
 
 const initialCampaigns: Campaign[] = [
   {
@@ -137,6 +142,33 @@ function App() {
   const [characterStrength, setCharacterStrength] = useState(10)
   const [characterGold, setCharacterGold] = useState(0)
 
+  const [npcs, setNpcs] = useState<Npc[]>([])
+  const [npcsLoading, setNpcsLoading] = useState(false)
+  const [showNpc, setShowNpc] = useState(false)
+  const [editingNpc, setEditingNpc] = useState<Npc | null>(null)
+  const [npcName, setNpcName] = useState('')
+  const [npcRole, setNpcRole] = useState('')
+  const [npcMaxSlots, setNpcMaxSlots] = useState(10)
+
+  const [npcItems, setNpcItems] = useState<NpcItem[]>([])
+  const [npcItemsLoading, setNpcItemsLoading] = useState(false)
+  const [showNpcItem, setShowNpcItem] = useState(false)
+  const [editingNpcItem, setEditingNpcItem] = useState<NpcItem | null>(null)
+  const [npcItemNpcId, setNpcItemNpcId] = useState('')
+  const [npcItemCatalogItemId, setNpcItemCatalogItemId] = useState('')
+  const [npcItemName, setNpcItemName] = useState('')
+  const [npcItemQuantity, setNpcItemQuantity] = useState(1)
+  const [npcItemSlotsPerUnit, setNpcItemSlotsPerUnit] = useState(1)
+  const [npcItemSlotGroupSize, setNpcItemSlotGroupSize] = useState(1)
+  const [npcItemFreeQuantity, setNpcItemFreeQuantity] = useState(0)
+  const [npcItemCategory, setNpcItemCategory] = useState<ItemCategory>('normal')
+  const [npcItemLightMinutes, setNpcItemLightMinutes] = useState(60)
+  const [npcItemWeaponDamage, setNpcItemWeaponDamage] = useState('')
+  const [npcItemWeaponRange, setNpcItemWeaponRange] = useState('')
+  const [npcItemWeaponProperties, setNpcItemWeaponProperties] = useState('')
+  const [npcItemArmorClass, setNpcItemArmorClass] = useState('')
+  const [npcItemArmorProperties, setNpcItemArmorProperties] = useState('')
+
   const [items, setItems] = useState<CharacterItem[]>([])
   const [itemsLoading, setItemsLoading] = useState(false)
   const [showItem, setShowItem] = useState(false)
@@ -181,8 +213,8 @@ function App() {
   const [lightNow, setLightNow] = useState(() => Date.now())
   const [feedingExpedition, setFeedingExpedition] = useState(false)
   const [transferringRation, setTransferringRation] = useState(false)
-  const [rationTransferFromId, setRationTransferFromId] = useState('')
-  const [rationTransferToId, setRationTransferToId] = useState('')
+  const [rationTransferFromKey, setRationTransferFromKey] = useState('')
+  const [rationTransferToKey, setRationTransferToKey] = useState('')
 
   const isCloudMode = Boolean(supabaseEnabled && session)
 
@@ -232,6 +264,39 @@ function App() {
       setCharactersLoading(false)
     }
   }, [activeId, isCloudMode])
+
+  const refreshNpcs = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setNpcs([])
+      return
+    }
+
+    setNpcsLoading(true)
+    try {
+      setNpcs(await loadNpcs(activeId))
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się pobrać NPC.')
+    } finally {
+      setNpcsLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
+  const refreshNpcItems = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setNpcItems([])
+      return
+    }
+
+    setNpcItemsLoading(true)
+    try {
+      setNpcItems(await loadNpcItems(activeId))
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się pobrać ekwipunku NPC.')
+    } finally {
+      setNpcItemsLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
 
   const refreshItems = useCallback(async () => {
     if (!activeId || !isCloudMode) {
@@ -437,6 +502,14 @@ function App() {
   }, [refreshCharacters])
 
   useEffect(() => {
+    refreshNpcs()
+  }, [refreshNpcs])
+
+  useEffect(() => {
+    refreshNpcItems()
+  }, [refreshNpcItems])
+
+  useEffect(() => {
     refreshItems()
   }, [refreshItems])
 
@@ -473,6 +546,58 @@ function App() {
       sb.removeChannel(channel)
     }
   }, [session, activeId, refreshCharacters])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+
+    const channel = sb
+      .channel(`npcs-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'npcs',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        () => {
+          refreshNpcs()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshNpcs])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+
+    const channel = sb
+      .channel(`npc-items-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'npc_items',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        () => {
+          refreshNpcItems()
+          refreshNpcs()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshNpcItems, refreshNpcs])
+
 
   useEffect(() => {
     if (!supabase || !session || !activeId) return
@@ -588,6 +713,27 @@ function App() {
     [items]
   )
 
+
+  const slotUsageForNpcItem = useCallback((item: NpcItem) => {
+    const quantity = Math.max(0, item.quantity - (item.freeQuantity ?? 0))
+    if (quantity <= 0) return 0
+    const groupSize = Math.max(1, item.slotGroupSize ?? 1)
+    return Math.ceil(quantity / groupSize) * item.slotsPerUnit
+  }, [])
+
+  const usedSlotsForNpc = useCallback(
+    (npcId: string) =>
+      npcItems
+        .filter(item => item.npcId === npcId)
+        .reduce((sum, item) => sum + slotUsageForNpcItem(item), 0),
+    [npcItems, slotUsageForNpcItem]
+  )
+
+  const itemsForNpc = useCallback(
+    (npcId: string) => npcItems.filter(item => item.npcId === npcId),
+    [npcItems]
+  )
+
   const totalGold = useMemo(
     () => characters.reduce((sum, character) => sum + character.gold, 0),
     [characters]
@@ -603,137 +749,147 @@ function App() {
       .replace(/[^a-z0-9]+/g, '')
   }
 
-  function isRationItem(item: CharacterItem) {
-    const itemName = normalizeInventoryName(item.name)
+  function isRationName(name: string, catalogItemId: string | null) {
+    const itemName = normalizeInventoryName(name)
     const catalogName = normalizeInventoryName(
-      catalog.find(entry => entry.id === item.catalogItemId)?.name ?? ''
+      catalog.find(entry => entry.id === catalogItemId)?.name ?? ''
     )
 
-    return (
-      item.category === 'food' &&
-      ['ration', 'rations', 'racja', 'racje'].includes(
-        itemName || catalogName
-      )
+    return ['ration', 'rations', 'racja', 'racje'].includes(
+      itemName || catalogName
     )
   }
 
-  const rationCounts = useMemo(() => {
+  const characterRationCounts = useMemo(() => {
     const counts = new Map<string, number>()
-
-    for (const character of characters) {
-      counts.set(character.id, 0)
-    }
+    characters.forEach(character => counts.set(character.id, 0))
 
     for (const item of items) {
-      if (!isRationItem(item)) continue
-      counts.set(
-        item.characterId,
-        (counts.get(item.characterId) ?? 0) + item.quantity
-      )
+      if (item.category !== 'food' || !isRationName(item.name, item.catalogItemId)) continue
+      counts.set(item.characterId, (counts.get(item.characterId) ?? 0) + item.quantity)
     }
 
     return counts
   }, [characters, items, catalog])
 
+  const npcRationCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    npcs.forEach(npc => counts.set(npc.id, 0))
+
+    for (const item of npcItems) {
+      if (item.category !== 'food' || !isRationName(item.name, item.catalogItemId)) continue
+      counts.set(item.npcId, (counts.get(item.npcId) ?? 0) + item.quantity)
+    }
+
+    return counts
+  }, [npcs, npcItems, catalog])
+
+  type ExpeditionMember = {
+    key: string
+    type: MemberType
+    id: string
+    name: string
+    rationCount: number
+    usedSlots: number
+    maxSlots: number
+  }
+
+  const expeditionMembers = useMemo<ExpeditionMember[]>(
+    () => [
+      ...characters.map(character => ({
+        key: `character:${character.id}`,
+        type: 'character' as MemberType,
+        id: character.id,
+        name: character.name,
+        rationCount: characterRationCounts.get(character.id) ?? 0,
+        usedSlots: usedSlotsForCharacter(character.id),
+        maxSlots: Math.max(10, character.strength),
+      })),
+      ...npcs.map(npc => ({
+        key: `npc:${npc.id}`,
+        type: 'npc' as MemberType,
+        id: npc.id,
+        name: npc.name,
+        rationCount: npcRationCounts.get(npc.id) ?? 0,
+        usedSlots: usedSlotsForNpc(npc.id),
+        maxSlots: npc.maxSlots,
+      })),
+    ],
+    [
+      characters,
+      npcs,
+      characterRationCounts,
+      npcRationCounts,
+      usedSlotsForCharacter,
+      usedSlotsForNpc,
+    ]
+  )
+
   const totalRations = useMemo(
-    () =>
-      Array.from(rationCounts.values()).reduce(
-        (sum, quantity) => sum + quantity,
-        0
-      ),
-    [rationCounts]
+    () => expeditionMembers.reduce((sum, member) => sum + member.rationCount, 0),
+    [expeditionMembers]
   )
 
   const expeditionFeedsAvailable = useMemo(() => {
-    if (!characters.length) return 0
-    return Math.floor(totalRations / characters.length)
-  }, [characters.length, totalRations])
+    if (!expeditionMembers.length) return 0
+    return Math.floor(totalRations / expeditionMembers.length)
+  }, [expeditionMembers.length, totalRations])
 
-
-  const charactersMissingRations = useMemo(
-    () =>
-      characters.filter(
-        character => (rationCounts.get(character.id) ?? 0) < 1
-      ),
-    [characters, rationCounts]
+  const membersMissingRations = useMemo(
+    () => expeditionMembers.filter(member => member.rationCount < 1),
+    [expeditionMembers]
   )
 
   const rationDonors = useMemo(
     () =>
-      characters
-        .filter(character => (rationCounts.get(character.id) ?? 0) > 1)
-        .sort(
-          (a, b) =>
-            (rationCounts.get(b.id) ?? 0) -
-            (rationCounts.get(a.id) ?? 0)
-        ),
-    [characters, rationCounts]
+      expeditionMembers
+        .filter(member => member.rationCount > 1)
+        .sort((a, b) => b.rationCount - a.rationCount),
+    [expeditionMembers]
   )
 
   useEffect(() => {
-    if (
-      !charactersMissingRations.some(
-        character => character.id === rationTransferToId
-      )
-    ) {
-      setRationTransferToId(charactersMissingRations[0]?.id ?? '')
+    if (!membersMissingRations.some(member => member.key === rationTransferToKey)) {
+      setRationTransferToKey(membersMissingRations[0]?.key ?? '')
     }
 
-    if (
-      !rationDonors.some(
-        character => character.id === rationTransferFromId
-      )
-    ) {
-      setRationTransferFromId(rationDonors[0]?.id ?? '')
+    if (!rationDonors.some(member => member.key === rationTransferFromKey)) {
+      setRationTransferFromKey(rationDonors[0]?.key ?? '')
     }
   }, [
-    charactersMissingRations,
+    membersMissingRations,
     rationDonors,
-    rationTransferFromId,
-    rationTransferToId,
+    rationTransferFromKey,
+    rationTransferToKey,
   ])
 
   async function handleTransferRation() {
-    if (!activeId || !rationTransferFromId || !rationTransferToId) {
+    if (!activeId || !rationTransferFromKey || !rationTransferToKey) {
       setError('Wybierz dawcę i odbiorcę racji.')
       return
     }
 
-    if (rationTransferFromId === rationTransferToId) {
-      setError('Dawca i odbiorca muszą być różnymi postaciami.')
+    const from = expeditionMembers.find(member => member.key === rationTransferFromKey)
+    const to = expeditionMembers.find(member => member.key === rationTransferToKey)
+
+    if (!from || !to) {
+      setError('Nie znaleziono dawcy lub odbiorcy.')
       return
     }
 
     setTransferringRation(true)
 
     try {
-      await transferRation(
-        activeId,
-        rationTransferFromId,
-        rationTransferToId
-      )
-
-      await Promise.all([refreshItems(), refreshCharacters()])
-
-      const from = characters.find(
-        character => character.id === rationTransferFromId
-      )
-      const to = characters.find(
-        character => character.id === rationTransferToId
-      )
-
-      flash(
-        `Przekazano 1 rację: ${from?.name ?? 'dawca'} → ${
-          to?.name ?? 'odbiorca'
-        }.`
-      )
+      await transferMemberRation(activeId, from.type, from.id, to.type, to.id)
+      await Promise.all([
+        refreshItems(),
+        refreshCharacters(),
+        refreshNpcItems(),
+        refreshNpcs(),
+      ])
+      flash(`Przekazano 1 rację: ${from.name} → ${to.name}.`)
     } catch (e: any) {
-      console.error('TRANSFER RATION ERROR:', e)
-      setError(
-        e?.message ||
-          e?.details ||
-          'Nie udało się przekazać racji.'
-      )
+      setError(e?.message || e?.details || 'Nie udało się przekazać racji.')
     } finally {
       setTransferringRation(false)
     }
@@ -769,10 +925,15 @@ function App() {
 
     try {
       const result = await feedExpedition(activeId)
-      await Promise.all([refreshItems(), refreshCharacters()])
+      await Promise.all([
+        refreshItems(),
+        refreshCharacters(),
+        refreshNpcItems(),
+        refreshNpcs(),
+      ])
       flash(
-        `Nakarmiono ekspedycję: ${result.charactersFed} ${
-          result.charactersFed === 1 ? 'postać' : 'postaci'
+        `Nakarmiono ekspedycję: ${result.membersFed} ${
+          result.membersFed === 1 ? 'członek' : 'członków'
         }.`
       )
     } catch (e: any) {
@@ -1392,6 +1553,173 @@ function App() {
   }
 
 
+  function openNewNpc() {
+    setEditingNpc(null)
+    setNpcName('')
+    setNpcRole('')
+    setNpcMaxSlots(10)
+    setShowNpc(true)
+  }
+
+  function openEditNpc(npc: Npc) {
+    setEditingNpc(npc)
+    setNpcName(npc.name)
+    setNpcRole(npc.role)
+    setNpcMaxSlots(npc.maxSlots)
+    setShowNpc(true)
+  }
+
+  async function saveNpc() {
+    if (!activeId || !npcName.trim()) {
+      setError('NPC musi mieć nazwę.')
+      return
+    }
+
+    try {
+      if (editingNpc) {
+        await updateNpc(editingNpc.id, {
+          name: npcName,
+          role: npcRole,
+          maxSlots: npcMaxSlots,
+        })
+        flash('NPC został zaktualizowany.')
+      } else {
+        await createNpc(activeId, npcName, npcRole, npcMaxSlots)
+        flash('NPC został dodany.')
+      }
+
+      setShowNpc(false)
+      setEditingNpc(null)
+      await refreshNpcs()
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zapisać NPC.')
+    }
+  }
+
+  async function removeNpc(npc: Npc) {
+    if (!window.confirm(`Czy na pewno usunąć NPC "${npc.name}" wraz z jego ekwipunkiem?`)) return
+
+    try {
+      await deleteNpc(npc.id)
+      flash('NPC został usunięty.')
+      await Promise.all([refreshNpcs(), refreshNpcItems()])
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się usunąć NPC.')
+    }
+  }
+
+  function resetNpcItemDetails() {
+    setNpcItemCatalogItemId('')
+    setNpcItemName('')
+    setNpcItemQuantity(1)
+    setNpcItemSlotsPerUnit(1)
+    setNpcItemSlotGroupSize(1)
+    setNpcItemFreeQuantity(0)
+    setNpcItemCategory('normal')
+    setNpcItemLightMinutes(60)
+    setNpcItemWeaponDamage('')
+    setNpcItemWeaponRange('')
+    setNpcItemWeaponProperties('')
+    setNpcItemArmorClass('')
+    setNpcItemArmorProperties('')
+  }
+
+  function applyCatalogToNpcItem(entry: CatalogItem) {
+    setNpcItemCatalogItemId(entry.id)
+    setNpcItemName(entry.name)
+    setNpcItemSlotsPerUnit(entry.slotsPerUnit)
+    setNpcItemSlotGroupSize(entry.slotGroupSize)
+    setNpcItemFreeQuantity(entry.freeQuantity)
+    setNpcItemCategory(entry.category)
+    setNpcItemLightMinutes(entry.lightMinutes ?? 60)
+    setNpcItemWeaponDamage(entry.weaponDamage ?? '')
+    setNpcItemWeaponRange(entry.weaponRange ?? '')
+    setNpcItemWeaponProperties(entry.weaponProperties ?? '')
+    setNpcItemArmorClass(entry.armorClass ?? '')
+    setNpcItemArmorProperties(entry.armorProperties ?? '')
+  }
+
+  function openNewNpcItem(npcId: string) {
+    setEditingNpcItem(null)
+    setNpcItemNpcId(npcId)
+    resetNpcItemDetails()
+    setShowNpcItem(true)
+  }
+
+  function openEditNpcItem(item: NpcItem) {
+    setEditingNpcItem(item)
+    setNpcItemNpcId(item.npcId)
+    setNpcItemCatalogItemId(item.catalogItemId ?? '')
+    setNpcItemName(item.name)
+    setNpcItemQuantity(item.quantity)
+    setNpcItemSlotsPerUnit(item.slotsPerUnit)
+    setNpcItemSlotGroupSize(item.slotGroupSize)
+    setNpcItemFreeQuantity(item.freeQuantity)
+    setNpcItemCategory(item.category)
+    setNpcItemLightMinutes(item.lightMinutes ?? 60)
+    setNpcItemWeaponDamage(item.weaponDamage ?? '')
+    setNpcItemWeaponRange(item.weaponRange ?? '')
+    setNpcItemWeaponProperties(item.weaponProperties ?? '')
+    setNpcItemArmorClass(item.armorClass ?? '')
+    setNpcItemArmorProperties(item.armorProperties ?? '')
+    setShowNpcItem(true)
+  }
+
+  async function saveNpcItem() {
+    if (!activeId || !npcItemNpcId || !npcItemName.trim()) {
+      setError('Wybierz NPC i przedmiot.')
+      return
+    }
+
+    const details = {
+      catalogItemId: npcItemCatalogItemId || null,
+      name: npcItemName,
+      quantity: npcItemQuantity,
+      slotsPerUnit: npcItemSlotsPerUnit,
+      slotGroupSize: npcItemSlotGroupSize,
+      freeQuantity: npcItemFreeQuantity,
+      category: npcItemCategory,
+      lightMinutes: npcItemCategory === 'light' ? npcItemLightMinutes : null,
+      weaponDamage: npcItemCategory === 'weapon' ? npcItemWeaponDamage : null,
+      weaponRange: npcItemCategory === 'weapon' ? npcItemWeaponRange : null,
+      weaponProperties: npcItemCategory === 'weapon' ? npcItemWeaponProperties : null,
+      armorClass: npcItemCategory === 'armor' ? npcItemArmorClass : null,
+      armorProperties: npcItemCategory === 'armor' ? npcItemArmorProperties : null,
+    }
+
+    try {
+      if (editingNpcItem) {
+        await updateNpcItem(editingNpcItem.id, npcItemNpcId, details)
+        flash('Przedmiot NPC został zaktualizowany.')
+      } else {
+        await createNpcItem({
+          campaignId: activeId,
+          npcId: npcItemNpcId,
+          ...details,
+        })
+        flash('Przedmiot został dodany NPC.')
+      }
+
+      setShowNpcItem(false)
+      setEditingNpcItem(null)
+      await Promise.all([refreshNpcItems(), refreshNpcs()])
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zapisać przedmiotu NPC.')
+    }
+  }
+
+  async function removeNpcItem(item: NpcItem) {
+    if (!window.confirm(`Usunąć "${item.name}" z ekwipunku NPC?`)) return
+
+    try {
+      await deleteNpcItem(item.id, item.npcId)
+      flash('Przedmiot NPC został usunięty.')
+      await Promise.all([refreshNpcItems(), refreshNpcs()])
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się usunąć przedmiotu NPC.')
+    }
+  }
+
   function catalogCategoryLabel(category: CatalogItemCategory) {
     switch (category) {
       case 'food': return 'Żywność'
@@ -1669,7 +1997,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 2G.1 • przekazywanie racji</span>
+              Etap 3A • NPC</span>
           </div>
 
         </aside>
@@ -2005,14 +2333,14 @@ function App() {
                 całej ekspedycji.
               </p>
 
-              {charactersMissingRations.length > 0 ? (
+              {membersMissingRations.length > 0 ? (
                 <div className="setup-banner" style={{ marginBottom: 14 }}>
                   <Beef size={18} />
                   <div>
                     <strong>Brakuje racji</strong>
                     <span>
-                      {charactersMissingRations
-                        .map(character => character.name)
+                      {membersMissingRations
+                        .map(member => `${member.name}${member.type === 'npc' ? ' (NPC)' : ''}`)
                         .join(', ')}
                     </span>
                   </div>
@@ -2027,7 +2355,7 @@ function App() {
                 </div>
               )}
 
-              {charactersMissingRations.length > 0 && (
+              {membersMissingRations.length > 0 && (
                 <div style={{ marginBottom: 14 }}>
                   <p className="muted">
                     Przekaż 1 rację od postaci, która ma zapas. Dawcy po
@@ -2040,19 +2368,16 @@ function App() {
                       <label>
                         Dawca
                         <select
-                          value={rationTransferFromId}
+                          value={rationTransferFromKey}
                           onChange={e =>
-                            setRationTransferFromId(e.target.value)
+                            setRationTransferFromKey(e.target.value)
                           }
                         >
-                          {rationDonors.map(character => (
-                            <option key={character.id} value={character.id}>
-                              {character.name} • racje:{' '}
-                              {rationCounts.get(character.id) ?? 0} • sloty:{' '}
-                              {Number(
-                                usedSlotsForCharacter(character.id).toFixed(2)
-                              )}
-                              /{Math.max(10, character.strength)}
+                          {rationDonors.map(member => (
+                            <option key={member.key} value={member.key}>
+                              {member.name} ({member.type === 'npc' ? 'NPC' : 'Postać'})
+                              {' • '}racje: {member.rationCount}
+                              {' • '}sloty: {Number(member.usedSlots.toFixed(2))}/{member.maxSlots}
                             </option>
                           ))}
                         </select>
@@ -2061,19 +2386,16 @@ function App() {
                       <label>
                         Odbiorca
                         <select
-                          value={rationTransferToId}
+                          value={rationTransferToKey}
                           onChange={e =>
-                            setRationTransferToId(e.target.value)
+                            setRationTransferToKey(e.target.value)
                           }
                         >
-                          {charactersMissingRations.map(character => (
-                            <option key={character.id} value={character.id}>
-                              {character.name} • racje:{' '}
-                              {rationCounts.get(character.id) ?? 0} • sloty:{' '}
-                              {Number(
-                                usedSlotsForCharacter(character.id).toFixed(2)
-                              )}
-                              /{Math.max(10, character.strength)}
+                          {membersMissingRations.map(member => (
+                            <option key={member.key} value={member.key}>
+                              {member.name} ({member.type === 'npc' ? 'NPC' : 'Postać'})
+                              {' • '}racje: {member.rationCount}
+                              {' • '}sloty: {Number(member.usedSlots.toFixed(2))}/{member.maxSlots}
                             </option>
                           ))}
                         </select>
@@ -2084,8 +2406,8 @@ function App() {
                         onClick={handleTransferRation}
                         disabled={
                           transferringRation ||
-                          !rationTransferFromId ||
-                          !rationTransferToId
+                          !rationTransferFromKey ||
+                          !rationTransferToKey
                         }
                       >
                         <ArrowRightLeft size={16} />
@@ -2120,7 +2442,7 @@ function App() {
                 disabled={
                   feedingExpedition ||
                   characters.length === 0 ||
-                  charactersMissingRations.length > 0
+                  membersMissingRations.length > 0
                 }
               >
                 <Utensils size={16} />
@@ -2217,6 +2539,46 @@ function App() {
                       </article>
                     )
                   })}
+
+                  {npcs.map(npc => {
+                    const usedSlots = usedSlotsForNpc(npc.id)
+
+                    return (
+                      <article className="entity-card" key={`npc-${npc.id}`}>
+                        <div className="entity-head">
+                          <strong>{npc.name}</strong>
+                          <span>NPC{npc.role ? ` • ${npc.role}` : ''}</span>
+                        </div>
+
+                        <div className="slot-line">
+                          <span>Pojemność</span>
+                          <b>{Number(usedSlots.toFixed(2))}/{npc.maxSlots}</b>
+                        </div>
+
+                        <div className="progress small">
+                          <i
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                npc.maxSlots > 0 ? (usedSlots / npc.maxSlots) * 100 : 0
+                              )}%`,
+                            }}
+                          />
+                        </div>
+
+                        <div className="slot-line" style={{ marginTop: 12 }}>
+                          <span>Racje</span>
+                          <b>{npcRationCounts.get(npc.id) ?? 0}</b>
+                        </div>
+
+                        <div className="slot-line" style={{ marginTop: 8 }}>
+                          <span>Ostatnio nakarmiony</span>
+                          <b>{formatLastFed(npc.lastFedAt)}</b>
+                        </div>
+                      </article>
+                    )
+                  })}
+
                 </div>
               )}
 
@@ -2328,7 +2690,7 @@ function App() {
                                 </span>
                                 <span style={{ display: 'block', marginTop: 4 }}>
                                   Ostatnio nakarmiona: {formatLastFed(character.lastFedAt)}
-                                  {' • '}Racje: {rationCounts.get(character.id) ?? 0}
+                                  {' • '}Racje: {characterRationCounts.get(character.id) ?? 0}
                                 </span>
                               </div>
 
@@ -2458,6 +2820,146 @@ function App() {
           )}
 
 
+          {activeView === 'NPC' && (
+            <>
+              <section className="hero parchment-panel">
+                <div>
+                  <p className="eyebrow">NPC</p>
+                  <h1>{active?.name ?? 'Brak kampanii'}</h1>
+                  <p>
+                    Towarzysze i najemnicy ekspedycji. NPC mają własną pojemność,
+                    ekwipunek, racje i znacznik ostatniego karmienia.
+                  </p>
+                </div>
+
+                <button className="primary" onClick={openNewNpc} disabled={!activeId}>
+                  <Plus size={16} />
+                  Nowy NPC
+                </button>
+              </section>
+
+              <section className="dashboard-grid">
+                <div className="panel wide">
+                  <div className="panel-title">
+                    <Shield size={18} />
+                    NPC i ekwipunek
+                  </div>
+
+                  {npcsLoading || npcItemsLoading ? (
+                    <p className="muted">Ładowanie NPC…</p>
+                  ) : npcs.length === 0 ? (
+                    <div className="empty-state">
+                      <p>W tej kampanii nie ma jeszcze NPC.</p>
+                      <button className="primary" onClick={openNewNpc}>
+                        <Plus size={16} />
+                        Dodaj pierwszego NPC
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gap: 16 }}>
+                      {npcs.map(npc => {
+                        const usedSlots = usedSlotsForNpc(npc.id)
+                        const currentItems = itemsForNpc(npc.id)
+
+                        return (
+                          <article className="entity-card" key={npc.id}>
+                            <div className="entity-head">
+                              <div>
+                                <strong>{npc.name}</strong>
+                                <span style={{ display: 'block', marginTop: 4 }}>
+                                  NPC{npc.role ? ` • ${npc.role}` : ''}
+                                </span>
+                                <span style={{ display: 'block', marginTop: 4 }}>
+                                  Ostatnio nakarmiony: {formatLastFed(npc.lastFedAt)}
+                                  {' • '}Racje: {npcRationCounts.get(npc.id) ?? 0}
+                                </span>
+                              </div>
+
+                              <div className="button-row">
+                                <button className="secondary" onClick={() => openNewNpcItem(npc.id)}>
+                                  <Package size={15} />
+                                  Dodaj przedmiot
+                                </button>
+                                <button className="secondary" onClick={() => openEditNpc(npc)}>
+                                  <Pencil size={15} />
+                                  Edytuj
+                                </button>
+                                <button className="danger" onClick={() => removeNpc(npc)}>
+                                  <Trash2 size={15} />
+                                  Usuń
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="slot-line" style={{ marginTop: 12 }}>
+                              <span>Sloty ekwipunku</span>
+                              <b>{Number(usedSlots.toFixed(2))}/{npc.maxSlots}</b>
+                            </div>
+
+                            <div className="progress small">
+                              <i
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    npc.maxSlots > 0 ? (usedSlots / npc.maxSlots) * 100 : 0
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+
+                            <div style={{ marginTop: 16 }}>
+                              {currentItems.length === 0 ? (
+                                <p className="muted">Brak przedmiotów.</p>
+                              ) : (
+                                <div style={{ display: 'grid', gap: 8 }}>
+                                  {currentItems.map(item => (
+                                    <div
+                                      key={item.id}
+                                      className="slot-line"
+                                      style={{
+                                        borderTop: '1px solid rgba(180, 135, 60, 0.25)',
+                                        paddingTop: 8,
+                                        alignItems: 'center',
+                                      }}
+                                    >
+                                      <span>
+                                        <strong>{item.name}</strong>
+                                        {' × '}{item.quantity}
+                                        {' • '}{item.slotsPerUnit} slot./szt.
+                                        {item.category === 'food' && ' • żywność'}
+                                        {item.category === 'light' &&
+                                          ` • światło ${item.lightMinutes ?? 60} min`}
+                                        {item.category === 'weapon' &&
+                                          ` • broń${item.weaponDamage ? ` • obrażenia ${item.weaponDamage}` : ''}`}
+                                        {item.category === 'armor' &&
+                                          ` • pancerz${item.armorClass ? ` • KP/AC ${item.armorClass}` : ''}`}
+                                      </span>
+
+                                      <span className="button-row">
+                                        <button className="secondary" onClick={() => openEditNpcItem(item)}>
+                                          <Pencil size={14} />
+                                          Edytuj
+                                        </button>
+                                        <button className="danger" onClick={() => removeNpcItem(item)}>
+                                          <Trash2 size={14} />
+                                          Usuń
+                                        </button>
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </article>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+
           {activeView === 'Biblioteka' && (
             <>
               <section className="hero parchment-panel">
@@ -2519,7 +3021,7 @@ function App() {
             </>
           )}
 
-          {activeView !== 'Dashboard' && activeView !== 'Postacie' && activeView !== 'Biblioteka' && (
+          {activeView !== 'Dashboard' && activeView !== 'Postacie' && activeView !== 'NPC' && activeView !== 'Biblioteka' && (
             <section className="hero parchment-panel">
               <div>
                 <p className="eyebrow">{activeView.toUpperCase()}</p>
@@ -2532,6 +3034,103 @@ function App() {
         </main>
 
       </div>
+
+      {showNpc && (
+        <Modal
+          onClose={() => {
+            setShowNpc(false)
+            setEditingNpc(null)
+          }}
+        >
+          <p className="eyebrow">{editingNpc ? 'EDYCJA NPC' : 'NOWY NPC'}</p>
+          <h2>{editingNpc ? 'Edytuj NPC' : 'Dodaj NPC'}</h2>
+
+          <label>
+            Nazwa
+            <input autoFocus value={npcName} onChange={e => setNpcName(e.target.value)} />
+          </label>
+
+          <label>
+            Rola / typ
+            <input
+              value={npcRole}
+              onChange={e => setNpcRole(e.target.value)}
+              placeholder="np. najemnik, przewodnik"
+            />
+          </label>
+
+          <label>
+            Maksymalna liczba slotów
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={npcMaxSlots}
+              onChange={e => setNpcMaxSlots(Math.max(0, Number(e.target.value) || 0))}
+            />
+          </label>
+
+          <button className="primary full" onClick={saveNpc}>
+            {editingNpc ? 'Zapisz zmiany' : 'Dodaj NPC'}
+          </button>
+        </Modal>
+      )}
+
+      {showNpcItem && (
+        <Modal
+          onClose={() => {
+            setShowNpcItem(false)
+            setEditingNpcItem(null)
+          }}
+        >
+          <p className="eyebrow">{editingNpcItem ? 'EDYCJA PRZEDMIOTU NPC' : 'NOWY PRZEDMIOT NPC'}</p>
+          <h2>{editingNpcItem ? 'Edytuj przedmiot' : 'Dodaj do ekwipunku NPC'}</h2>
+
+          {!editingNpcItem && (
+            <label>
+              Przedmiot z katalogu
+              <select
+                autoFocus
+                value={npcItemCatalogItemId}
+                onChange={e => {
+                  const id = e.target.value
+                  setNpcItemCatalogItemId(id)
+                  const selected = catalog.find(entry => entry.id === id)
+                  if (selected) applyCatalogToNpcItem(selected)
+                }}
+              >
+                <option value="">— wybierz przedmiot —</option>
+                {catalog.map(entry => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {editingNpcItem && (
+            <label>
+              Nazwa
+              <input value={npcItemName} onChange={e => setNpcItemName(e.target.value)} />
+            </label>
+          )}
+
+          <label>
+            Ilość
+            <input
+              type="number"
+              min="1"
+              value={npcItemQuantity}
+              onChange={e => setNpcItemQuantity(Math.max(1, Number(e.target.value) || 1))}
+            />
+          </label>
+
+          <button className="primary full" onClick={saveNpcItem} disabled={!npcItemName.trim()}>
+            {editingNpcItem ? 'Zapisz zmiany' : 'Dodaj przedmiot'}
+          </button>
+        </Modal>
+      )}
 
       {showCharacter && (
         <Modal
