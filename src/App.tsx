@@ -13,11 +13,13 @@ import {
   Home,
   KeyRound,
   Menu,
+  Package,
   Pencil,
   Plus,
   Shield,
   Trash2,
   Truck,
+  Utensils,
   UserPlus,
   Users,
   X,
@@ -38,6 +40,13 @@ import {
   updateCharacter,
 } from './lib/characters'
 import type { Character } from './lib/characters'
+import {
+  createItem,
+  deleteItem,
+  loadItems,
+  updateItem,
+} from './lib/items'
+import type { CharacterItem, ItemCategory } from './lib/items'
 
 const initialCampaigns: Campaign[] = [
   {
@@ -101,7 +110,7 @@ function App() {
   const [joinCode, setJoinCode] = useState('')
 
   const [mobileNav, setMobileNav] = useState(false)
-  const [activeView, setActiveView] = useState('Dashboard')
+  const [activeView, setActiveView] = useState<(typeof nav)[number][0]>('Dashboard')
 
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -113,7 +122,17 @@ function App() {
   const [characterName, setCharacterName] = useState('')
   const [characterStrength, setCharacterStrength] = useState(10)
   const [characterGold, setCharacterGold] = useState(0)
-  const [characterUsedSlots, setCharacterUsedSlots] = useState(0)
+
+  const [items, setItems] = useState<CharacterItem[]>([])
+  const [itemsLoading, setItemsLoading] = useState(false)
+  const [showItem, setShowItem] = useState(false)
+  const [editingItem, setEditingItem] = useState<CharacterItem | null>(null)
+  const [itemCharacterId, setItemCharacterId] = useState('')
+  const [itemName, setItemName] = useState('')
+  const [itemQuantity, setItemQuantity] = useState(1)
+  const [itemSlotsPerUnit, setItemSlotsPerUnit] = useState(1)
+  const [itemCategory, setItemCategory] = useState<ItemCategory>('normal')
+  const [itemLightMinutes, setItemLightMinutes] = useState(60)
 
   const isCloudMode = Boolean(supabaseEnabled && session)
 
@@ -161,6 +180,25 @@ function App() {
       setError(e?.message || e?.details || 'Nie udało się pobrać postaci.')
     } finally {
       setCharactersLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
+  const refreshItems = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setItems([])
+      return
+    }
+
+    setItemsLoading(true)
+
+    try {
+      const remote = await loadItems(activeId)
+      setItems(remote)
+    } catch (e: any) {
+      console.error('LOAD ITEMS ERROR:', e)
+      setError(e?.message || e?.details || 'Nie udało się pobrać ekwipunku.')
+    } finally {
+      setItemsLoading(false)
     }
   }, [activeId, isCloudMode])
 
@@ -316,6 +354,10 @@ function App() {
   }, [refreshCharacters])
 
   useEffect(() => {
+    refreshItems()
+  }, [refreshItems])
+
+  useEffect(() => {
     if (!supabase || !session || !activeId) return
 
     const sb = supabase
@@ -341,21 +383,67 @@ function App() {
     }
   }, [session, activeId, refreshCharacters])
 
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+
+    const sb = supabase
+
+    const channel = sb
+      .channel(`items-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'character_items',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        () => {
+          refreshItems()
+          refreshCharacters()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshItems, refreshCharacters])
+
   const active =
     campaigns.find(c => c.id === activeId) ??
     campaigns[0]
 
   const characterSlots = useMemo(() => {
-    return characters.reduce(
-      (result, character) => {
-        const maxSlots = Math.max(10, character.strength)
-        result.used += character.usedSlots
-        result.max += maxSlots
-        return result
-      },
-      { used: 0, max: 0 }
+    const max = characters.reduce(
+      (sum, character) => sum + Math.max(10, character.strength),
+      0
     )
-  }, [characters])
+
+    const used = items.reduce(
+      (sum, item) => sum + item.quantity * item.slotsPerUnit,
+      0
+    )
+
+    return { used, max }
+  }, [characters, items])
+
+  const usedSlotsForCharacter = useCallback(
+    (characterId: string) =>
+      items
+        .filter(item => item.characterId === characterId)
+        .reduce(
+          (sum, item) => sum + item.quantity * item.slotsPerUnit,
+          0
+        ),
+    [items]
+  )
+
+  const itemsForCharacter = useCallback(
+    (characterId: string) =>
+      items.filter(item => item.characterId === characterId),
+    [items]
+  )
 
   const totalGold = useMemo(
     () => characters.reduce((sum, character) => sum + character.gold, 0),
@@ -476,7 +564,6 @@ function App() {
     setCharacterName('')
     setCharacterStrength(10)
     setCharacterGold(0)
-    setCharacterUsedSlots(0)
     setShowCharacter(true)
   }
 
@@ -485,7 +572,6 @@ function App() {
     setCharacterName(character.name)
     setCharacterStrength(character.strength)
     setCharacterGold(character.gold)
-    setCharacterUsedSlots(character.usedSlots)
     setShowCharacter(true)
   }
 
@@ -506,7 +592,7 @@ function App() {
           name: characterName,
           strength: characterStrength,
           gold: characterGold,
-          usedSlots: characterUsedSlots,
+          usedSlots: usedSlotsForCharacter(editingCharacter.id),
         })
         flash('Postać została zaktualizowana.')
       } else {
@@ -537,6 +623,109 @@ function App() {
     } catch (e: any) {
       console.error('DELETE CHARACTER ERROR:', e)
       setError(e?.message || e?.details || 'Nie udało się usunąć postaci.')
+    }
+  }
+
+  function openNewItem(characterId: string) {
+    setEditingItem(null)
+    setItemCharacterId(characterId)
+    setItemName('')
+    setItemQuantity(1)
+    setItemSlotsPerUnit(1)
+    setItemCategory('normal')
+    setItemLightMinutes(60)
+    setShowItem(true)
+  }
+
+  function openEditItem(item: CharacterItem) {
+    setEditingItem(item)
+    setItemCharacterId(item.characterId)
+    setItemName(item.name)
+    setItemQuantity(item.quantity)
+    setItemSlotsPerUnit(item.slotsPerUnit)
+    setItemCategory(item.category)
+    setItemLightMinutes(item.lightMinutes ?? 60)
+    setShowItem(true)
+  }
+
+  async function saveItem() {
+    if (!activeId || !itemCharacterId) {
+      setError('Najpierw wybierz kampanię i postać.')
+      return
+    }
+
+    if (!itemName.trim()) {
+      setError('Przedmiot musi mieć nazwę.')
+      return
+    }
+
+    try {
+      if (editingItem) {
+        await updateItem(editingItem.id, itemCharacterId, {
+          name: itemName,
+          quantity: itemQuantity,
+          slotsPerUnit: itemSlotsPerUnit,
+          category: itemCategory,
+          lightMinutes: itemCategory === 'light' ? itemLightMinutes : null,
+        })
+        flash('Przedmiot został zaktualizowany.')
+      } else {
+        await createItem({
+          campaignId: activeId,
+          characterId: itemCharacterId,
+          name: itemName,
+          quantity: itemQuantity,
+          slotsPerUnit: itemSlotsPerUnit,
+          category: itemCategory,
+          lightMinutes: itemCategory === 'light' ? itemLightMinutes : null,
+        })
+        flash('Przedmiot został dodany.')
+      }
+
+      setShowItem(false)
+      setEditingItem(null)
+      await Promise.all([refreshItems(), refreshCharacters()])
+    } catch (e: any) {
+      console.error('SAVE ITEM ERROR:', e)
+      setError(e?.message || e?.details || 'Nie udało się zapisać przedmiotu.')
+    }
+  }
+
+  async function removeItem(item: CharacterItem) {
+    const confirmed = window.confirm(
+      `Czy na pewno usunąć "${item.name}" z ekwipunku?`
+    )
+    if (!confirmed) return
+
+    try {
+      await deleteItem(item.id, item.characterId)
+      flash('Przedmiot został usunięty.')
+      await Promise.all([refreshItems(), refreshCharacters()])
+    } catch (e: any) {
+      console.error('DELETE ITEM ERROR:', e)
+      setError(e?.message || e?.details || 'Nie udało się usunąć przedmiotu.')
+    }
+  }
+
+  async function consumeOne(item: CharacterItem) {
+    try {
+      if (item.quantity <= 1) {
+        await deleteItem(item.id, item.characterId)
+      } else {
+        await updateItem(item.id, item.characterId, {
+          name: item.name,
+          quantity: item.quantity - 1,
+          slotsPerUnit: item.slotsPerUnit,
+          category: item.category,
+          lightMinutes: item.lightMinutes,
+        })
+      }
+
+      flash(`Zużyto 1 × ${item.name}.`)
+      await Promise.all([refreshItems(), refreshCharacters()])
+    } catch (e: any) {
+      console.error('CONSUME ITEM ERROR:', e)
+      setError(e?.message || e?.details || 'Nie udało się zużyć przedmiotu.')
     }
   }
 
@@ -671,7 +860,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 1B • kampanie i synchronizacja
+              Etap 2A • postacie online
             </span>
           </div>
 
@@ -807,8 +996,8 @@ function App() {
             <Metric
               icon={<Backpack />}
               label="Sloty postaci"
-              value={`${characterSlots.used} / ${characterSlots.max}`}
-              sub={`${Math.max(0, characterSlots.max - characterSlots.used)} wolnych`}
+              value={`${Number(characterSlots.used.toFixed(2))} / ${characterSlots.max}`}
+              sub={`${Number(Math.max(0, characterSlots.max - characterSlots.used).toFixed(2))} wolnych`}
             />
 
             <Metric
@@ -1046,109 +1235,174 @@ function App() {
             </>
           )}
 
-
           {activeView === 'Postacie' && (
             <>
               <section className="hero parchment-panel">
                 <div>
                   <p className="eyebrow">POSTACIE</p>
-                  <h1>{active?.name ?? 'Brak aktywnej kampanii'}</h1>
+                  <h1>{active?.name ?? 'Brak kampanii'}</h1>
                   <p>
-                    Postacie, złoto i sloty aktywnej kampanii. Zmiany synchronizują się
-                    między użytkownikami.
+                    Postacie, złoto i ekwipunek aktywnej kampanii.
+                    Zmiany synchronizują się między użytkownikami.
                   </p>
                 </div>
 
-                <div className="hero-tools">
-                  <button
-                    className="primary"
-                    onClick={openNewCharacter}
-                    disabled={!activeId}
-                  >
-                    <Plus size={16} />
-                    Nowa postać
-                  </button>
-                </div>
+                <button
+                  className="primary"
+                  onClick={openNewCharacter}
+                  disabled={!activeId}
+                >
+                  <Plus size={16} />
+                  Nowa postać
+                </button>
               </section>
 
-              <section className="panel">
-                <div className="panel-title">
-                  <Users size={18} />
-                  Postacie
+              <section className="dashboard-grid">
+                <div className="panel wide">
+                  <div className="panel-title">
+                    <Users size={18} />
+                    Postacie i ekwipunek
+                  </div>
+
+                  {charactersLoading || itemsLoading ? (
+                    <p className="muted">Ładowanie danych…</p>
+                  ) : characters.length === 0 ? (
+                    <div className="empty-state">
+                      <p>W tej kampanii nie ma jeszcze żadnych postaci.</p>
+                      <button className="primary" onClick={openNewCharacter}>
+                        <Plus size={16} />
+                        Dodaj pierwszą postać
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gap: 16 }}>
+                      {characters.map(character => {
+                        const maxSlots = Math.max(10, character.strength)
+                        const usedSlots = usedSlotsForCharacter(character.id)
+                        const characterItems = itemsForCharacter(character.id)
+
+                        return (
+                          <article className="entity-card" key={character.id}>
+                            <div className="entity-head">
+                              <div>
+                                <strong>{character.name}</strong>
+                                <span style={{ display: 'block', marginTop: 4 }}>
+                                  SIŁA {character.strength} • {character.gold} gp
+                                </span>
+                              </div>
+
+                              <div className="button-row">
+                                <button
+                                  className="secondary"
+                                  onClick={() => openNewItem(character.id)}
+                                >
+                                  <Package size={15} />
+                                  Dodaj przedmiot
+                                </button>
+
+                                <button
+                                  className="secondary"
+                                  onClick={() => openEditCharacter(character)}
+                                >
+                                  <Pencil size={15} />
+                                  Edytuj
+                                </button>
+
+                                <button
+                                  className="danger"
+                                  onClick={() => removeCharacter(character)}
+                                >
+                                  <Trash2 size={15} />
+                                  Usuń
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="slot-line" style={{ marginTop: 12 }}>
+                              <span>Sloty ekwipunku</span>
+                              <b>
+                                {Number(usedSlots.toFixed(2))}/{maxSlots}
+                              </b>
+                            </div>
+
+                            <div className="progress small">
+                              <i
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    maxSlots > 0 ? (usedSlots / maxSlots) * 100 : 0
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+
+                            <div style={{ marginTop: 16 }}>
+                              {characterItems.length === 0 ? (
+                                <p className="muted">
+                                  Brak przedmiotów. Dodaj pierwszy element ekwipunku.
+                                </p>
+                              ) : (
+                                <div style={{ display: 'grid', gap: 8 }}>
+                                  {characterItems.map(item => (
+                                    <div
+                                      key={item.id}
+                                      className="slot-line"
+                                      style={{
+                                        borderTop: '1px solid rgba(180, 135, 60, 0.25)',
+                                        paddingTop: 8,
+                                        alignItems: 'center',
+                                      }}
+                                    >
+                                      <span>
+                                        <strong>{item.name}</strong>
+                                        {' × '}
+                                        {item.quantity}
+                                        {' • '}
+                                        {item.slotsPerUnit} slot./szt.
+                                        {item.category === 'food' && ' • żywność'}
+                                        {item.category === 'light' &&
+                                          ` • światło ${item.lightMinutes ?? 60} min`}
+                                      </span>
+
+                                      <span className="button-row">
+                                        {(item.category === 'food' ||
+                                          item.category === 'light') && (
+                                          <button
+                                            className="secondary"
+                                            onClick={() => consumeOne(item)}
+                                          >
+                                            <Utensils size={14} />
+                                            Zużyj 1
+                                          </button>
+                                        )}
+
+                                        <button
+                                          className="secondary"
+                                          onClick={() => openEditItem(item)}
+                                        >
+                                          <Pencil size={14} />
+                                          Edytuj
+                                        </button>
+
+                                        <button
+                                          className="danger"
+                                          onClick={() => removeItem(item)}
+                                        >
+                                          <Trash2 size={14} />
+                                          Usuń
+                                        </button>
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </article>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
-
-                {charactersLoading ? (
-                  <p className="muted">Ładowanie postaci…</p>
-                ) : characters.length === 0 ? (
-                  <div className="empty-state">
-                    <p>W tej kampanii nie ma jeszcze żadnych postaci.</p>
-                    <button
-                      className="primary"
-                      onClick={openNewCharacter}
-                      disabled={!activeId}
-                    >
-                      <Plus size={16} />
-                      Dodaj pierwszą postać
-                    </button>
-                  </div>
-                ) : (
-                  <div className="entity-grid">
-                    {characters.map(character => {
-                      const maxSlots = Math.max(10, character.strength)
-                      const usedSlots = Number(character.usedSlots) || 0
-
-                      return (
-                        <article className="entity-card" key={character.id}>
-                          <div className="entity-head">
-                            <strong>{character.name}</strong>
-                            <span>Postać</span>
-                          </div>
-
-                          <div className="slot-line">
-                            <span>SIŁA {character.strength}</span>
-                            <b>
-                              {usedSlots.toFixed(2).replace(/\.00$/, '')}/{maxSlots}
-                            </b>
-                          </div>
-
-                          <div className="progress small">
-                            <i
-                              style={{
-                                width: `${Math.min(
-                                  100,
-                                  maxSlots > 0 ? (usedSlots / maxSlots) * 100 : 0
-                                )}%`,
-                              }}
-                            />
-                          </div>
-
-                          <div className="slot-line" style={{ marginTop: 12 }}>
-                            <span>Złoto</span>
-                            <b>{character.gold} gp</b>
-                          </div>
-
-                          <div className="button-row">
-                            <button
-                              className="secondary"
-                              onClick={() => openEditCharacter(character)}
-                            >
-                              <Pencil size={15} />
-                              Edytuj
-                            </button>
-
-                            <button
-                              className="danger"
-                              onClick={() => removeCharacter(character)}
-                            >
-                              <Trash2 size={15} />
-                              Usuń
-                            </button>
-                          </div>
-                        </article>
-                      )
-                    })}
-                  </div>
-                )}
               </section>
             </>
           )}
@@ -1158,7 +1412,7 @@ function App() {
               <div>
                 <p className="eyebrow">{activeView.toUpperCase()}</p>
                 <h1>{activeView}</h1>
-                <p>Ten moduł zbudujemy w kolejnym etapie.</p>
+                <p>Ta sekcja zostanie podłączona do Supabase w kolejnym etapie.</p>
               </div>
             </section>
           )}
@@ -1212,20 +1466,6 @@ function App() {
             <strong>{Math.max(10, characterStrength)}</strong>
           </p>
 
-          {editingCharacter && (
-            <label>
-              Zajęte sloty
-              <input
-                type="number"
-                min="0"
-                value={characterUsedSlots}
-                onChange={e =>
-                  setCharacterUsedSlots(Math.max(0, Number(e.target.value) || 0))
-                }
-              />
-            </label>
-          )}
-
           <label>
             Złoto (gp)
             <input
@@ -1244,6 +1484,92 @@ function App() {
             disabled={!characterName.trim()}
           >
             {editingCharacter ? 'Zapisz zmiany' : 'Dodaj postać'}
+          </button>
+        </Modal>
+      )}
+
+      {showItem && (
+        <Modal
+          onClose={() => {
+            setShowItem(false)
+            setEditingItem(null)
+          }}
+        >
+          <p className="eyebrow">
+            {editingItem ? 'EDYCJA PRZEDMIOTU' : 'NOWY PRZEDMIOT'}
+          </p>
+
+          <h2>
+            {editingItem ? 'Edytuj przedmiot' : 'Dodaj do ekwipunku'}
+          </h2>
+
+          <label>
+            Nazwa
+            <input
+              autoFocus
+              value={itemName}
+              onChange={e => setItemName(e.target.value)}
+              placeholder="np. Pochodnia"
+            />
+          </label>
+
+          <label>
+            Ilość
+            <input
+              type="number"
+              min="1"
+              value={itemQuantity}
+              onChange={e =>
+                setItemQuantity(Math.max(1, Number(e.target.value) || 1))
+              }
+            />
+          </label>
+
+          <label>
+            Sloty na 1 sztukę
+            <input
+              type="number"
+              min="0"
+              step="0.25"
+              value={itemSlotsPerUnit}
+              onChange={e =>
+                setItemSlotsPerUnit(Math.max(0, Number(e.target.value) || 0))
+              }
+            />
+          </label>
+
+          <label>
+            Typ
+            <select
+              value={itemCategory}
+              onChange={e => setItemCategory(e.target.value as ItemCategory)}
+            >
+              <option value="normal">Zwykły przedmiot</option>
+              <option value="food">Żywność / racja</option>
+              <option value="light">Źródło światła</option>
+            </select>
+          </label>
+
+          {itemCategory === 'light' && (
+            <label>
+              Czas światła jednej sztuki (minuty)
+              <input
+                type="number"
+                min="1"
+                value={itemLightMinutes}
+                onChange={e =>
+                  setItemLightMinutes(Math.max(1, Number(e.target.value) || 1))
+                }
+              />
+            </label>
+          )}
+
+          <button
+            className="primary full"
+            onClick={saveItem}
+            disabled={!itemName.trim()}
+          >
+            {editingItem ? 'Zapisz zmiany' : 'Dodaj przedmiot'}
           </button>
         </Modal>
       )}
