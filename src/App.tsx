@@ -101,6 +101,7 @@ function App() {
   const [joinCode, setJoinCode] = useState('')
 
   const [mobileNav, setMobileNav] = useState(false)
+  const [activeView, setActiveView] = useState('Dashboard')
 
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -651,21 +652,19 @@ function App() {
           </button>
 
           <nav>
-            {nav.map(
-              ([label, Icon], i) => (
-                <button
-                  key={label}
-                  className={
-                    i === 0
-                      ? 'nav-active'
-                      : ''
-                  }
-                >
-                  <Icon size={17} />
-                  {label}
-                </button>
-              )
-            )}
+            {nav.map(([label, Icon]) => (
+              <button
+                key={label}
+                className={activeView === label ? 'nav-active' : ''}
+                onClick={() => {
+                  setActiveView(label)
+                  setMobileNav(false)
+                }}
+              >
+                <Icon size={17} />
+                {label}
+              </button>
+            ))}
           </nav>
 
           <div className="sidebar-footer">
@@ -741,6 +740,8 @@ function App() {
               </div>
             )}
 
+          {activeView === 'Dashboard' && (
+            <>
           <section className="hero parchment-panel">
 
             <div>
@@ -1042,6 +1043,125 @@ function App() {
             </div>
 
           </section>
+            </>
+          )}
+
+
+          {activeView === 'Postacie' && (
+            <>
+              <section className="hero parchment-panel">
+                <div>
+                  <p className="eyebrow">POSTACIE</p>
+                  <h1>{active?.name ?? 'Brak aktywnej kampanii'}</h1>
+                  <p>
+                    Postacie, złoto i sloty aktywnej kampanii. Zmiany synchronizują się
+                    między użytkownikami.
+                  </p>
+                </div>
+
+                <div className="hero-tools">
+                  <button
+                    className="primary"
+                    onClick={openNewCharacter}
+                    disabled={!activeId}
+                  >
+                    <Plus size={16} />
+                    Nowa postać
+                  </button>
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="panel-title">
+                  <Users size={18} />
+                  Postacie
+                </div>
+
+                {charactersLoading ? (
+                  <p className="muted">Ładowanie postaci…</p>
+                ) : characters.length === 0 ? (
+                  <div className="empty-state">
+                    <p>W tej kampanii nie ma jeszcze żadnych postaci.</p>
+                    <button
+                      className="primary"
+                      onClick={openNewCharacter}
+                      disabled={!activeId}
+                    >
+                      <Plus size={16} />
+                      Dodaj pierwszą postać
+                    </button>
+                  </div>
+                ) : (
+                  <div className="entity-grid">
+                    {characters.map(character => {
+                      const maxSlots = Math.max(10, character.strength)
+                      const usedSlots = Number(character.usedSlots) || 0
+
+                      return (
+                        <article className="entity-card" key={character.id}>
+                          <div className="entity-head">
+                            <strong>{character.name}</strong>
+                            <span>Postać</span>
+                          </div>
+
+                          <div className="slot-line">
+                            <span>SIŁA {character.strength}</span>
+                            <b>
+                              {usedSlots.toFixed(2).replace(/\.00$/, '')}/{maxSlots}
+                            </b>
+                          </div>
+
+                          <div className="progress small">
+                            <i
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  maxSlots > 0 ? (usedSlots / maxSlots) * 100 : 0
+                                )}%`,
+                              }}
+                            />
+                          </div>
+
+                          <div className="slot-line" style={{ marginTop: 12 }}>
+                            <span>Złoto</span>
+                            <b>{character.gold} gp</b>
+                          </div>
+
+                          <div className="button-row">
+                            <button
+                              className="secondary"
+                              onClick={() => openEditCharacter(character)}
+                            >
+                              <Pencil size={15} />
+                              Edytuj
+                            </button>
+
+                            <button
+                              className="danger"
+                              onClick={() => removeCharacter(character)}
+                            >
+                              <Trash2 size={15} />
+                              Usuń
+                            </button>
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
+          {activeView !== 'Dashboard' && activeView !== 'Postacie' && (
+            <section className="hero parchment-panel">
+              <div>
+                <p className="eyebrow">{activeView.toUpperCase()}</p>
+                <h1>{activeView}</h1>
+                <p>Ten moduł zbudujemy w kolejnym etapie.</p>
+              </div>
+            </section>
+          )}
 
         </main>
 
