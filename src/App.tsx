@@ -143,6 +143,8 @@ function App() {
   const [itemName, setItemName] = useState('')
   const [itemQuantity, setItemQuantity] = useState(1)
   const [itemSlotsPerUnit, setItemSlotsPerUnit] = useState(1)
+  const [itemSlotGroupSize, setItemSlotGroupSize] = useState(1)
+  const [itemFreeQuantity, setItemFreeQuantity] = useState(0)
   const [itemCategory, setItemCategory] = useState<ItemCategory>('normal')
   const [itemLightMinutes, setItemLightMinutes] = useState(60)
   const [itemCatalogItemId, setItemCatalogItemId] = useState('')
@@ -157,6 +159,8 @@ function App() {
   const [showCatalogItem, setShowCatalogItem] = useState(false)
   const [catalogName, setCatalogName] = useState('')
   const [catalogSlotsPerUnit, setCatalogSlotsPerUnit] = useState(1)
+  const [catalogSlotGroupSize, setCatalogSlotGroupSize] = useState(1)
+  const [catalogFreeQuantity, setCatalogFreeQuantity] = useState(0)
   const [catalogCategory, setCatalogCategory] = useState<CatalogItemCategory>('normal')
   const [catalogLightMinutes, setCatalogLightMinutes] = useState(60)
   const [catalogWeaponDamage, setCatalogWeaponDamage] = useState('')
@@ -542,29 +546,34 @@ function App() {
     campaigns.find(c => c.id === activeId) ??
     campaigns[0]
 
+  const slotUsageForItem = useCallback(
+    (item: CharacterItem) => {
+      const quantity = Math.max(0, item.quantity - (item.freeQuantity ?? 0))
+      if (quantity <= 0) return 0
+
+      const groupSize = Math.max(1, item.slotGroupSize ?? 1)
+      return Math.ceil(quantity / groupSize) * item.slotsPerUnit
+    },
+    []
+  )
+
   const characterSlots = useMemo(() => {
     const max = characters.reduce(
       (sum, character) => sum + Math.max(10, character.strength),
       0
     )
 
-    const used = items.reduce(
-      (sum, item) => sum + item.quantity * item.slotsPerUnit,
-      0
-    )
+    const used = items.reduce((sum, item) => sum + slotUsageForItem(item), 0)
 
     return { used, max }
-  }, [characters, items])
+  }, [characters, items, slotUsageForItem])
 
   const usedSlotsForCharacter = useCallback(
     (characterId: string) =>
       items
         .filter(item => item.characterId === characterId)
-        .reduce(
-          (sum, item) => sum + item.quantity * item.slotsPerUnit,
-          0
-        ),
-    [items]
+        .reduce((sum, item) => sum + slotUsageForItem(item), 0),
+    [items, slotUsageForItem]
   )
 
   const itemsForCharacter = useCallback(
@@ -633,13 +642,24 @@ function App() {
       const rule = lightRuleForItem(item)
       if (!rule || rule.lightConsumesSource || !rule.lightFuelItemName) return null
 
+      const fuelCatalogIds = new Set(
+        catalog
+          .filter(entry =>
+            entry.name.trim().toLowerCase() === rule.lightFuelItemName!.trim().toLowerCase()
+          )
+          .map(entry => entry.id)
+      )
+
+      const normalizeName = (value: string) =>
+        value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
+      const expectedName = normalizeName(rule.lightFuelItemName)
       const available = items
-        .filter(
-          candidate =>
-            candidate.characterId === item.characterId &&
-            candidate.name.trim().toLowerCase() ===
-              rule.lightFuelItemName!.trim().toLowerCase()
-        )
+        .filter(candidate => {
+          if (candidate.characterId !== item.characterId) return false
+          if (candidate.catalogItemId && fuelCatalogIds.has(candidate.catalogItemId)) return true
+          return normalizeName(candidate.name) === expectedName
+        })
         .reduce((sum, candidate) => sum + candidate.quantity, 0)
 
       return {
@@ -648,7 +668,7 @@ function App() {
         available,
       }
     },
-    [items, lightRuleForItem]
+    [items, catalog, lightRuleForItem]
   )
 
   function formatTimer(totalSeconds: number) {
@@ -972,6 +992,8 @@ function App() {
     setItemName('')
     setItemQuantity(1)
     setItemSlotsPerUnit(1)
+    setItemSlotGroupSize(1)
+    setItemFreeQuantity(0)
     setItemCategory('normal')
     setItemLightMinutes(60)
     setItemWeaponDamage('')
@@ -985,6 +1007,8 @@ function App() {
     setItemCatalogItemId(entry.id)
     setItemName(entry.name)
     setItemSlotsPerUnit(entry.slotsPerUnit)
+    setItemSlotGroupSize(entry.slotGroupSize)
+    setItemFreeQuantity(entry.freeQuantity)
     setItemCategory(entry.category)
     setItemLightMinutes(entry.lightMinutes ?? 60)
     setItemWeaponDamage(entry.weaponDamage ?? '')
@@ -1008,6 +1032,8 @@ function App() {
     setItemName(item.name)
     setItemQuantity(item.quantity)
     setItemSlotsPerUnit(item.slotsPerUnit)
+    setItemSlotGroupSize(item.slotGroupSize)
+    setItemFreeQuantity(item.freeQuantity)
     setItemCategory(item.category)
     setItemLightMinutes(item.lightMinutes ?? 60)
     setItemWeaponDamage(item.weaponDamage ?? '')
@@ -1021,6 +1047,8 @@ function App() {
   function openNewCatalogItem() {
     setCatalogName('')
     setCatalogSlotsPerUnit(1)
+    setCatalogSlotGroupSize(1)
+    setCatalogFreeQuantity(0)
     setCatalogCategory('normal')
     setCatalogLightMinutes(60)
     setCatalogWeaponDamage('')
@@ -1039,6 +1067,8 @@ function App() {
         campaignId: activeId,
         name: catalogName,
         slotsPerUnit: catalogSlotsPerUnit,
+        slotGroupSize: catalogSlotGroupSize,
+        freeQuantity: catalogFreeQuantity,
         category: catalogCategory,
         lightMinutes: catalogCategory === 'light' ? catalogLightMinutes : null,
         weaponDamage: catalogCategory === 'weapon' ? catalogWeaponDamage : null,
@@ -1071,6 +1101,8 @@ function App() {
       name: itemName,
       quantity: itemQuantity,
       slotsPerUnit: itemSlotsPerUnit,
+      slotGroupSize: itemSlotGroupSize,
+      freeQuantity: itemFreeQuantity,
       category: itemCategory,
       lightMinutes: itemCategory === 'light' ? itemLightMinutes : null,
       weaponDamage: itemCategory === 'weapon' ? itemWeaponDamage : null,
@@ -1121,6 +1153,8 @@ function App() {
           name: item.name,
           quantity: item.quantity - 1,
           slotsPerUnit: item.slotsPerUnit,
+          slotGroupSize: item.slotGroupSize,
+          freeQuantity: item.freeQuantity,
           category: item.category,
           lightMinutes: item.lightMinutes,
           weaponDamage: item.weaponDamage,
@@ -1149,7 +1183,8 @@ function App() {
   }
 
   function catalogItemDetails(entry: CatalogItem) {
-    const parts = [`${entry.slotsPerUnit} slot./szt.`]
+    const parts = [entry.slotGroupSize > 1 ? `${entry.slotsPerUnit} slot / ${entry.slotGroupSize} szt.` : `${entry.slotsPerUnit} slot./szt.`]
+    if (entry.freeQuantity > 0) parts.push(`pierwsze ${entry.freeQuantity} bez slotu`)
     if (entry.category === 'light' && entry.lightMinutes) parts.push(`${entry.lightMinutes} min światła`)
     if (entry.category === 'weapon') {
       if (entry.weaponDamage) parts.push(`obrażenia ${entry.weaponDamage}`)
@@ -1208,7 +1243,7 @@ function App() {
       const cols = line.split(';').map(value => value.trim())
       const [name, categoryRaw = 'normal', slotsRaw = '1', lightRaw = '',
         weaponDamage = '', weaponRange = '', weaponProperties = '',
-        armorClass = '', armorProperties = ''] = cols
+        armorClass = '', armorProperties = '', slotGroupRaw = '1', freeQuantityRaw = '0'] = cols
 
       if (!name) throw new Error(`Brak nazwy przedmiotu w wierszu ${index + 1 + start}.`)
 
@@ -1221,10 +1256,13 @@ function App() {
         throw new Error(`Nieprawidłowa liczba slotów dla "${name}".`)
       }
 
+      const slotGroupSize = Math.max(1, Number(slotGroupRaw.replace(',', '.')) || 1)
+      const freeQuantity = Math.max(0, Number(freeQuantityRaw.replace(',', '.')) || 0)
+
       const lightParsed = lightRaw === '' ? null : Number(lightRaw.replace(',', '.'))
 
       return {
-        name, category, slotsPerUnit,
+        name, category, slotsPerUnit, slotGroupSize, freeQuantity,
         lightMinutes: category === 'light' && lightParsed != null && Number.isFinite(lightParsed) ? lightParsed : null,
         weaponDamage: category === 'weapon' ? weaponDamage || null : null,
         weaponRange: category === 'weapon' ? weaponRange || null : null,
@@ -1263,11 +1301,11 @@ function App() {
   }
 
   function exportCatalogCsv() {
-    const header = 'name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties'
+    const header = 'name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties;slot_group_size;free_quantity'
     const rows = catalog.map(entry =>
       [entry.name, entry.category, entry.slotsPerUnit, entry.lightMinutes ?? '',
        entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '',
-       entry.armorClass ?? '', entry.armorProperties ?? '']
+       entry.armorClass ?? '', entry.armorProperties ?? '', entry.slotGroupSize, entry.freeQuantity]
         .map(value => String(value).split(';').join(',')).join(';')
     )
 
@@ -1411,7 +1449,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 2F • przekazywanie światła i paliwo
+              Etap 2F.1 • paliwo i reguły slotów
             </span>
           </div>
 
@@ -2312,6 +2350,18 @@ function App() {
               onChange={e => setCatalogSlotsPerUnit(Math.max(0, Number(e.target.value) || 0))} />
           </label>
 
+          <label>
+            Ile sztuk mieści się w jednym slocie
+            <input type="number" min="1" step="1" value={catalogSlotGroupSize}
+              onChange={e => setCatalogSlotGroupSize(Math.max(1, Number(e.target.value) || 1))} />
+          </label>
+
+          <label>
+            Ile pierwszych sztuk nie zajmuje slotów
+            <input type="number" min="0" step="1" value={catalogFreeQuantity}
+              onChange={e => setCatalogFreeQuantity(Math.max(0, Number(e.target.value) || 0))} />
+          </label>
+
           {catalogCategory === 'light' && (
             <label>
               Czas światła jednej sztuki (minuty)
@@ -2348,7 +2398,7 @@ function App() {
           <p className="eyebrow">IMPORT BIBLIOTEKI</p>
           <h2>Importuj przedmioty z CSV</h2>
           <p className="muted">
-            Każdy wiersz: nazwa;typ;sloty;czas światła;obrażenia;zasięg;właściwości broni;KP/AC;właściwości pancerza.
+            Każdy wiersz: nazwa;typ;sloty;czas światła;obrażenia;zasięg;właściwości broni;KP/AC;właściwości pancerza;wielkość grupy slotu;darmowa ilość.
           </p>
           <textarea
             rows={12}
@@ -2356,7 +2406,8 @@ function App() {
             onChange={e => setCatalogImportText(e.target.value)}
             placeholder={`name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties
 Pochodnia;light;1;60;;;;;
-Racje;food;0.33;;;;;;`}
+Racje;food;1;;;;;;;3;0
+Coin;normal;1;;;;;;;100;100`}
           />
           <button className="primary full" onClick={importCatalogCsv} disabled={!catalogImportText.trim()}>
             Importuj do kampanii
