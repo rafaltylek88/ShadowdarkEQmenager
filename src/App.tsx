@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Backpack, Beef, Building2, Castle, Coins, Flame, Gauge, Home, Menu, Plus, Shield, Users, X } from 'lucide-react'
+import { Backpack, Beef, Building2, Castle, Coins, Flame, Gauge, Home, Menu, Plus, Shield, Users, Truck X } from 'lucide-react'
 import { supabaseEnabled } from './lib/supabase'
 import type { Campaign, CharacterSummary } from './types'
 
@@ -18,7 +18,7 @@ const summaries: CharacterSummary[] = [
 ]
 
 const nav = [
-  ['Dashboard', Gauge], ['Postacie', Users], ['NPC', Shield], ['Zwierzęta', Beef], ['Wozy', Package],
+  ['Dashboard', Gauge], ['Postacie', Users], ['NPC', Shield], ['Zwierzęta', Beef], ['Wozy', Truck],
   ['Siedziby', Castle], ['Ekwipunek wspólny', Backpack], ['Podsumowanie', Coins],
 ] as const
 
