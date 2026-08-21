@@ -47,6 +47,8 @@ import {
   updateItem,
 } from './lib/items'
 import type { CharacterItem, ItemCategory } from './lib/items'
+import { createCatalogItem, loadCatalog } from './lib/catalog'
+import type { CatalogItem, CatalogItemCategory } from './lib/catalog'
 
 const initialCampaigns: Campaign[] = [
   {
@@ -133,6 +135,25 @@ function App() {
   const [itemSlotsPerUnit, setItemSlotsPerUnit] = useState(1)
   const [itemCategory, setItemCategory] = useState<ItemCategory>('normal')
   const [itemLightMinutes, setItemLightMinutes] = useState(60)
+  const [itemCatalogItemId, setItemCatalogItemId] = useState('')
+  const [itemWeaponDamage, setItemWeaponDamage] = useState('')
+  const [itemWeaponRange, setItemWeaponRange] = useState('')
+  const [itemWeaponProperties, setItemWeaponProperties] = useState('')
+  const [itemArmorClass, setItemArmorClass] = useState('')
+  const [itemArmorProperties, setItemArmorProperties] = useState('')
+
+  const [catalog, setCatalog] = useState<CatalogItem[]>([])
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [showCatalogItem, setShowCatalogItem] = useState(false)
+  const [catalogName, setCatalogName] = useState('')
+  const [catalogSlotsPerUnit, setCatalogSlotsPerUnit] = useState(1)
+  const [catalogCategory, setCatalogCategory] = useState<CatalogItemCategory>('normal')
+  const [catalogLightMinutes, setCatalogLightMinutes] = useState(60)
+  const [catalogWeaponDamage, setCatalogWeaponDamage] = useState('')
+  const [catalogWeaponRange, setCatalogWeaponRange] = useState('')
+  const [catalogWeaponProperties, setCatalogWeaponProperties] = useState('')
+  const [catalogArmorClass, setCatalogArmorClass] = useState('')
+  const [catalogArmorProperties, setCatalogArmorProperties] = useState('')
 
   const isCloudMode = Boolean(supabaseEnabled && session)
 
@@ -201,6 +222,23 @@ function App() {
       setItemsLoading(false)
     }
   }, [activeId, isCloudMode])
+
+  const refreshCatalog = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setCatalog([])
+      return
+    }
+
+    setCatalogLoading(true)
+    try {
+      setCatalog(await loadCatalog(activeId))
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się pobrać katalogu.')
+    } finally {
+      setCatalogLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
 
   /*
    * Supabase uruchamia anonimową sesję.
@@ -358,6 +396,10 @@ function App() {
   }, [refreshItems])
 
   useEffect(() => {
+    refreshCatalog()
+  }, [refreshCatalog])
+
+  useEffect(() => {
     if (!supabase || !session || !activeId) return
 
     const sb = supabase
@@ -409,6 +451,30 @@ function App() {
       sb.removeChannel(channel)
     }
   }, [session, activeId, refreshItems, refreshCharacters])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+
+    const channel = sb
+      .channel(`catalog-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'item_catalog',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        refreshCatalog
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshCatalog])
+
 
   const active =
     campaigns.find(c => c.id === activeId) ??
@@ -626,26 +692,93 @@ function App() {
     }
   }
 
-  function openNewItem(characterId: string) {
-    setEditingItem(null)
-    setItemCharacterId(characterId)
+  function resetItemDetails() {
+    setItemCatalogItemId('')
     setItemName('')
     setItemQuantity(1)
     setItemSlotsPerUnit(1)
     setItemCategory('normal')
     setItemLightMinutes(60)
+    setItemWeaponDamage('')
+    setItemWeaponRange('')
+    setItemWeaponProperties('')
+    setItemArmorClass('')
+    setItemArmorProperties('')
+  }
+
+  function applyCatalogItem(entry: CatalogItem) {
+    setItemCatalogItemId(entry.id)
+    setItemName(entry.name)
+    setItemSlotsPerUnit(entry.slotsPerUnit)
+    setItemCategory(entry.category)
+    setItemLightMinutes(entry.lightMinutes ?? 60)
+    setItemWeaponDamage(entry.weaponDamage ?? '')
+    setItemWeaponRange(entry.weaponRange ?? '')
+    setItemWeaponProperties(entry.weaponProperties ?? '')
+    setItemArmorClass(entry.armorClass ?? '')
+    setItemArmorProperties(entry.armorProperties ?? '')
+  }
+
+  function openNewItem(characterId: string) {
+    setEditingItem(null)
+    setItemCharacterId(characterId)
+    resetItemDetails()
     setShowItem(true)
   }
 
   function openEditItem(item: CharacterItem) {
     setEditingItem(item)
     setItemCharacterId(item.characterId)
+    setItemCatalogItemId(item.catalogItemId ?? '')
     setItemName(item.name)
     setItemQuantity(item.quantity)
     setItemSlotsPerUnit(item.slotsPerUnit)
     setItemCategory(item.category)
     setItemLightMinutes(item.lightMinutes ?? 60)
+    setItemWeaponDamage(item.weaponDamage ?? '')
+    setItemWeaponRange(item.weaponRange ?? '')
+    setItemWeaponProperties(item.weaponProperties ?? '')
+    setItemArmorClass(item.armorClass ?? '')
+    setItemArmorProperties(item.armorProperties ?? '')
     setShowItem(true)
+  }
+
+  function openNewCatalogItem() {
+    setCatalogName('')
+    setCatalogSlotsPerUnit(1)
+    setCatalogCategory('normal')
+    setCatalogLightMinutes(60)
+    setCatalogWeaponDamage('')
+    setCatalogWeaponRange('')
+    setCatalogWeaponProperties('')
+    setCatalogArmorClass('')
+    setCatalogArmorProperties('')
+    setShowCatalogItem(true)
+  }
+
+  async function saveCatalogItem() {
+    if (!activeId || !catalogName.trim()) return
+
+    try {
+      const created = await createCatalogItem({
+        campaignId: activeId,
+        name: catalogName,
+        slotsPerUnit: catalogSlotsPerUnit,
+        category: catalogCategory,
+        lightMinutes: catalogCategory === 'light' ? catalogLightMinutes : null,
+        weaponDamage: catalogCategory === 'weapon' ? catalogWeaponDamage : null,
+        weaponRange: catalogCategory === 'weapon' ? catalogWeaponRange : null,
+        weaponProperties: catalogCategory === 'weapon' ? catalogWeaponProperties : null,
+        armorClass: catalogCategory === 'armor' ? catalogArmorClass : null,
+        armorProperties: catalogCategory === 'armor' ? catalogArmorProperties : null,
+      })
+      setCatalog(prev => [...prev.filter(i => i.id !== created.id), created].sort((a, b) => a.name.localeCompare(b.name, 'pl')))
+      applyCatalogItem(created)
+      setShowCatalogItem(false)
+      flash(`Dodano "${created.name}" do katalogu kampanii.`)
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się dodać przedmiotu do katalogu.')
+    }
   }
 
   async function saveItem() {
@@ -653,56 +786,52 @@ function App() {
       setError('Najpierw wybierz kampanię i postać.')
       return
     }
-
     if (!itemName.trim()) {
-      setError('Przedmiot musi mieć nazwę.')
+      setError('Wybierz przedmiot z katalogu.')
       return
+    }
+
+    const details = {
+      catalogItemId: itemCatalogItemId || null,
+      name: itemName,
+      quantity: itemQuantity,
+      slotsPerUnit: itemSlotsPerUnit,
+      category: itemCategory,
+      lightMinutes: itemCategory === 'light' ? itemLightMinutes : null,
+      weaponDamage: itemCategory === 'weapon' ? itemWeaponDamage : null,
+      weaponRange: itemCategory === 'weapon' ? itemWeaponRange : null,
+      weaponProperties: itemCategory === 'weapon' ? itemWeaponProperties : null,
+      armorClass: itemCategory === 'armor' ? itemArmorClass : null,
+      armorProperties: itemCategory === 'armor' ? itemArmorProperties : null,
     }
 
     try {
       if (editingItem) {
-        await updateItem(editingItem.id, itemCharacterId, {
-          name: itemName,
-          quantity: itemQuantity,
-          slotsPerUnit: itemSlotsPerUnit,
-          category: itemCategory,
-          lightMinutes: itemCategory === 'light' ? itemLightMinutes : null,
-        })
+        await updateItem(editingItem.id, itemCharacterId, details)
         flash('Przedmiot został zaktualizowany.')
       } else {
         await createItem({
           campaignId: activeId,
           characterId: itemCharacterId,
-          name: itemName,
-          quantity: itemQuantity,
-          slotsPerUnit: itemSlotsPerUnit,
-          category: itemCategory,
-          lightMinutes: itemCategory === 'light' ? itemLightMinutes : null,
+          ...details,
         })
         flash('Przedmiot został dodany.')
       }
-
       setShowItem(false)
       setEditingItem(null)
       await Promise.all([refreshItems(), refreshCharacters()])
     } catch (e: any) {
-      console.error('SAVE ITEM ERROR:', e)
       setError(e?.message || e?.details || 'Nie udało się zapisać przedmiotu.')
     }
   }
 
   async function removeItem(item: CharacterItem) {
-    const confirmed = window.confirm(
-      `Czy na pewno usunąć "${item.name}" z ekwipunku?`
-    )
-    if (!confirmed) return
-
+    if (!window.confirm(`Czy na pewno usunąć "${item.name}" z ekwipunku?`)) return
     try {
       await deleteItem(item.id, item.characterId)
       flash('Przedmiot został usunięty.')
       await Promise.all([refreshItems(), refreshCharacters()])
     } catch (e: any) {
-      console.error('DELETE ITEM ERROR:', e)
       setError(e?.message || e?.details || 'Nie udało się usunąć przedmiotu.')
     }
   }
@@ -713,18 +842,22 @@ function App() {
         await deleteItem(item.id, item.characterId)
       } else {
         await updateItem(item.id, item.characterId, {
+          catalogItemId: item.catalogItemId,
           name: item.name,
           quantity: item.quantity - 1,
           slotsPerUnit: item.slotsPerUnit,
           category: item.category,
           lightMinutes: item.lightMinutes,
+          weaponDamage: item.weaponDamage,
+          weaponRange: item.weaponRange,
+          weaponProperties: item.weaponProperties,
+          armorClass: item.armorClass,
+          armorProperties: item.armorProperties,
         })
       }
-
       flash(`Zużyto 1 × ${item.name}.`)
       await Promise.all([refreshItems(), refreshCharacters()])
     } catch (e: any) {
-      console.error('CONSUME ITEM ERROR:', e)
       setError(e?.message || e?.details || 'Nie udało się zużyć przedmiotu.')
     }
   }
@@ -1364,6 +1497,14 @@ function App() {
                                         {item.category === 'food' && ' • żywność'}
                                         {item.category === 'light' &&
                                           ` • światło ${item.lightMinutes ?? 60} min`}
+                                        {item.category === 'weapon' &&
+                                          ` • broń${item.weaponDamage ? ` • obrażenia ${item.weaponDamage}` : ''}${item.weaponRange ? ` • zasięg ${item.weaponRange}` : ''}`}
+                                        {item.category === 'armor' &&
+                                          ` • pancerz${item.armorClass ? ` • KP/AC ${item.armorClass}` : ''}`}
+                                        {item.category === 'weapon' && item.weaponProperties &&
+                                          ` • ${item.weaponProperties}`}
+                                        {item.category === 'armor' && item.armorProperties &&
+                                          ` • ${item.armorProperties}`}
                                       </span>
 
                                       <span className="button-row">
@@ -1500,20 +1641,51 @@ function App() {
           <p className="eyebrow">
             {editingItem ? 'EDYCJA PRZEDMIOTU' : 'NOWY PRZEDMIOT'}
           </p>
+          <h2>{editingItem ? 'Edytuj przedmiot' : 'Dodaj do ekwipunku'}</h2>
 
-          <h2>
-            {editingItem ? 'Edytuj przedmiot' : 'Dodaj do ekwipunku'}
-          </h2>
+          {!editingItem && (
+            <>
+              <label>
+                Przedmiot z katalogu
+                <select
+                  autoFocus
+                  value={itemCatalogItemId}
+                  disabled={catalogLoading}
+                  onChange={e => {
+                    const selected = catalog.find(i => i.id === e.target.value)
+                    setItemCatalogItemId(e.target.value)
+                    if (selected) applyCatalogItem(selected)
+                  }}
+                >
+                  <option value="">{catalogLoading ? 'Ładowanie katalogu…' : '— wybierz przedmiot —'}</option>
+                  {catalog.map(entry => (
+                    <option key={entry.id} value={entry.id}>{entry.name}</option>
+                  ))}
+                </select>
+              </label>
 
-          <label>
-            Nazwa
-            <input
-              autoFocus
-              value={itemName}
-              onChange={e => setItemName(e.target.value)}
-              placeholder="np. Pochodnia"
-            />
-          </label>
+              <button className="secondary full" type="button" onClick={openNewCatalogItem}>
+                <Plus size={16} />
+                Dodaj nowy przedmiot na stałe do katalogu
+              </button>
+            </>
+          )}
+
+          {itemName && (
+            <div className="setup-banner">
+              <Package size={18} />
+              <div>
+                <strong>{itemName}</strong>
+                <span>
+                  {itemSlotsPerUnit} slot./szt.
+                  {itemCategory === 'food' && ' • żywność'}
+                  {itemCategory === 'light' && ` • światło ${itemLightMinutes} min`}
+                  {itemCategory === 'weapon' && ` • broń${itemWeaponDamage ? ` • obrażenia ${itemWeaponDamage}` : ''}${itemWeaponRange ? ` • zasięg ${itemWeaponRange}` : ''}`}
+                  {itemCategory === 'armor' && ` • pancerz${itemArmorClass ? ` • KP/AC ${itemArmorClass}` : ''}`}
+                </span>
+              </div>
+            </div>
+          )}
 
           <label>
             Ilość
@@ -1521,58 +1693,70 @@ function App() {
               type="number"
               min="1"
               value={itemQuantity}
-              onChange={e =>
-                setItemQuantity(Math.max(1, Number(e.target.value) || 1))
-              }
+              onChange={e => setItemQuantity(Math.max(1, Number(e.target.value) || 1))}
             />
           </label>
 
+          <button className="primary full" onClick={saveItem} disabled={!itemName.trim()}>
+            {editingItem ? 'Zapisz zmiany' : 'Dodaj przedmiot'}
+          </button>
+        </Modal>
+      )}
+
+      {showCatalogItem && (
+        <Modal onClose={() => setShowCatalogItem(false)}>
+          <p className="eyebrow">KATALOG KAMPANII</p>
+          <h2>Nowy przedmiot katalogowy</h2>
+
           <label>
-            Sloty na 1 sztukę
-            <input
-              type="number"
-              min="0"
-              step="0.25"
-              value={itemSlotsPerUnit}
-              onChange={e =>
-                setItemSlotsPerUnit(Math.max(0, Number(e.target.value) || 0))
-              }
-            />
+            Nazwa
+            <input autoFocus value={catalogName} onChange={e => setCatalogName(e.target.value)} placeholder="np. Miecz długi" />
           </label>
 
           <label>
             Typ
-            <select
-              value={itemCategory}
-              onChange={e => setItemCategory(e.target.value as ItemCategory)}
-            >
+            <select value={catalogCategory} onChange={e => setCatalogCategory(e.target.value as CatalogItemCategory)}>
               <option value="normal">Zwykły przedmiot</option>
               <option value="food">Żywność / racja</option>
               <option value="light">Źródło światła</option>
+              <option value="weapon">Broń</option>
+              <option value="armor">Pancerz / tarcza</option>
             </select>
           </label>
 
-          {itemCategory === 'light' && (
+          <label>
+            Sloty na 1 sztukę
+            <input type="number" min="0" step="0.01" value={catalogSlotsPerUnit}
+              onChange={e => setCatalogSlotsPerUnit(Math.max(0, Number(e.target.value) || 0))} />
+          </label>
+
+          {catalogCategory === 'light' && (
             <label>
               Czas światła jednej sztuki (minuty)
-              <input
-                type="number"
-                min="1"
-                value={itemLightMinutes}
-                onChange={e =>
-                  setItemLightMinutes(Math.max(1, Number(e.target.value) || 1))
-                }
-              />
+              <input type="number" min="1" value={catalogLightMinutes}
+                onChange={e => setCatalogLightMinutes(Math.max(1, Number(e.target.value) || 1))} />
             </label>
           )}
 
-          <button
-            className="primary full"
-            onClick={saveItem}
-            disabled={!itemName.trim()}
-          >
-            {editingItem ? 'Zapisz zmiany' : 'Dodaj przedmiot'}
+          {catalogCategory === 'weapon' && (
+            <>
+              <label>Obrażenia<input value={catalogWeaponDamage} onChange={e => setCatalogWeaponDamage(e.target.value)} placeholder="np. 1d6" /></label>
+              <label>Zasięg<input value={catalogWeaponRange} onChange={e => setCatalogWeaponRange(e.target.value)} placeholder="np. bliski" /></label>
+              <label>Właściwości broni<input value={catalogWeaponProperties} onChange={e => setCatalogWeaponProperties(e.target.value)} placeholder="np. dwuręczna" /></label>
+            </>
+          )}
+
+          {catalogCategory === 'armor' && (
+            <>
+              <label>KP / AC<input value={catalogArmorClass} onChange={e => setCatalogArmorClass(e.target.value)} placeholder="np. 14 albo +2" /></label>
+              <label>Właściwości pancerza<input value={catalogArmorProperties} onChange={e => setCatalogArmorProperties(e.target.value)} placeholder="np. ciężki, tarcza" /></label>
+            </>
+          )}
+
+          <button className="primary full" onClick={saveCatalogItem} disabled={!catalogName.trim()}>
+            Dodaj do katalogu
           </button>
+          <p className="muted">Przedmiot będzie dostępny wszystkim użytkownikom tej kampanii.</p>
         </Modal>
       )}
 
