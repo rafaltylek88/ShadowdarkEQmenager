@@ -1,57 +1,74 @@
-# Shadowdark Manager
+# Shadowdark Manager — Etap 1B
 
-Pierwszy etap menadżera ekwipunku i drużyny do Shadowdark RPG.
+Aplikacja webowa do zarządzania kampaniami, drużyną, ekwipunkiem i zasobami w Shadowdark RPG.
 
-## Co już działa
+## Co działa w Etapie 1B
 
-- interfejs w stylu klasycznego RPG / pergaminu,
-- responsywny dashboard,
-- wiele kampanii w trybie lokalnym,
-- tworzenie i przełączanie kampanii,
-- przygotowane widoki zasobów, światła, prowiantu, złota i slotów,
-- gotowa konfiguracja pod Supabase,
-- gotowy workflow GitHub Pages.
+- styl A: ciemny interfejs fantasy z pergaminowo-złotymi akcentami,
+- wiele kampanii,
+- tryb lokalny bez backendu,
+- Supabase Auth: rejestracja i logowanie e-mail + hasło,
+- kampanie przechowywane w Supabase po zalogowaniu,
+- kod dołączenia do kampanii,
+- role kampanii: owner / gm / player,
+- RLS zabezpieczający dostęp do kampanii,
+- Realtime dla zmian kampanii i członkostwa,
+- przygotowanie pod GitHub Pages,
+- dashboard będący podstawą kolejnych etapów.
 
-## Uruchomienie lokalne
+## 1. Uruchomienie lokalne
 
-Wymagany Node.js 20+ (zalecany 22).
+Wymagany Node.js 20+.
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Supabase
+Bez `.env` aplikacja działa w trybie lokalnym/demo.
+
+## 2. Konfiguracja Supabase
 
 1. Utwórz projekt w Supabase.
-2. W SQL Editor uruchom `supabase-schema.sql`.
-3. Skopiuj `.env.example` do `.env.local`.
-4. Uzupełnij:
+2. Otwórz **SQL Editor**.
+3. Wklej i uruchom cały plik `supabase-schema.sql`.
+4. W ustawieniach projektu skopiuj Project URL i **publishable key**.
+5. Skopiuj `.env.example` do `.env` i wpisz dane:
 
 ```env
-VITE_SUPABASE_URL=...
-VITE_SUPABASE_PUBLISHABLE_KEY=...
+VITE_SUPABASE_URL=https://TWOJ-PROJEKT.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_TUTAJ_KLUCZ
 ```
 
-Na tym etapie obecność zmiennych przełącza oznaczenie interfejsu na tryb Supabase. Faktyczne logowanie i pobieranie kampanii z bazy dodamy w następnym kroku Etapu 1.
+Nigdy nie umieszczaj w frontendzie `service_role` ani secret key.
 
-## GitHub Pages
+### Auth / potwierdzanie e-mail
 
-Repozytorium zawiera `.github/workflows/deploy.yml`.
+Jeśli w Supabase włączone jest potwierdzanie adresu e-mail, po rejestracji użytkownik musi kliknąć link potwierdzający. W **Authentication → URL Configuration** ustaw `Site URL` na adres opublikowanej aplikacji GitHub Pages, np. `https://uzytkownik.github.io/shadowdark-manager/`, i dodaj ten sam adres do dozwolonych Redirect URLs. Do szybkich testów możesz odpowiednio skonfigurować potwierdzanie e-mail w ustawieniach Auth projektu.
 
-W GitHub:
+## 3. GitHub Pages
 
-1. `Settings -> Pages`
-2. w `Build and deployment` ustaw `Source: GitHub Actions`,
-3. w `Settings -> Secrets and variables -> Actions` dodaj:
+Repozytorium zawiera `.github/workflows/deploy.yml`. Po wypchnięciu kodu:
+
+1. GitHub → **Settings → Pages**.
+2. W `Build and deployment` wybierz **GitHub Actions**.
+3. Dodaj w repozytorium **Settings → Secrets and variables → Actions → Variables**:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_PUBLISHABLE_KEY`
-4. push na gałąź `main` uruchomi wdrożenie.
+4. Ponownie uruchom workflow lub zrób commit.
 
-Vite używa względnej ścieżki bazowej (`./`), dzięki czemu build działa zarówno pod domeną główną, jak i pod `/NAZWA-REPOZYTORIUM/` na GitHub Pages.
+`vite.config.ts` wylicza bazową ścieżkę na GitHub Actions z nazwy repozytorium, więc projekt może działać pod `https://uzytkownik.github.io/nazwa-repo/`.
 
-## Status projektu
+## 4. Jak działa wspólna kampania
 
-Etap 1A: **gotowy** — szkielet aplikacji i dashboard.
+Właściciel tworzy kampanię. Aplikacja generuje kod dołączenia. Drugi użytkownik loguje się, wybiera **Dołącz kodem**, wpisuje kod i zostaje członkiem kampanii. Zmiany listy kampanii i członkostwa są subskrybowane przez Supabase Realtime.
 
-Następny krok: **Etap 1B — logowanie Supabase, rzeczywiste kampanie w bazie, członkostwo użytkowników i synchronizacja kampanii.**
+W kolejnych etapach ten sam model `campaign_id + RLS + Realtime` będzie użyty dla postaci, przedmiotów, światła, prowiantu i złota.
+
+## 5. Build test
+
+```bash
+npm run build
+```
+
+Wynik trafia do katalogu `dist/`.
