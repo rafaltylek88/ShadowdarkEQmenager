@@ -672,6 +672,20 @@ function App() {
     [items, catalog, lightRuleForItem]
   )
 
+  const selectedLightItem = useMemo(
+    () => lightItemsForSelectedCharacter.find(item => item.id === lightItemId) ?? null,
+    [lightItemsForSelectedCharacter, lightItemId]
+  )
+
+  const selectedLightFuel = selectedLightItem
+    ? lightFuelStatus(selectedLightItem)
+    : null
+
+  const selectedLightMissingFuel = Boolean(
+    selectedLightFuel &&
+    selectedLightFuel.available < selectedLightFuel.required
+  )
+
   function formatTimer(totalSeconds: number) {
     const safe = Math.max(0, Math.floor(totalSeconds))
     const hours = Math.floor(safe / 3600)
@@ -1455,7 +1469,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 2F.2.1 • paliwo i reguły slotów
+              Etap 2F.2.2.1 • paliwo i reguły slotów
             </span>
           </div>
 
@@ -1706,7 +1720,7 @@ function App() {
                         return (
                           <option key={item.id} value={item.id}>
                             {item.name} × {item.quantity} • {item.lightMinutes} min
-                            {fuel ? ` • paliwo: ${fuel.name} ${fuel.available}/${fuel.required}` : ''}
+                            {fuel ? ` • paliwo: ${fuel.name} ${fuel.available}/${fuel.required}${fuel.available < fuel.required ? ' • BRAK PALIWA' : ''}` : ''}
                           </option>
                         )
                       })}
@@ -1726,7 +1740,8 @@ function App() {
                   disabled={
                     lightLoading ||
                     lightState?.status === 'running' ||
-                    (lightState?.status !== 'paused' && !lightItemId)
+                    (lightState?.status !== 'paused' &&
+                      (!lightItemId || selectedLightMissingFuel))
                   }
                 >
                   {lightState?.status === 'paused' ? 'WZNÓW' : 'START'}
@@ -1751,6 +1766,12 @@ function App() {
                   ZGAŚ
                 </button>
               </div>
+
+              {lightState?.status !== 'paused' && selectedLightMissingFuel && selectedLightFuel && (
+                <div className="alert error">
+                  Brak paliwa: potrzebne {selectedLightFuel.required} × {selectedLightFuel.name}.
+                </div>
+              )}
 
               <p className="muted">
                 START zużywa źródło jednorazowe albo wymagane paliwo. Latarnia
