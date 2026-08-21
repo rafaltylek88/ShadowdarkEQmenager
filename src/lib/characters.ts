@@ -7,6 +7,7 @@ export type Character = {
   strength: number
   usedSlots: number
   gold: number
+  lastFedAt: string | null
   createdBy?: string
   createdAt?: string
   updatedAt?: string
@@ -19,7 +20,8 @@ function mapCharacter(row: any): Character {
     name: row.name,
     strength: row.strength,
     usedSlots: row.used_slots,
-    gold: row.gold,
+    gold: Number(row.gold ?? 0),
+    lastFedAt: row.last_fed_at ?? null,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
