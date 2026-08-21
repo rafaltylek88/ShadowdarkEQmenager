@@ -23,3 +23,35 @@ export async function feedExpedition(
     charactersFed: Number(row.characters_fed ?? 0),
   }
 }
+
+export type TransferRationResult = {
+  fromCharacterId: string
+  toCharacterId: string
+  fromQuantity: number
+  toQuantity: number
+}
+
+export async function transferRation(
+  campaignId: string,
+  fromCharacterId: string,
+  toCharacterId: string
+): Promise<TransferRationResult> {
+  if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
+
+  const { data, error } = await supabase.rpc('transfer_ration', {
+    p_campaign_id: campaignId,
+    p_from_character_id: fromCharacterId,
+    p_to_character_id: toCharacterId,
+  })
+
+  if (error) throw error
+
+  const row = (data ?? {}) as any
+
+  return {
+    fromCharacterId: row.from_character_id ?? fromCharacterId,
+    toCharacterId: row.to_character_id ?? toCharacterId,
+    fromQuantity: Number(row.from_quantity ?? 0),
+    toQuantity: Number(row.to_quantity ?? 0),
+  }
+}
