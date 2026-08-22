@@ -93,6 +93,10 @@ import {
   setBastionHp,
 } from './lib/bastions'
 import type { Bastion, BastionTypeId, BastionUpgrade } from './lib/bastions'
+import { loadBastionItems } from './lib/bastionItems'
+import type { BastionItem } from './lib/bastionItems'
+import { buyInventoryItem, sellInventoryItem } from './lib/trade'
+import type { InventoryOwnerType } from './lib/trade'
 
 const initialCampaigns: Campaign[] = [
   {
@@ -314,6 +318,32 @@ function App() {
   const [upgradingBastion, setUpgradingBastion] = useState<Bastion | null>(null)
   const [bastionUpgradeId, setBastionUpgradeId] = useState('')
 
+  const [bastionItems, setBastionItems] = useState<BastionItem[]>([])
+  const [bastionItemsLoading, setBastionItemsLoading] = useState(false)
+
+  const [showBuyItem, setShowBuyItem] = useState(false)
+  const [buyOwnerType, setBuyOwnerType] = useState<InventoryOwnerType>('character')
+  const [buyOwnerId, setBuyOwnerId] = useState('')
+  const [buyCatalogItemId, setBuyCatalogItemId] = useState('')
+  const [buyQuantity, setBuyQuantity] = useState(1)
+  const [buyCharacterId, setBuyCharacterId] = useState('')
+  const [buyGp, setBuyGp] = useState(0)
+  const [buySp, setBuySp] = useState(0)
+  const [buyCp, setBuyCp] = useState(0)
+  const [buyingItem, setBuyingItem] = useState(false)
+
+  const [showSellItem, setShowSellItem] = useState(false)
+  const [sellOwnerType, setSellOwnerType] = useState<InventoryOwnerType>('character')
+  const [sellItemId, setSellItemId] = useState('')
+  const [sellItemName, setSellItemName] = useState('')
+  const [sellMaxQuantity, setSellMaxQuantity] = useState(1)
+  const [sellQuantity, setSellQuantity] = useState(1)
+  const [sellCharacterId, setSellCharacterId] = useState('')
+  const [sellGp, setSellGp] = useState(0)
+  const [sellSp, setSellSp] = useState(0)
+  const [sellCp, setSellCp] = useState(0)
+  const [sellingItem, setSellingItem] = useState(false)
+
   const isCloudMode = Boolean(supabaseEnabled && session)
 
   const refreshCampaigns = useCallback(async () => {
@@ -447,6 +477,22 @@ function App() {
       setError(e?.message || e?.details || 'Nie udało się pobrać bastionów.')
     } finally {
       setBastionsLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
+  const refreshBastionItems = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setBastionItems([])
+      return
+    }
+
+    setBastionItemsLoading(true)
+    try {
+      setBastionItems(await loadBastionItems(activeId))
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się pobrać ekwipunku bastionów.')
+    } finally {
+      setBastionItemsLoading(false)
     }
   }, [activeId, isCloudMode])
 
@@ -674,6 +720,10 @@ function App() {
   }, [refreshBastions])
 
   useEffect(() => {
+    refreshBastionItems()
+  }, [refreshBastionItems])
+
+  useEffect(() => {
     refreshItems()
   }, [refreshItems])
 
@@ -833,6 +883,30 @@ function App() {
       sb.removeChannel(channel)
     }
   }, [session, activeId, refreshBastions])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+
+    const channel = sb
+      .channel(`bastion-items-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bastion_items',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        refreshBastionItems
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshBastionItems])
+
 
 
 
@@ -2455,6 +2529,132 @@ function App() {
   }
 
 
+  function moneyToCp(gp: number, sp: number, cp: number) {
+    return Math.max(0, Math.round(gp) * 100 + Math.round(sp) * 10 + Math.round(cp))
+  }
+
+  function formatMoneyCp(totalCp: number) {
+    const safe = Math.max(0, Math.round(totalCp))
+    const gp = Math.floor(safe / 100)
+    const sp = Math.floor((safe % 100) / 10)
+    const cp = safe % 10
+    return `${gp} GP ${sp} SP ${cp} CP`
+  }
+
+  function hasVault(bastionId: string) {
+    return upgradesForBastion(bastionId).some(upgrade => upgrade.upgradeId === 'vault')
+  }
+
+  function itemsForBastion(bastionId: string) {
+    return bastionItems.filter(item => item.bastionId === bastionId)
+  }
+
+  function bastionItemSlots(item: BastionItem) {
+    const quantity = Math.max(0, item.quantity - item.freeQuantity)
+    if (quantity <= 0) return 0
+    return Math.ceil(quantity / Math.max(1, item.slotGroupSize)) * item.slotsPerUnit
+  }
+
+  function usedBastionSlots(bastionId: string) {
+    return itemsForBastion(bastionId).reduce((sum, item) => sum + bastionItemSlots(item), 0)
+  }
+
+  function openBuyItem(ownerType: InventoryOwnerType, ownerId: string) {
+    setBuyOwnerType(ownerType)
+    setBuyOwnerId(ownerId)
+    setBuyCatalogItemId(catalog[0]?.id ?? '')
+    setBuyQuantity(1)
+    setBuyCharacterId(characters[0]?.id ?? '')
+    setBuyGp(0)
+    setBuySp(0)
+    setBuyCp(0)
+    setShowBuyItem(true)
+  }
+
+  function openSellItem(
+    ownerType: InventoryOwnerType,
+    item: { id: string; name: string; quantity: number }
+  ) {
+    setSellOwnerType(ownerType)
+    setSellItemId(item.id)
+    setSellItemName(item.name)
+    setSellMaxQuantity(item.quantity)
+    setSellQuantity(1)
+    setSellCharacterId(characters[0]?.id ?? '')
+    setSellGp(0)
+    setSellSp(0)
+    setSellCp(0)
+    setShowSellItem(true)
+  }
+
+  async function refreshAllInventoriesAfterTrade() {
+    await Promise.all([
+      refreshCharacters(),
+      refreshItems(),
+      refreshNpcs(),
+      refreshNpcItems(),
+      refreshAnimals(),
+      refreshAnimalItems(),
+      refreshBastions(),
+      refreshBastionItems(),
+    ])
+  }
+
+  async function executeBuyItem() {
+    if (!activeId || !buyOwnerId || !buyCatalogItemId || !buyCharacterId) {
+      setError('Wybierz przedmiot, miejsce docelowe i postać płacącą.')
+      return
+    }
+
+    const priceCp = moneyToCp(buyGp, buySp, buyCp)
+    setBuyingItem(true)
+    try {
+      await buyInventoryItem({
+        campaignId: activeId,
+        ownerType: buyOwnerType,
+        ownerId: buyOwnerId,
+        buyerCharacterId: buyCharacterId,
+        catalogItemId: buyCatalogItemId,
+        quantity: Math.max(1, buyQuantity),
+        priceCp,
+      })
+      setShowBuyItem(false)
+      await refreshAllInventoriesAfterTrade()
+      flash(`Zakup zakończony. Zapłacono ${formatMoneyCp(priceCp)}.`)
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się kupić przedmiotu.')
+    } finally {
+      setBuyingItem(false)
+    }
+  }
+
+  async function executeSellItem() {
+    if (!activeId || !sellItemId || !sellCharacterId) {
+      setError('Wybierz postać, która otrzyma pieniądze.')
+      return
+    }
+
+    const priceCp = moneyToCp(sellGp, sellSp, sellCp)
+    setSellingItem(true)
+    try {
+      await sellInventoryItem({
+        campaignId: activeId,
+        ownerType: sellOwnerType,
+        itemId: sellItemId,
+        receiverCharacterId: sellCharacterId,
+        quantity: Math.min(sellMaxQuantity, Math.max(1, sellQuantity)),
+        priceCp,
+      })
+      setShowSellItem(false)
+      await refreshAllInventoriesAfterTrade()
+      flash(`Sprzedaż zakończona. Otrzymano ${formatMoneyCp(priceCp)}.`)
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się sprzedać przedmiotu.')
+    } finally {
+      setSellingItem(false)
+    }
+  }
+
   function bastionTypeFor(bastion: Bastion) {
     return BASTION_TYPES.find(type => type.id === bastion.typeId) ?? BASTION_TYPES[0]
   }
@@ -3206,7 +3406,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3G • bastiony</span>
+              Etap 3H • Vault i handel</span>
           </div>
 
         </aside>
@@ -4030,6 +4230,13 @@ function App() {
                                   <Package size={15} />
                                   Dodaj przedmiot
                                 </button>
+                                <button
+                                  className="secondary"
+                                  onClick={() => openBuyItem('character', character.id)}
+                                >
+                                  <Coins size={15} />
+                                  Kup
+                                </button>
 
                                 <button
                                   className="secondary"
@@ -4187,6 +4394,16 @@ function App() {
                                         </button>
 
                                         <button
+                                          className="secondary"
+                                          onClick={() => openSellItem('character', item)}
+                                        >
+                                          <Coins size={14} />
+                                          Sprzedaj
+                                        </button>
+                                        <button
+                                          className="danger"
+                                          onClick={() => removeItem(item)}
+                                        <button
                                           className="danger"
                                           onClick={() => removeItem(item)}
                                         >
@@ -4268,6 +4485,10 @@ function App() {
                                 <button className="secondary" onClick={() => openNewAnimalItem(animal.id)}>
                                   <Package size={15} />
                                   Dodaj wyposażenie
+                                </button>
+                                <button className="secondary" onClick={() => openBuyItem('animal', animal.id)}>
+                                  <Coins size={15} />
+                                  Kup
                                 </button>
                                 <button className="secondary" onClick={() => openEditAnimal(animal)}>
                                   <Pencil size={15} />
@@ -4385,6 +4606,10 @@ function App() {
                                               Edytuj
                                             </button>
                                           )}
+                                          <button className="secondary" onClick={() => openSellItem('animal', item)}>
+                                            <Coins size={14} />
+                                            Sprzedaj
+                                          </button>
                                           <button className="danger" onClick={() => removeAnimalItem(item)}>
                                             <Trash2 size={14} />
                                             {wagon ? 'Odepnij wóz' : 'Usuń'}
@@ -4466,6 +4691,10 @@ function App() {
                                   <Package size={15} />
                                   Dodaj przedmiot
                                 </button>
+                                <button className="secondary" onClick={() => openBuyItem('npc', npc.id)}>
+                                  <Coins size={15} />
+                                  Kup
+                                </button>
                                 <button className="secondary" onClick={() => openEditNpc(npc)}>
                                   <Pencil size={15} />
                                   Edytuj
@@ -4521,6 +4750,10 @@ function App() {
                                         <button className="secondary" onClick={() => openEditNpcItem(item)}>
                                           <Pencil size={14} />
                                           Edytuj
+                                        </button>
+                                        <button className="secondary" onClick={() => openSellItem('npc', item)}>
+                                          <Coins size={14} />
+                                          Sprzedaj
                                         </button>
                                         <button className="danger" onClick={() => removeNpcItem(item)}>
                                           <Trash2 size={14} />
@@ -4668,6 +4901,61 @@ function App() {
                                   })}
                                 </div>
                               )}
+
+                            {hasVault(bastion.id) && (
+                              <div
+                                style={{
+                                  marginTop: 16,
+                                  paddingTop: 14,
+                                  borderTop: '1px solid rgba(180, 135, 60, 0.28)',
+                                }}
+                              >
+                                <div className="entity-head">
+                                  <div>
+                                    <strong>VAULT — EKWIPUNEK BASTIONU</strong>
+                                    <span style={{ display: 'block', marginTop: 4 }}>
+                                      {Number(usedBastionSlots(bastion.id).toFixed(2))}/100 slotów
+                                    </span>
+                                  </div>
+                                  <button className="secondary" onClick={() => openBuyItem('bastion', bastion.id)}>
+                                    <Coins size={15} /> Kup do Vault
+                                  </button>
+                                </div>
+
+                                {bastionItemsLoading ? (
+                                  <p className="muted">Ładowanie Vault…</p>
+                                ) : itemsForBastion(bastion.id).length === 0 ? (
+                                  <p className="muted">Vault jest pusty.</p>
+                                ) : (
+                                  <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                                    {itemsForBastion(bastion.id).map(item => (
+                                      <div
+                                        key={item.id}
+                                        className="slot-line"
+                                        style={inventoryHighlightStyle(
+                                          item.category,
+                                          isMagicalInventoryItem(item.catalogItemId)
+                                        )}
+                                      >
+                                        <span>
+                                          <strong>{item.name}</strong> × {item.quantity}
+                                          {' • '}{Number(bastionItemSlots(item).toFixed(2))} slot.
+                                          {item.category === 'food' && ' • ŻYWNOŚĆ'}
+                                          {item.category === 'light' && ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
+                                          {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
+                                        </span>
+                                        <button
+                                          className="secondary"
+                                          onClick={() => openSellItem('bastion', item)}
+                                        >
+                                          <Coins size={14} /> Sprzedaj
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                             </div>
                           </article>
                         )
@@ -4839,6 +5127,140 @@ function App() {
         </main>
 
       </div>
+
+      {showBuyItem && (
+        <Modal onClose={() => setShowBuyItem(false)}>
+          <p className="eyebrow">ZAKUP</p>
+          <h2>Kup przedmiot</h2>
+
+          <label>
+            Przedmiot z Biblioteki
+            <select
+              value={buyCatalogItemId}
+              onChange={e => setBuyCatalogItemId(e.target.value)}
+            >
+              <option value="">— wybierz —</option>
+              {catalog.map(entry => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Ilość
+            <input
+              type="number"
+              min="1"
+              value={buyQuantity}
+              onChange={e => setBuyQuantity(Math.max(1, Number(e.target.value) || 1))}
+            />
+          </label>
+
+          <label>
+            Płaci postać
+            <select value={buyCharacterId} onChange={e => setBuyCharacterId(e.target.value)}>
+              <option value="">— wybierz —</option>
+              {characters.map(character => (
+                <option key={character.id} value={character.id}>
+                  {character.name} • {Number(character.gold.toFixed(2))} GP
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            <label>
+              GP
+              <input type="number" min="0" value={buyGp} onChange={e => setBuyGp(Math.max(0, Number(e.target.value) || 0))} />
+            </label>
+            <label>
+              SP
+              <input type="number" min="0" value={buySp} onChange={e => setBuySp(Math.max(0, Number(e.target.value) || 0))} />
+            </label>
+            <label>
+              CP
+              <input type="number" min="0" value={buyCp} onChange={e => setBuyCp(Math.max(0, Number(e.target.value) || 0))} />
+            </label>
+          </div>
+
+          <p className="muted">
+            Cena całkowita: {formatMoneyCp(moneyToCp(buyGp, buySp, buyCp))}
+            {' • '}1 GP = 10 SP = 100 CP.
+          </p>
+
+          <button
+            className="primary full"
+            onClick={executeBuyItem}
+            disabled={buyingItem || !buyCatalogItemId || !buyCharacterId}
+          >
+            {buyingItem ? 'Kupowanie…' : 'Kup'}
+          </button>
+        </Modal>
+      )}
+
+      {showSellItem && (
+        <Modal onClose={() => setShowSellItem(false)}>
+          <p className="eyebrow">SPRZEDAŻ</p>
+          <h2>Sprzedaj: {sellItemName}</h2>
+
+          <label>
+            Ilość
+            <input
+              type="number"
+              min="1"
+              max={sellMaxQuantity}
+              value={sellQuantity}
+              onChange={e =>
+                setSellQuantity(
+                  Math.min(sellMaxQuantity, Math.max(1, Number(e.target.value) || 1))
+                )
+              }
+            />
+          </label>
+
+          <label>
+            Pieniądze otrzymuje
+            <select value={sellCharacterId} onChange={e => setSellCharacterId(e.target.value)}>
+              <option value="">— wybierz postać —</option>
+              {characters.map(character => (
+                <option key={character.id} value={character.id}>
+                  {character.name} • {Number(character.gold.toFixed(2))} GP
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            <label>
+              GP
+              <input type="number" min="0" value={sellGp} onChange={e => setSellGp(Math.max(0, Number(e.target.value) || 0))} />
+            </label>
+            <label>
+              SP
+              <input type="number" min="0" value={sellSp} onChange={e => setSellSp(Math.max(0, Number(e.target.value) || 0))} />
+            </label>
+            <label>
+              CP
+              <input type="number" min="0" value={sellCp} onChange={e => setSellCp(Math.max(0, Number(e.target.value) || 0))} />
+            </label>
+          </div>
+
+          <p className="muted">
+            Cena całkowita: {formatMoneyCp(moneyToCp(sellGp, sellSp, sellCp))}
+            {' • '}1 GP = 10 SP = 100 CP.
+          </p>
+
+          <button
+            className="primary full"
+            onClick={executeSellItem}
+            disabled={sellingItem || !sellCharacterId}
+          >
+            {sellingItem ? 'Sprzedawanie…' : 'Sprzedaj'}
+          </button>
+        </Modal>
+      )}
 
       {showBastion && (
         <Modal onClose={() => setShowBastion(false)}>
