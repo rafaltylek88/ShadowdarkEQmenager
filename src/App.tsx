@@ -284,6 +284,7 @@ function App() {
   const [catalogArmorClass, setCatalogArmorClass] = useState('')
   const [catalogArmorProperties, setCatalogArmorProperties] = useState('')
   const [catalogIsMagical, setCatalogIsMagical] = useState(false)
+  const [catalogIsQuestItem, setCatalogIsQuestItem] = useState(false)
   const [catalogMagicDescription, setCatalogMagicDescription] = useState('')
   const [showCatalogImport, setShowCatalogImport] = useState(false)
   const [catalogImportText, setCatalogImportText] = useState('')
@@ -1186,8 +1187,34 @@ function App() {
     animalMaxSlots,
   ])
 
+  const themedSelectStyle = {
+    width: '100%',
+    minHeight: 36,
+    padding: '7px 34px 7px 10px',
+    borderRadius: 6,
+    border: '1px solid rgba(138, 101, 48, 0.72)',
+    background: 'rgba(18, 16, 13, 0.96)',
+    color: '#e6cf9c',
+    boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.55)',
+    outline: 'none',
+    fontWeight: 700,
+  } as const
+
   const inventoryHighlightStyle = useCallback(
-    (category: ItemCategory, isMagical = false) => {
+    (category: ItemCategory, isMagical = false, isQuestItem = false) => {
+      if (isQuestItem) {
+        return {
+          border: '1px solid rgba(210, 122, 39, 0.92)',
+          borderRadius: 8,
+          padding: '10px 12px',
+          alignItems: 'center',
+          background:
+            'linear-gradient(135deg, rgba(190, 94, 24, 0.28), rgba(103, 57, 24, 0.18))',
+          boxShadow:
+            'inset 0 0 0 1px rgba(255, 174, 83, 0.13), 0 0 12px rgba(188, 91, 24, 0.08)',
+        }
+      }
+
       if (isMagical) {
         return {
           border: '1px solid rgba(72, 118, 164, 0.82)',
@@ -1256,6 +1283,12 @@ function App() {
     [catalogEntryForItem]
   )
 
+  const isQuestInventoryItem = useCallback(
+    (catalogItemId: string | null) =>
+      Boolean(catalogEntryForItem(catalogItemId)?.isQuestItem),
+    [catalogEntryForItem]
+  )
+
   function isCoinInventoryItem(
     item: { name: string; catalogItemId: string | null }
   ) {
@@ -1301,6 +1334,91 @@ function App() {
   const expeditionGold = charactersWealth + npcCoins + animalCoins
   const totalWealth = expeditionGold + bastionCoins
 
+
+  const inventorySummary = useMemo(() => {
+    type SummaryOwner = {
+      key: string
+      owner: string
+      ownerType: 'Postać' | 'NPC' | 'Zwierzę' | 'Bastion'
+      quantity: number
+    }
+
+    type SummaryGroup = {
+      key: string
+      name: string
+      category: ItemCategory
+      catalogItemId: string | null
+      total: number
+      owners: SummaryOwner[]
+    }
+
+    const groups = new Map<string, SummaryGroup>()
+
+    const add = (
+      name: string,
+      quantity: number,
+      category: ItemCategory,
+      catalogItemId: string | null,
+      owner: string,
+      ownerType: SummaryOwner['ownerType'],
+      ownerKey: string
+    ) => {
+      if (quantity <= 0) return
+      const itemKey = `${normalizeInventoryName(name)}::${catalogItemId ?? ''}`
+      let group = groups.get(itemKey)
+      if (!group) {
+        group = {
+          key: itemKey,
+          name,
+          category,
+          catalogItemId,
+          total: 0,
+          owners: [],
+        }
+        groups.set(itemKey, group)
+      }
+      group.total += quantity
+
+      const existing = group.owners.find(entry => entry.key === ownerKey)
+      if (existing) existing.quantity += quantity
+      else group.owners.push({ key: ownerKey, owner, ownerType, quantity })
+    }
+
+    items.forEach(item => {
+      const owner = characters.find(character => character.id === item.characterId)
+      add(item.name, item.quantity, item.category, item.catalogItemId,
+        owner?.name ?? 'Nieznana postać', 'Postać', `character:${item.characterId}`)
+    })
+
+    npcItems.forEach(item => {
+      const owner = npcs.find(npc => npc.id === item.npcId)
+      add(item.name, item.quantity, item.category, item.catalogItemId,
+        owner?.name ?? 'Nieznany NPC', 'NPC', `npc:${item.npcId}`)
+    })
+
+    animalItems.forEach(item => {
+      const owner = animals.find(animal => animal.id === item.animalId)
+      add(item.name, item.quantity, item.category, item.catalogItemId,
+        owner?.name ?? 'Nieznane zwierzę', 'Zwierzę', `animal:${item.animalId}`)
+    })
+
+    bastionItems.forEach(item => {
+      const owner = bastions.find(bastion => bastion.id === item.bastionId)
+      add(item.name, item.quantity, item.category, item.catalogItemId,
+        owner?.name ?? 'Nieznany bastion', 'Bastion', `bastion:${item.bastionId}`)
+    })
+
+    return Array.from(groups.values())
+      .map(group => ({
+        ...group,
+        owners: group.owners.sort((a, b) =>
+          a.owner.localeCompare(b.owner, 'pl', { sensitivity: 'base' })
+        ),
+      }))
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' })
+      )
+  }, [items, characters, npcItems, npcs, animalItems, animals, bastionItems, bastions])
 
   function normalizeInventoryName(value: string) {
     return value
@@ -2465,6 +2583,7 @@ function App() {
     setCatalogArmorClass('')
     setCatalogArmorProperties('')
     setCatalogIsMagical(false)
+    setCatalogIsQuestItem(false)
     setCatalogMagicDescription('')
     setShowCatalogItem(true)
   }
@@ -2487,6 +2606,7 @@ function App() {
         armorClass: catalogCategory === 'armor' ? catalogArmorClass : null,
         armorProperties: catalogCategory === 'armor' ? catalogArmorProperties : null,
         isMagical: catalogIsMagical,
+        isQuestItem: catalogIsQuestItem,
         magicDescription: catalogIsMagical ? catalogMagicDescription : null,
       })
       setCatalog(prev => [...prev.filter(i => i.id !== created.id), created].sort((a, b) => a.name.localeCompare(b.name, 'pl')))
@@ -3322,6 +3442,7 @@ function App() {
       if (entry.armorProperties) parts.push(entry.armorProperties)
     }
     if (entry.isMagical) parts.push('MAGICZNY')
+    if (entry.isQuestItem) parts.push('PRZEDMIOT ZADANIA')
     if (entry.isMagical && entry.magicDescription) parts.push(entry.magicDescription)
     return parts.join(' • ')
   }
@@ -3372,7 +3493,7 @@ function App() {
       const [name, categoryRaw = 'normal', slotsRaw = '1', lightRaw = '',
         weaponDamage = '', weaponRange = '', weaponProperties = '',
         armorClass = '', armorProperties = '', slotGroupRaw = '1',
-        freeQuantityRaw = '0', magicalRaw = 'false', magicDescription = ''] = cols
+        freeQuantityRaw = '0', magicalRaw = 'false', magicDescription = '', questRaw = 'false'] = cols
 
       if (!name) throw new Error(`Brak nazwy przedmiotu w wierszu ${index + 1 + start}.`)
 
@@ -3390,9 +3511,10 @@ function App() {
 
       const lightParsed = lightRaw === '' ? null : Number(lightRaw.replace(',', '.'))
       const isMagical = ['1', 'true', 'tak', 'yes'].includes(magicalRaw.toLowerCase())
+      const isQuestItem = ['1', 'true', 'tak', 'yes'].includes(questRaw.toLowerCase())
 
       return {
-        name, category, slotsPerUnit, slotGroupSize, freeQuantity, isMagical,
+        name, category, slotsPerUnit, slotGroupSize, freeQuantity, isMagical, isQuestItem,
         magicDescription: isMagical ? magicDescription || null : null,
         lightMinutes: category === 'light' && lightParsed != null && Number.isFinite(lightParsed) ? lightParsed : null,
         weaponDamage: category === 'weapon' ? weaponDamage || null : null,
@@ -3437,7 +3559,8 @@ function App() {
       [entry.name, entry.category, entry.slotsPerUnit, entry.lightMinutes ?? '',
        entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '',
        entry.armorClass ?? '', entry.armorProperties ?? '', entry.slotGroupSize, entry.freeQuantity,
-       entry.isMagical ? 'true' : 'false', entry.magicDescription ?? '']
+       entry.isMagical ? 'true' : 'false', entry.magicDescription ?? '',
+       entry.isQuestItem ? 'true' : 'false']
         .map(value => String(value).split(';').join(',')).join(';')
     )
 
@@ -3823,7 +3946,8 @@ function App() {
                       Przekaż światło
                       <select
                         value={lightTransferCharacterId}
-                        onChange={e => setLightTransferCharacterId(e.target.value)}
+                        onChange={e =
+                        style={themedSelectStyle}> setLightTransferCharacterId(e.target.value)}
                         disabled={lightLoading || expeditionCarrierOptions.length < 2}
                       >
                         {expeditionCarrierOptions.length < 2 && (
@@ -3855,7 +3979,8 @@ function App() {
                     Niosący
                     <select
                       value={lightCharacterId}
-                      onChange={e => setLightCharacterId(e.target.value)}
+                      onChange={e =
+                        style={themedSelectStyle}> setLightCharacterId(e.target.value)}
                       disabled={lightLoading || lightCarrierChoices.length === 0}
                     >
                       {lightCarrierChoices.length === 0 && (
@@ -3874,7 +3999,8 @@ function App() {
                     Źródło
                     <select
                       value={lightItemId}
-                      onChange={e => setLightItemId(e.target.value)}
+                      onChange={e =
+                        style={themedSelectStyle}> setLightItemId(e.target.value)}
                       disabled={lightLoading || lightItemsForSelectedMember.length === 0}
                     >
                       {lightItemsForSelectedMember.length === 0 && (
@@ -4112,7 +4238,8 @@ function App() {
                       Sposób karmienia
                       <select
                         value={animalFeedMethod}
-                        onChange={e =>
+                        onChange={e =
+                        style={themedSelectStyle}>
                           setAnimalFeedMethod(e.target.value as AnimalFeedMethod)
                         }
                         disabled={feedingAnimals}
@@ -4465,7 +4592,8 @@ function App() {
                                       style={{
                                         ...inventoryHighlightStyle(
                                           item.category,
-                                          isMagicalInventoryItem(item.catalogItemId)
+                                          isMagicalInventoryItem(item.catalogItemId),
+                                          isQuestInventoryItem(item.catalogItemId)
                                         ),
                                         ...(item.isQuickpull
                                           ? {
@@ -4501,6 +4629,7 @@ function App() {
                                         {item.category === 'armor' &&
                                           ` • pancerz${item.armorClass ? ` • KP/AC ${item.armorClass}` : ''}`}
                                         {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
+                                        {isQuestInventoryItem(item.catalogItemId) && ' • PRZEDMIOT ZADANIA'}
                                         {isMagicalInventoryItem(item.catalogItemId) &&
                                           magicDescriptionForItem(item.catalogItemId) &&
                                           ` • ${magicDescriptionForItem(item.catalogItemId)}`}
@@ -4511,6 +4640,7 @@ function App() {
                                         {item.isActiveLight && ' • AKTYWNE ŚWIATŁO'}
                                         {item.isQuickpull && ' • QUICKPULL'}
                                         {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
+                                        {isQuestInventoryItem(item.catalogItemId) && ' • PRZEDMIOT ZADANIA'}
                                         {isMagicalInventoryItem(item.catalogItemId) &&
                                           magicDescriptionForItem(item.catalogItemId) &&
                                           ` • ${magicDescriptionForItem(item.catalogItemId)}`}
@@ -4732,7 +4862,7 @@ function App() {
                                                 boxShadow:
                                                   'inset 0 0 0 1px rgba(224, 190, 112, 0.10)',
                                               }
-                                            : inventoryHighlightStyle(item.category, isMagicalInventoryItem(item.catalogItemId))
+                                            : inventoryHighlightStyle(item.category, isMagicalInventoryItem(item.catalogItemId), isQuestInventoryItem(item.catalogItemId))
                                         }
                                       >
                                         <span>
@@ -4757,6 +4887,7 @@ function App() {
                                               {item.category === 'food' && ' • ŻYWNOŚĆ'}
                                               {item.category === 'light' && ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
                                               {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
+                                        {isQuestInventoryItem(item.catalogItemId) && ' • PRZEDMIOT ZADANIA'}
                                               {isMagicalInventoryItem(item.catalogItemId) &&
                                                 magicDescriptionForItem(item.catalogItemId) &&
                                                 ` • ${magicDescriptionForItem(item.catalogItemId)}`}
@@ -4898,7 +5029,7 @@ function App() {
                                     <div
                                       key={item.id}
                                       className="slot-line"
-                                      style={inventoryHighlightStyle(item.category, isMagicalInventoryItem(item.catalogItemId))}
+                                      style={inventoryHighlightStyle(item.category, isMagicalInventoryItem(item.catalogItemId), isQuestInventoryItem(item.catalogItemId))}
                                     >
                                       <span>
                                         <strong>{item.name}</strong>
@@ -5112,7 +5243,8 @@ function App() {
                                         className="slot-line"
                                         style={inventoryHighlightStyle(
                                           item.category,
-                                          isMagicalInventoryItem(item.catalogItemId)
+                                          isMagicalInventoryItem(item.catalogItemId),
+                                          isQuestInventoryItem(item.catalogItemId)
                                         )}
                                       >
                                         <span>
@@ -5128,6 +5260,7 @@ function App() {
                                           {item.category === 'food' && ' • ŻYWNOŚĆ'}
                                           {item.category === 'light' && ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
                                           {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
+                                        {isQuestInventoryItem(item.catalogItemId) && ' • PRZEDMIOT ZADANIA'}
                                         </span>
                                         <span className="button-row">
                                           <button
@@ -5192,6 +5325,79 @@ function App() {
             </>
           )}
 
+          {activeView === 'Podsumowanie' && (
+            <>
+              <section className="hero parchment-panel">
+                <div>
+                  <p className="eyebrow">PODSUMOWANIE EKWIPUNKU</p>
+                  <h1>{active?.name ?? 'Brak aktywnej kampanii'}</h1>
+                  <p>
+                    Wszystkie przedmioty Postaci, NPC, Zwierząt i Bastionów.
+                    Lista jest alfabetyczna i pokazuje dokładnie kto posiada dany przedmiot oraz w jakiej ilości.
+                  </p>
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="panel-title">
+                  <Package size={18} />
+                  Cały majątek rzeczowy kampanii
+                  <span style={{ marginLeft: 'auto' }}>{inventorySummary.length} rodzajów przedmiotów</span>
+                </div>
+
+                {inventorySummary.length === 0 ? (
+                  <div className="empty-state">
+                    <p>W kampanii nie ma jeszcze żadnych przedmiotów.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {inventorySummary.map(group => (
+                      <article
+                        key={group.key}
+                        className="entity-card"
+                        style={inventoryHighlightStyle(
+                          group.category,
+                          isMagicalInventoryItem(group.catalogItemId),
+                          isQuestInventoryItem(group.catalogItemId)
+                        )}
+                      >
+                        <div className="entity-head">
+                          <strong>
+                            {group.name}
+                            {isMagicalInventoryItem(group.catalogItemId) ? ' • MAGICZNY' : ''}
+                            {isQuestInventoryItem(group.catalogItemId) ? ' • PRZEDMIOT ZADANIA' : ''}
+                          </strong>
+                          <span>Łącznie: {group.total}</span>
+                        </div>
+
+                        <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
+                          {group.owners.map(owner => (
+                            <div
+                              key={owner.key}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                gap: 16,
+                                paddingTop: 6,
+                                borderTop: '1px solid rgba(180, 135, 60, 0.18)',
+                              }}
+                            >
+                              <span>
+                                <b>{owner.owner}</b>
+                                <span className="muted"> • {owner.ownerType}</span>
+                              </span>
+                              <strong>× {owner.quantity}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
           {activeView === 'Biblioteka' && (
             <>
               <section className="hero parchment-panel">
@@ -5236,13 +5442,14 @@ function App() {
                         <article
                           className="entity-card"
                           key={entry.id}
-                          style={inventoryHighlightStyle(entry.category, entry.isMagical)}
+                          style={inventoryHighlightStyle(entry.category, entry.isMagical, entry.isQuestItem)}
                         >
                           <div className="entity-head">
                             <strong>{entry.name}</strong>
                             <span>
                               {catalogCategoryLabel(entry.category)}
                               {entry.isMagical ? ' • MAGICZNY' : ''}
+                              {entry.isQuestItem ? ' • PRZEDMIOT ZADANIA' : ''}
                             </span>
                           </div>
                           <p className="muted" style={{ marginTop: 10 }}>{catalogItemDetails(entry)}</p>
@@ -6142,6 +6349,31 @@ function App() {
             </span>
           </label>
 
+          <label
+            style={{
+              display: 'flex',
+              gap: 10,
+              alignItems: 'center',
+              padding: '10px 12px',
+              border: '1px solid rgba(210, 122, 39, 0.72)',
+              borderRadius: 8,
+              background: 'rgba(190, 94, 24, 0.14)',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={catalogIsQuestItem}
+              onChange={e => setCatalogIsQuestItem(e.target.checked)}
+              style={{ width: 'auto', margin: 0 }}
+            />
+            <span>
+              <strong>Przedmiot zadania</strong>
+              <span className="muted" style={{ display: 'block', marginTop: 2 }}>
+                Oznacz przedmiot pomarańczowym wyróżnieniem w bibliotece, ekwipunku i podsumowaniu.
+              </span>
+            </span>
+          </label>
+
           {catalogIsMagical && (
             <label>
               Opis magicznych właściwości
@@ -6167,7 +6399,7 @@ function App() {
           <p className="eyebrow">IMPORT BIBLIOTEKI</p>
           <h2>Importuj przedmioty z CSV</h2>
           <p className="muted">
-            Każdy wiersz: nazwa;typ;sloty;czas światła;obrażenia;zasięg;właściwości broni;KP/AC;właściwości pancerza;wielkość grupy slotu;darmowa ilość;magiczny;opis magii.
+            Każdy wiersz: nazwa;typ;sloty;czas światła;obrażenia;zasięg;właściwości broni;KP/AC;właściwości pancerza;wielkość grupy slotu;darmowa ilość;magiczny;opis magii;przedmiot zadania.
           </p>
           <textarea
             rows={12}
