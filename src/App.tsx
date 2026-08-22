@@ -45,6 +45,10 @@ import { createNpc, deleteNpc, loadNpcs, updateNpc } from './lib/npcs'
 import type { Npc } from './lib/npcs'
 import { createNpcItem, deleteNpcItem, loadNpcItems, updateNpcItem } from './lib/npcItems'
 import type { NpcItem } from './lib/npcItems'
+import { createAnimal, deleteAnimal, loadAnimals, updateAnimal } from './lib/animals'
+import type { Animal } from './lib/animals'
+import { createAnimalItem, deleteAnimalItem, loadAnimalItems, updateAnimalItem } from './lib/animalItems'
+import type { AnimalItem } from './lib/animalItems'
 import {
   createItem,
   deleteItem,
@@ -90,7 +94,6 @@ const nav = [
   ['Postacie', Users],
   ['NPC', Shield],
   ['Zwierzęta', Beef],
-  ['Wozy', Truck],
   ['Siedziby', Castle],
   ['Ekwipunek wspólny', Backpack],
   ['Biblioteka', Package],
@@ -168,6 +171,33 @@ function App() {
   const [npcItemWeaponProperties, setNpcItemWeaponProperties] = useState('')
   const [npcItemArmorClass, setNpcItemArmorClass] = useState('')
   const [npcItemArmorProperties, setNpcItemArmorProperties] = useState('')
+
+  const [animals, setAnimals] = useState<Animal[]>([])
+  const [animalsLoading, setAnimalsLoading] = useState(false)
+  const [showAnimal, setShowAnimal] = useState(false)
+  const [editingAnimal, setEditingAnimal] = useState<Animal | null>(null)
+  const [animalName, setAnimalName] = useState('')
+  const [animalType, setAnimalType] = useState('')
+  const [animalBaseSlots, setAnimalBaseSlots] = useState(10)
+
+  const [animalItems, setAnimalItems] = useState<AnimalItem[]>([])
+  const [animalItemsLoading, setAnimalItemsLoading] = useState(false)
+  const [showAnimalItem, setShowAnimalItem] = useState(false)
+  const [editingAnimalItem, setEditingAnimalItem] = useState<AnimalItem | null>(null)
+  const [animalItemAnimalId, setAnimalItemAnimalId] = useState('')
+  const [animalItemCatalogItemId, setAnimalItemCatalogItemId] = useState('')
+  const [animalItemName, setAnimalItemName] = useState('')
+  const [animalItemQuantity, setAnimalItemQuantity] = useState(1)
+  const [animalItemSlotsPerUnit, setAnimalItemSlotsPerUnit] = useState(1)
+  const [animalItemSlotGroupSize, setAnimalItemSlotGroupSize] = useState(1)
+  const [animalItemFreeQuantity, setAnimalItemFreeQuantity] = useState(0)
+  const [animalItemCategory, setAnimalItemCategory] = useState<ItemCategory>('normal')
+  const [animalItemLightMinutes, setAnimalItemLightMinutes] = useState(60)
+  const [animalItemWeaponDamage, setAnimalItemWeaponDamage] = useState('')
+  const [animalItemWeaponRange, setAnimalItemWeaponRange] = useState('')
+  const [animalItemWeaponProperties, setAnimalItemWeaponProperties] = useState('')
+  const [animalItemArmorClass, setAnimalItemArmorClass] = useState('')
+  const [animalItemArmorProperties, setAnimalItemArmorProperties] = useState('')
 
   const [items, setItems] = useState<CharacterItem[]>([])
   const [itemsLoading, setItemsLoading] = useState(false)
@@ -297,6 +327,38 @@ function App() {
     }
   }, [activeId, isCloudMode])
 
+
+  const refreshAnimals = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setAnimals([])
+      return
+    }
+
+    setAnimalsLoading(true)
+    try {
+      setAnimals(await loadAnimals(activeId))
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się pobrać zwierząt.')
+    } finally {
+      setAnimalsLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
+  const refreshAnimalItems = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setAnimalItems([])
+      return
+    }
+
+    setAnimalItemsLoading(true)
+    try {
+      setAnimalItems(await loadAnimalItems(activeId))
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się pobrać ekwipunku zwierząt.')
+    } finally {
+      setAnimalItemsLoading(false)
+    }
+  }, [activeId, isCloudMode])
 
   const refreshItems = useCallback(async () => {
     if (!activeId || !isCloudMode) {
@@ -510,6 +572,14 @@ function App() {
   }, [refreshNpcItems])
 
   useEffect(() => {
+    refreshAnimals()
+  }, [refreshAnimals])
+
+  useEffect(() => {
+    refreshAnimalItems()
+  }, [refreshAnimalItems])
+
+  useEffect(() => {
     refreshItems()
   }, [refreshItems])
 
@@ -597,6 +667,56 @@ function App() {
       sb.removeChannel(channel)
     }
   }, [session, activeId, refreshNpcItems, refreshNpcs])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+
+    const channel = sb
+      .channel(`animals-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'animals',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        refreshAnimals
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshAnimals])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+
+    const channel = sb
+      .channel(`animal-items-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'animal_items',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        () => {
+          refreshAnimalItems()
+          refreshAnimals()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshAnimalItems, refreshAnimals])
+
 
 
   useEffect(() => {
@@ -732,6 +852,79 @@ function App() {
   const itemsForNpc = useCallback(
     (npcId: string) => npcItems.filter(item => item.npcId === npcId),
     [npcItems]
+  )
+
+
+  const normalizeSpecialItemName = useCallback(
+    (value: string) =>
+      value
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, ''),
+    []
+  )
+
+  const isWagonName = useCallback(
+    (value: string) =>
+      ['wagon', 'woz'].includes(normalizeSpecialItemName(value)),
+    [normalizeSpecialItemName]
+  )
+
+  const isSaddleName = useCallback(
+    (value: string) =>
+      ['saddle', 'siodlo'].includes(normalizeSpecialItemName(value)),
+    [normalizeSpecialItemName]
+  )
+
+  const animalHasWagon = useCallback(
+    (animalId: string) =>
+      animalItems.some(
+        item => item.animalId === animalId && isWagonName(item.name)
+      ),
+    [animalItems, isWagonName]
+  )
+
+  const wagonBonusForAnimal = useCallback(
+    (animalId: string) => (animalHasWagon(animalId) ? 15 : 0),
+    [animalHasWagon]
+  )
+
+  const animalMaxSlots = useCallback(
+    (animal: Animal) => animal.baseSlots + wagonBonusForAnimal(animal.id),
+    [wagonBonusForAnimal]
+  )
+
+  const slotUsageForAnimalItem = useCallback(
+    (item: AnimalItem) => {
+      if (isWagonName(item.name)) return 0
+
+      const extraFree = isSaddleName(item.name) ? 1 : 0
+      const quantity = Math.max(
+        0,
+        item.quantity - Math.max(item.freeQuantity ?? 0, extraFree)
+      )
+      if (quantity <= 0) return 0
+
+      const groupSize = Math.max(1, item.slotGroupSize ?? 1)
+      return Math.ceil(quantity / groupSize) * item.slotsPerUnit
+    },
+    [isSaddleName, isWagonName]
+  )
+
+  const usedSlotsForAnimal = useCallback(
+    (animalId: string) =>
+      animalItems
+        .filter(item => item.animalId === animalId)
+        .reduce((sum, item) => sum + slotUsageForAnimalItem(item), 0),
+    [animalItems, slotUsageForAnimalItem]
+  )
+
+  const itemsForAnimal = useCallback(
+    (animalId: string) =>
+      animalItems.filter(item => item.animalId === animalId),
+    [animalItems]
   )
 
   const totalGold = useMemo(
@@ -1712,6 +1905,183 @@ function App() {
   }
 
 
+  function openNewAnimal() {
+    setEditingAnimal(null)
+    setAnimalName('')
+    setAnimalType('')
+    setAnimalBaseSlots(10)
+    setShowAnimal(true)
+  }
+
+  function openEditAnimal(animal: Animal) {
+    setEditingAnimal(animal)
+    setAnimalName(animal.name)
+    setAnimalType(animal.animalType)
+    setAnimalBaseSlots(animal.baseSlots)
+    setShowAnimal(true)
+  }
+
+  async function saveAnimal() {
+    if (!activeId || !animalName.trim()) {
+      setError('Zwierzę musi mieć nazwę.')
+      return
+    }
+
+    try {
+      if (editingAnimal) {
+        await updateAnimal(editingAnimal.id, {
+          name: animalName,
+          animalType,
+          baseSlots: animalBaseSlots,
+        })
+        flash('Zwierzę zostało zaktualizowane.')
+      } else {
+        await createAnimal(activeId, animalName, animalType, animalBaseSlots)
+        flash('Zwierzę zostało dodane.')
+      }
+
+      setShowAnimal(false)
+      setEditingAnimal(null)
+      await refreshAnimals()
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zapisać zwierzęcia.')
+    }
+  }
+
+  async function removeAnimal(animal: Animal) {
+    if (!window.confirm(`Czy na pewno usunąć zwierzę "${animal.name}" wraz z jego ekwipunkiem?`)) return
+
+    try {
+      await deleteAnimal(animal.id)
+      flash('Zwierzę zostało usunięte.')
+      await Promise.all([refreshAnimals(), refreshAnimalItems()])
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się usunąć zwierzęcia.')
+    }
+  }
+
+  function resetAnimalItemDetails() {
+    setAnimalItemCatalogItemId('')
+    setAnimalItemName('')
+    setAnimalItemQuantity(1)
+    setAnimalItemSlotsPerUnit(1)
+    setAnimalItemSlotGroupSize(1)
+    setAnimalItemFreeQuantity(0)
+    setAnimalItemCategory('normal')
+    setAnimalItemLightMinutes(60)
+    setAnimalItemWeaponDamage('')
+    setAnimalItemWeaponRange('')
+    setAnimalItemWeaponProperties('')
+    setAnimalItemArmorClass('')
+    setAnimalItemArmorProperties('')
+  }
+
+  function applyCatalogToAnimalItem(entry: CatalogItem) {
+    setAnimalItemCatalogItemId(entry.id)
+    setAnimalItemName(entry.name)
+    setAnimalItemQuantity(isWagonName(entry.name) ? 1 : 1)
+    setAnimalItemSlotsPerUnit(entry.slotsPerUnit)
+    setAnimalItemSlotGroupSize(entry.slotGroupSize)
+    setAnimalItemFreeQuantity(entry.freeQuantity)
+    setAnimalItemCategory(entry.category)
+    setAnimalItemLightMinutes(entry.lightMinutes ?? 60)
+    setAnimalItemWeaponDamage(entry.weaponDamage ?? '')
+    setAnimalItemWeaponRange(entry.weaponRange ?? '')
+    setAnimalItemWeaponProperties(entry.weaponProperties ?? '')
+    setAnimalItemArmorClass(entry.armorClass ?? '')
+    setAnimalItemArmorProperties(entry.armorProperties ?? '')
+  }
+
+  function openNewAnimalItem(animalId: string) {
+    setEditingAnimalItem(null)
+    setAnimalItemAnimalId(animalId)
+    resetAnimalItemDetails()
+    setShowAnimalItem(true)
+  }
+
+  function openEditAnimalItem(item: AnimalItem) {
+    setEditingAnimalItem(item)
+    setAnimalItemAnimalId(item.animalId)
+    setAnimalItemCatalogItemId(item.catalogItemId ?? '')
+    setAnimalItemName(item.name)
+    setAnimalItemQuantity(item.quantity)
+    setAnimalItemSlotsPerUnit(item.slotsPerUnit)
+    setAnimalItemSlotGroupSize(item.slotGroupSize)
+    setAnimalItemFreeQuantity(item.freeQuantity)
+    setAnimalItemCategory(item.category)
+    setAnimalItemLightMinutes(item.lightMinutes ?? 60)
+    setAnimalItemWeaponDamage(item.weaponDamage ?? '')
+    setAnimalItemWeaponRange(item.weaponRange ?? '')
+    setAnimalItemWeaponProperties(item.weaponProperties ?? '')
+    setAnimalItemArmorClass(item.armorClass ?? '')
+    setAnimalItemArmorProperties(item.armorProperties ?? '')
+    setShowAnimalItem(true)
+  }
+
+  async function saveAnimalItem() {
+    if (!activeId || !animalItemAnimalId || !animalItemName.trim()) {
+      setError('Wybierz zwierzę i przedmiot.')
+      return
+    }
+
+    if (isWagonName(animalItemName) && animalHasWagon(animalItemAnimalId) && !editingAnimalItem) {
+      setError('To zwierzę ma już wóz. Jedno zwierzę może mieć tylko jeden wóz.')
+      return
+    }
+
+    try {
+      if (editingAnimalItem) {
+        await updateAnimalItem(editingAnimalItem.id, {
+          name: animalItemName,
+          quantity: isWagonName(animalItemName) ? 1 : animalItemQuantity,
+        })
+        flash('Ekwipunek zwierzęcia został zaktualizowany.')
+      } else {
+        await createAnimalItem({
+          campaignId: activeId,
+          animalId: animalItemAnimalId,
+          catalogItemId: animalItemCatalogItemId || null,
+          name: animalItemName,
+          quantity: isWagonName(animalItemName) ? 1 : animalItemQuantity,
+          slotsPerUnit: animalItemSlotsPerUnit,
+          slotGroupSize: animalItemSlotGroupSize,
+          freeQuantity: animalItemFreeQuantity,
+          category: animalItemCategory,
+          lightMinutes: animalItemCategory === 'light' ? animalItemLightMinutes : null,
+          weaponDamage: animalItemCategory === 'weapon' ? animalItemWeaponDamage : null,
+          weaponRange: animalItemCategory === 'weapon' ? animalItemWeaponRange : null,
+          weaponProperties: animalItemCategory === 'weapon' ? animalItemWeaponProperties : null,
+          armorClass: animalItemCategory === 'armor' ? animalItemArmorClass : null,
+          armorProperties: animalItemCategory === 'armor' ? animalItemArmorProperties : null,
+        })
+        flash(
+          isWagonName(animalItemName)
+            ? 'Wóz został przypisany do zwierzęcia. Udźwig wzrósł o 15 slotów.'
+            : 'Przedmiot został dodany zwierzęciu.'
+        )
+      }
+
+      setShowAnimalItem(false)
+      setEditingAnimalItem(null)
+      await Promise.all([refreshAnimalItems(), refreshAnimals()])
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zapisać ekwipunku zwierzęcia.')
+    }
+  }
+
+  async function removeAnimalItem(item: AnimalItem) {
+    const label = isWagonName(item.name) ? 'wóz' : `"${item.name}"`
+    if (!window.confirm(`Usunąć ${label} z wyposażenia zwierzęcia?`)) return
+
+    try {
+      await deleteAnimalItem(item.id)
+      flash(isWagonName(item.name) ? 'Wóz został odpięty od zwierzęcia.' : 'Przedmiot został usunięty.')
+      await Promise.all([refreshAnimalItems(), refreshAnimals()])
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się usunąć przedmiotu.')
+    }
+  }
+
   function openNewNpc() {
     setEditingNpc(null)
     setNpcName('')
@@ -2156,7 +2526,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3B • światło NPC</span>
+              Etap 3C • zwierzęta i wozy</span>
           </div>
 
         </aside>
@@ -2984,6 +3354,174 @@ function App() {
           )}
 
 
+          {activeView === 'Zwierzęta' && (
+            <>
+              <section className="hero parchment-panel">
+                <div>
+                  <p className="eyebrow">ZWIERZĘTA TRANSPORTOWE</p>
+                  <h1>{active?.name ?? 'Brak kampanii'}</h1>
+                  <p>
+                    Zwierzęta mają własny udźwig i ekwipunek. Wóz jest specjalnym
+                    wyposażeniem zwierzęcia: nie zajmuje jego slotów i zwiększa
+                    pojemność o 15 slotów. Jedno zwierzę może ciągnąć tylko jeden wóz.
+                  </p>
+                </div>
+
+                <button className="primary" onClick={openNewAnimal} disabled={!activeId}>
+                  <Plus size={16} />
+                  Nowe zwierzę
+                </button>
+              </section>
+
+              <section className="dashboard-grid">
+                <div className="panel wide">
+                  <div className="panel-title">
+                    <Beef size={18} />
+                    Zwierzęta i ładunek
+                  </div>
+
+                  {animalsLoading || animalItemsLoading ? (
+                    <p className="muted">Ładowanie zwierząt…</p>
+                  ) : animals.length === 0 ? (
+                    <div className="empty-state">
+                      <p>W tej kampanii nie ma jeszcze zwierząt.</p>
+                      <button className="primary" onClick={openNewAnimal}>
+                        <Plus size={16} />
+                        Dodaj pierwsze zwierzę
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gap: 16 }}>
+                      {animals.map(animal => {
+                        const usedSlots = usedSlotsForAnimal(animal.id)
+                        const maxSlots = animalMaxSlots(animal)
+                        const currentItems = itemsForAnimal(animal.id)
+                        const hasWagon = animalHasWagon(animal.id)
+
+                        return (
+                          <article className="entity-card" key={animal.id}>
+                            <div className="entity-head">
+                              <div>
+                                <strong>{animal.name}</strong>
+                                <span style={{ display: 'block', marginTop: 4 }}>
+                                  {animal.animalType || 'Zwierzę transportowe'}
+                                </span>
+                              </div>
+
+                              <div className="button-row">
+                                <button className="secondary" onClick={() => openNewAnimalItem(animal.id)}>
+                                  <Package size={15} />
+                                  Dodaj wyposażenie
+                                </button>
+                                <button className="secondary" onClick={() => openEditAnimal(animal)}>
+                                  <Pencil size={15} />
+                                  Edytuj
+                                </button>
+                                <button className="danger" onClick={() => removeAnimal(animal)}>
+                                  <Trash2 size={15} />
+                                  Usuń
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="slot-line" style={{ marginTop: 12 }}>
+                              <span>Udźwig</span>
+                              <b>{Number(usedSlots.toFixed(2))}/{maxSlots}</b>
+                            </div>
+
+                            <div className="progress small">
+                              <i
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    maxSlots > 0 ? (usedSlots / maxSlots) * 100 : 0
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+
+                            <p className="muted" style={{ marginTop: 8 }}>
+                              Bazowy udźwig: {animal.baseSlots}
+                              {hasWagon ? ' • Wóz: +15 slotów' : ' • bez wozu'}
+                            </p>
+
+                            <div style={{ marginTop: 16 }}>
+                              {currentItems.length === 0 ? (
+                                <p className="muted">Brak wyposażenia.</p>
+                              ) : (
+                                <div style={{ display: 'grid', gap: 8 }}>
+                                  {currentItems.map(item => {
+                                    const wagon = isWagonName(item.name)
+
+                                    return (
+                                      <div
+                                        key={item.id}
+                                        className="slot-line"
+                                        style={
+                                          wagon
+                                            ? {
+                                                border: '1px solid rgba(154, 118, 55, 0.85)',
+                                                borderRadius: 8,
+                                                padding: '12px',
+                                                alignItems: 'center',
+                                                background:
+                                                  'linear-gradient(135deg, rgba(112, 86, 43, 0.28), rgba(61, 72, 48, 0.28))',
+                                                boxShadow:
+                                                  'inset 0 0 0 1px rgba(224, 190, 112, 0.10)',
+                                              }
+                                            : {
+                                                borderTop:
+                                                  '1px solid rgba(180, 135, 60, 0.25)',
+                                                paddingTop: 8,
+                                                alignItems: 'center',
+                                              }
+                                        }
+                                      >
+                                        <span>
+                                          <strong>{item.name}</strong>
+                                          {wagon ? (
+                                            <>
+                                              {' • '}
+                                              <b>WÓZ • +15 SLOTÓW UDŹWIGU</b>
+                                              {' • specjalne wyposażenie zwierzęcia'}
+                                            </>
+                                          ) : (
+                                            <>
+                                              {' × '}{item.quantity}
+                                              {' • '}{Number(slotUsageForAnimalItem(item).toFixed(2))} slot.
+                                              {isSaddleName(item.name) && ' • pierwsze siodło bez slotu'}
+                                            </>
+                                          )}
+                                        </span>
+
+                                        <span className="button-row">
+                                          {!wagon && (
+                                            <button className="secondary" onClick={() => openEditAnimalItem(item)}>
+                                              <Pencil size={14} />
+                                              Edytuj
+                                            </button>
+                                          )}
+                                          <button className="danger" onClick={() => removeAnimalItem(item)}>
+                                            <Trash2 size={14} />
+                                            {wagon ? 'Odepnij wóz' : 'Usuń'}
+                                          </button>
+                                        </span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </article>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+
           {activeView === 'NPC' && (
             <>
               <section className="hero parchment-panel">
@@ -3185,7 +3723,7 @@ function App() {
             </>
           )}
 
-          {activeView !== 'Dashboard' && activeView !== 'Postacie' && activeView !== 'NPC' && activeView !== 'Biblioteka' && (
+          {activeView !== 'Dashboard' && activeView !== 'Postacie' && activeView !== 'NPC' && activeView !== 'Zwierzęta' && activeView !== 'Biblioteka' && (
             <section className="hero parchment-panel">
               <div>
                 <p className="eyebrow">{activeView.toUpperCase()}</p>
@@ -3198,6 +3736,136 @@ function App() {
         </main>
 
       </div>
+
+      {showAnimal && (
+        <Modal
+          onClose={() => {
+            setShowAnimal(false)
+            setEditingAnimal(null)
+          }}
+        >
+          <p className="eyebrow">{editingAnimal ? 'EDYCJA ZWIERZĘCIA' : 'NOWE ZWIERZĘ'}</p>
+          <h2>{editingAnimal ? 'Edytuj zwierzę' : 'Dodaj zwierzę'}</h2>
+
+          <label>
+            Nazwa
+            <input autoFocus value={animalName} onChange={e => setAnimalName(e.target.value)} />
+          </label>
+
+          <label>
+            Typ
+            <input
+              value={animalType}
+              onChange={e => setAnimalType(e.target.value)}
+              placeholder="np. koń, muł, osioł"
+            />
+          </label>
+
+          <label>
+            Bazowy udźwig (sloty)
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={animalBaseSlots}
+              onChange={e => setAnimalBaseSlots(Math.max(0, Number(e.target.value) || 0))}
+            />
+          </label>
+
+          <p className="muted">
+            Wóz nie zajmuje slotów zwierzęcia i zwiększa jego udźwig o 15.
+            Jedno zwierzę może mieć tylko jeden wóz.
+          </p>
+
+          <button className="primary full" onClick={saveAnimal}>
+            {editingAnimal ? 'Zapisz zmiany' : 'Dodaj zwierzę'}
+          </button>
+        </Modal>
+      )}
+
+      {showAnimalItem && (
+        <Modal
+          onClose={() => {
+            setShowAnimalItem(false)
+            setEditingAnimalItem(null)
+          }}
+        >
+          <p className="eyebrow">
+            {editingAnimalItem ? 'EDYCJA WYPOSAŻENIA' : 'WYPOSAŻENIE ZWIERZĘCIA'}
+          </p>
+          <h2>{editingAnimalItem ? 'Edytuj przedmiot' : 'Dodaj wyposażenie'}</h2>
+
+          {!editingAnimalItem && (
+            <label>
+              Przedmiot z katalogu
+              <select
+                autoFocus
+                value={animalItemCatalogItemId}
+                onChange={e => {
+                  const id = e.target.value
+                  setAnimalItemCatalogItemId(id)
+                  const selected = catalog.find(entry => entry.id === id)
+                  if (selected) applyCatalogToAnimalItem(selected)
+                }}
+              >
+                <option value="">— wybierz przedmiot —</option>
+                {catalog
+                  .filter(entry =>
+                    !isWagonName(entry.name) ||
+                    !animalHasWagon(animalItemAnimalId)
+                  )
+                  .map(entry => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                      {isWagonName(entry.name) ? ' • WÓZ (+15 udźwigu)' : ''}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
+
+          {animalItemName && isWagonName(animalItemName) && (
+            <div
+              className="setup-banner"
+              style={{
+                border: '1px solid rgba(154, 118, 55, 0.85)',
+                background:
+                  'linear-gradient(135deg, rgba(112, 86, 43, 0.28), rgba(61, 72, 48, 0.28))',
+              }}
+            >
+              <Truck size={18} />
+              <div>
+                <strong>Wóz — specjalne wyposażenie</strong>
+                <span>
+                  Nie zajmuje slotów zwierzęcia. Zwiększa jego udźwig o 15 slotów.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {!isWagonName(animalItemName) && (
+            <label>
+              Ilość
+              <input
+                type="number"
+                min="1"
+                value={animalItemQuantity}
+                onChange={e =>
+                  setAnimalItemQuantity(Math.max(1, Number(e.target.value) || 1))
+                }
+              />
+            </label>
+          )}
+
+          <button
+            className="primary full"
+            onClick={saveAnimalItem}
+            disabled={!animalItemName.trim()}
+          >
+            {editingAnimalItem ? 'Zapisz zmiany' : 'Dodaj wyposażenie'}
+          </button>
+        </Modal>
+      )}
 
       {showNpc && (
         <Modal
@@ -3264,11 +3932,13 @@ function App() {
                 }}
               >
                 <option value="">— wybierz przedmiot —</option>
-                {catalog.map(entry => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.name}
-                  </option>
-                ))}
+                {catalog
+                  .filter(entry => !isWagonName(entry.name))
+                  .map(entry => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
               </select>
             </label>
           )}
@@ -3390,9 +4060,11 @@ function App() {
                   }}
                 >
                   <option value="">{catalogLoading ? 'Ładowanie katalogu…' : '— wybierz przedmiot —'}</option>
-                  {catalog.map(entry => (
-                    <option key={entry.id} value={entry.id}>{entry.name}</option>
-                  ))}
+                  {catalog
+                    .filter(entry => !isWagonName(entry.name))
+                    .map(entry => (
+                      <option key={entry.id} value={entry.id}>{entry.name}</option>
+                    ))}
                 </select>
               </label>
 
