@@ -3946,9 +3946,9 @@ function App() {
                       Przekaż światło
                       <select
                         value={lightTransferCharacterId}
-                        onChange={e =
-                        style={themedSelectStyle}> setLightTransferCharacterId(e.target.value)}
+                        onChange={e => setLightTransferCharacterId(e.target.value)}
                         disabled={lightLoading || expeditionCarrierOptions.length < 2}
+                        style={themedSelectStyle}
                       >
                         {expeditionCarrierOptions.length < 2 && (
                           <option value="">Brak innego członka ekspedycji</option>
@@ -3979,9 +3979,9 @@ function App() {
                     Niosący
                     <select
                       value={lightCharacterId}
-                      onChange={e =
-                        style={themedSelectStyle}> setLightCharacterId(e.target.value)}
+                      onChange={e => setLightCharacterId(e.target.value)}
                       disabled={lightLoading || lightCarrierChoices.length === 0}
+                      style={themedSelectStyle}
                     >
                       {lightCarrierChoices.length === 0 && (
                         <option value="">Brak źródeł światła</option>
@@ -3999,9 +3999,9 @@ function App() {
                     Źródło
                     <select
                       value={lightItemId}
-                      onChange={e =
-                        style={themedSelectStyle}> setLightItemId(e.target.value)}
+                      onChange={e => setLightItemId(e.target.value)}
                       disabled={lightLoading || lightItemsForSelectedMember.length === 0}
+                      style={themedSelectStyle}
                     >
                       {lightItemsForSelectedMember.length === 0 && (
                         <option value="">Brak źródła</option>
@@ -4238,11 +4238,11 @@ function App() {
                       Sposób karmienia
                       <select
                         value={animalFeedMethod}
-                        onChange={e =
-                        style={themedSelectStyle}>
+                        onChange={e =>
                           setAnimalFeedMethod(e.target.value as AnimalFeedMethod)
                         }
                         disabled={feedingAnimals}
+                        style={themedSelectStyle}
                       >
                         <option value="ration">
                           Racje — każde zwierzę zużywa 1 własną rację
