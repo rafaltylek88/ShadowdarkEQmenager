@@ -62,7 +62,7 @@ import {
   startCampaignLight,
   transferCampaignLight,
 } from './lib/light'
-import type { CampaignLight } from './lib/light'
+import type { CampaignLight, LightMemberType } from './lib/light'
 import { feedExpedition, transferMemberRation } from './lib/rations'
 import type { MemberType } from './lib/rations'
 
@@ -948,22 +948,88 @@ function App() {
     }
   }
 
-  const availableLightItems = useMemo(
-    () =>
-      items.filter(
-        item =>
-          item.category === 'light' &&
-          !item.isActiveLight &&
-          item.quantity > 0 &&
-          (item.lightMinutes ?? 0) > 0
-      ),
-    [items]
+  type LightChoice = {
+    key: string
+    memberType: LightMemberType
+    memberId: string
+    memberName: string
+    itemId: string
+    itemName: string
+    quantity: number
+    lightMinutes: number
+    catalogItemId: string | null
+  }
+
+  const availableLightChoices = useMemo<LightChoice[]>(
+    () => [
+      ...items
+        .filter(
+          item =>
+            item.category === 'light' &&
+            !item.isActiveLight &&
+            item.quantity > 0 &&
+            (item.lightMinutes ?? 0) > 0
+        )
+        .map(item => ({
+          key: `character:${item.characterId}:${item.id}`,
+          memberType: 'character' as LightMemberType,
+          memberId: item.characterId,
+          memberName:
+            characters.find(character => character.id === item.characterId)?.name ??
+            'Postać',
+          itemId: item.id,
+          itemName: item.name,
+          quantity: item.quantity,
+          lightMinutes: item.lightMinutes ?? 0,
+          catalogItemId: item.catalogItemId,
+        })),
+      ...npcItems
+        .filter(
+          item =>
+            item.category === 'light' &&
+            !item.isActiveLight &&
+            item.quantity > 0 &&
+            (item.lightMinutes ?? 0) > 0
+        )
+        .map(item => ({
+          key: `npc:${item.npcId}:${item.id}`,
+          memberType: 'npc' as LightMemberType,
+          memberId: item.npcId,
+          memberName: npcs.find(npc => npc.id === item.npcId)?.name ?? 'NPC',
+          itemId: item.id,
+          itemName: item.name,
+          quantity: item.quantity,
+          lightMinutes: item.lightMinutes ?? 0,
+          catalogItemId: item.catalogItemId,
+        })),
+    ],
+    [items, characters, npcItems, npcs]
   )
 
-  const lightItemsForSelectedCharacter = useMemo(
-    () => availableLightItems.filter(item => item.characterId === lightCharacterId),
-    [availableLightItems, lightCharacterId]
-  )
+  const lightCarrierChoices = useMemo(() => {
+    const map = new Map<string, { key: string; type: LightMemberType; id: string; name: string }>()
+
+    for (const choice of availableLightChoices) {
+      const key = `${choice.memberType}:${choice.memberId}`
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          type: choice.memberType,
+          id: choice.memberId,
+          name: choice.memberName,
+        })
+      }
+    }
+
+    return Array.from(map.values())
+  }, [availableLightChoices])
+
+  const lightItemsForSelectedMember = useMemo(() => {
+    const [memberType, memberId] = lightCharacterId.split(':')
+    return availableLightChoices.filter(
+      choice => choice.memberType === memberType && choice.memberId === memberId
+    )
+  }, [availableLightChoices, lightCharacterId])
 
   const lightRemainingSeconds = useMemo(() => {
     if (!lightState || lightState.status === 'off') return 0
@@ -982,47 +1048,64 @@ function App() {
     lightState && lightState.status !== 'off' && lightRemainingSeconds > 0
   )
 
+  const selectedLightChoice =
+    lightItemsForSelectedMember.find(choice => choice.itemId === lightItemId) ?? null
+
   const lightCarrierName =
     lightState?.carrierName ||
-    characters.find(character => character.id === lightCharacterId)?.name ||
+    selectedLightChoice?.memberName ||
     '—'
 
   const lightSourceName =
     lightState?.sourceName ||
-    availableLightItems.find(item => item.id === lightItemId)?.name ||
+    selectedLightChoice?.itemName ||
     '—'
 
-
-  const lightRuleForItem = useCallback(
-    (item: CharacterItem) =>
-      catalog.find(entry => entry.id === item.catalogItemId) ?? null,
-    [catalog]
-  )
-
-  const lightFuelStatus = useCallback(
-    (item: CharacterItem) => {
-      const rule = lightRuleForItem(item)
+  const lightFuelStatusForChoice = useCallback(
+    (choice: LightChoice) => {
+      const rule = catalog.find(entry => entry.id === choice.catalogItemId) ?? null
       if (!rule || rule.lightConsumesSource || !rule.lightFuelItemName) return null
-
-      const fuelCatalogIds = new Set(
-        catalog
-          .filter(entry =>
-            entry.name.trim().toLowerCase() === rule.lightFuelItemName!.trim().toLowerCase()
-          )
-          .map(entry => entry.id)
-      )
 
       const normalizeName = (value: string) =>
         value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 
+      const fuelCatalogIds = new Set(
+        catalog
+          .filter(
+            entry =>
+              normalizeName(entry.name) === normalizeName(rule.lightFuelItemName!)
+          )
+          .map(entry => entry.id)
+      )
+
       const expectedName = normalizeName(rule.lightFuelItemName)
-      const available = items
-        .filter(candidate => {
-          if (candidate.characterId !== item.characterId) return false
-          if (candidate.catalogItemId && fuelCatalogIds.has(candidate.catalogItemId)) return true
-          return normalizeName(candidate.name) === expectedName
-        })
-        .reduce((sum, candidate) => sum + candidate.quantity, 0)
+
+      const available =
+        choice.memberType === 'character'
+          ? items
+              .filter(candidate => {
+                if (candidate.characterId !== choice.memberId) return false
+                if (
+                  candidate.catalogItemId &&
+                  fuelCatalogIds.has(candidate.catalogItemId)
+                ) {
+                  return true
+                }
+                return normalizeName(candidate.name) === expectedName
+              })
+              .reduce((sum, candidate) => sum + candidate.quantity, 0)
+          : npcItems
+              .filter(candidate => {
+                if (candidate.npcId !== choice.memberId) return false
+                if (
+                  candidate.catalogItemId &&
+                  fuelCatalogIds.has(candidate.catalogItemId)
+                ) {
+                  return true
+                }
+                return normalizeName(candidate.name) === expectedName
+              })
+              .reduce((sum, candidate) => sum + candidate.quantity, 0)
 
       return {
         name: rule.lightFuelItemName,
@@ -1030,22 +1113,42 @@ function App() {
         available,
       }
     },
-    [items, catalog, lightRuleForItem]
+    [items, npcItems, catalog]
   )
 
-  const selectedLightItem = useMemo(
-    () => lightItemsForSelectedCharacter.find(item => item.id === lightItemId) ?? null,
-    [lightItemsForSelectedCharacter, lightItemId]
-  )
-
-  const selectedLightFuel = selectedLightItem
-    ? lightFuelStatus(selectedLightItem)
+  const selectedLightFuel = selectedLightChoice
+    ? lightFuelStatusForChoice(selectedLightChoice)
     : null
 
   const selectedLightMissingFuel = Boolean(
     selectedLightFuel &&
-    selectedLightFuel.available < selectedLightFuel.required
+      selectedLightFuel.available < selectedLightFuel.required
   )
+
+  const expeditionCarrierOptions = useMemo(
+    () => [
+      ...characters.map(character => ({
+        key: `character:${character.id}`,
+        type: 'character' as LightMemberType,
+        id: character.id,
+        name: character.name,
+      })),
+      ...npcs.map(npc => ({
+        key: `npc:${npc.id}`,
+        type: 'npc' as LightMemberType,
+        id: npc.id,
+        name: npc.name,
+      })),
+    ],
+    [characters, npcs]
+  )
+
+  const activeLightCarrierKey =
+    lightState?.carrierType === 'npc' && lightState.npcId
+      ? `npc:${lightState.npcId}`
+      : lightState?.characterId
+        ? `character:${lightState.characterId}`
+        : ''
 
   function formatTimer(totalSeconds: number) {
     const safe = Math.max(0, Math.floor(totalSeconds))
@@ -1077,29 +1180,41 @@ function App() {
     extinguishCampaignLight(activeId)
       .then(async next => {
         setLightState(next)
-        await Promise.all([refreshItems(), refreshCharacters()])
+        await Promise.all([
+          refreshItems(),
+          refreshCharacters(),
+          refreshNpcItems(),
+          refreshNpcs(),
+        ])
       })
       .catch(() => undefined)
-  }, [activeId, lightState?.status, lightRemainingSeconds, refreshItems, refreshCharacters])
+  }, [
+    activeId,
+    lightState?.status,
+    lightRemainingSeconds,
+    refreshItems,
+    refreshCharacters,
+    refreshNpcItems,
+    refreshNpcs,
+  ])
 
   useEffect(() => {
     if (lightState?.status === 'running' || lightState?.status === 'paused') return
 
     setLightCharacterId(current => {
-      if (availableLightItems.some(item => item.characterId === current)) return current
-      return availableLightItems[0]?.characterId ?? ''
+      if (lightCarrierChoices.some(member => member.key === current)) return current
+      return lightCarrierChoices[0]?.key ?? ''
     })
-  }, [availableLightItems, lightState?.status])
+  }, [lightCarrierChoices, lightState?.status])
 
   useEffect(() => {
     if (lightState?.status === 'running' || lightState?.status === 'paused') return
 
     setLightItemId(current => {
-      if (lightItemsForSelectedCharacter.some(item => item.id === current)) return current
-      return lightItemsForSelectedCharacter[0]?.id ?? ''
+      if (lightItemsForSelectedMember.some(choice => choice.itemId === current)) return current
+      return lightItemsForSelectedMember[0]?.itemId ?? ''
     })
-  }, [lightItemsForSelectedCharacter, lightState?.status])
-
+  }, [lightItemsForSelectedMember, lightState?.status])
 
   useEffect(() => {
     if (!lightState || lightState.status === 'off') {
@@ -1108,12 +1223,24 @@ function App() {
     }
 
     setLightTransferCharacterId(current => {
-      if (current && current !== lightState.characterId && characters.some(c => c.id === current)) {
+      if (
+        current &&
+        current !== activeLightCarrierKey &&
+        expeditionCarrierOptions.some(member => member.key === current)
+      ) {
         return current
       }
-      return characters.find(c => c.id !== lightState.characterId)?.id ?? ''
+
+      return (
+        expeditionCarrierOptions.find(member => member.key !== activeLightCarrierKey)
+          ?.key ?? ''
+      )
     })
-  }, [characters, lightState?.characterId, lightState?.status])
+  }, [
+    expeditionCarrierOptions,
+    activeLightCarrierKey,
+    lightState?.status,
+  ])
 
   async function handleLightStartOrResume() {
     if (!activeId) return
@@ -1127,15 +1254,26 @@ function App() {
         return
       }
 
-      if (!lightItemId) {
-        setError('Wybierz postać i źródło światła z jej ekwipunku.')
+      if (!selectedLightChoice) {
+        setError('Wybierz członka ekspedycji i źródło światła z jego ekwipunku.')
         return
       }
 
-      setLightState(await startCampaignLight(activeId, lightItemId))
+      setLightState(
+        await startCampaignLight(
+          activeId,
+          selectedLightChoice.memberType,
+          selectedLightChoice.itemId
+        )
+      )
       setLightNow(Date.now())
-      await Promise.all([refreshItems(), refreshCharacters()])
-      flash('Źródło światła zostało zapalone. Zużyto 1 sztukę.')
+      await Promise.all([
+        refreshItems(),
+        refreshCharacters(),
+        refreshNpcItems(),
+        refreshNpcs(),
+      ])
+      flash('Źródło światła zostało zapalone.')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się uruchomić światła.')
     } finally {
@@ -1164,7 +1302,12 @@ function App() {
       setLightLoading(true)
       setLightState(await extinguishCampaignLight(activeId))
       setLightNow(Date.now())
-      await Promise.all([refreshItems(), refreshCharacters()])
+      await Promise.all([
+        refreshItems(),
+        refreshCharacters(),
+        refreshNpcItems(),
+        refreshNpcs(),
+      ])
       flash('Światło zgaszone.')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zgasić światła.')
@@ -1173,24 +1316,40 @@ function App() {
     }
   }
 
-
   async function handleLightTransfer() {
-    if (!activeId || !lightTransferCharacterId || !lightState || lightState.status === 'off') return
+    if (
+      !activeId ||
+      !lightTransferCharacterId ||
+      !lightState ||
+      lightState.status === 'off'
+    ) {
+      return
+    }
+
+    const target = expeditionCarrierOptions.find(
+      member => member.key === lightTransferCharacterId
+    )
+    if (!target) return
 
     try {
       setLightLoading(true)
-      const next = await transferCampaignLight(activeId, lightTransferCharacterId)
+      const next = await transferCampaignLight(activeId, target.type, target.id)
       setLightState(next)
       setLightNow(Date.now())
-      await Promise.all([refreshItems(), refreshCharacters()])
-      const target = characters.find(c => c.id === lightTransferCharacterId)
-      flash(`Przekazano światło i przedmiot: ${target?.name ?? 'inna postać'}.`)
+      await Promise.all([
+        refreshItems(),
+        refreshCharacters(),
+        refreshNpcItems(),
+        refreshNpcs(),
+      ])
+      flash(`Przekazano światło i przedmiot: ${target.name}.`)
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się przekazać światła.')
     } finally {
       setLightLoading(false)
     }
   }
+
 
   async function createCampaign() {
     const name = newCampaign.trim()
@@ -1997,7 +2156,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3A • NPC</span>
+              Etap 3B • światło NPC</span>
           </div>
 
         </aside>
@@ -2172,7 +2331,10 @@ function App() {
                 <>
                   <div className="light-row">
                     <span>Niosący</span>
-                    <strong>{lightCarrierName}</strong>
+                    <strong>
+                      {lightCarrierName}
+                      {lightState.carrierType === 'npc' ? ' (NPC)' : ''}
+                    </strong>
 
                     <span>Źródło</span>
                     <strong>{lightSourceName}</strong>
@@ -2184,16 +2346,17 @@ function App() {
                       <select
                         value={lightTransferCharacterId}
                         onChange={e => setLightTransferCharacterId(e.target.value)}
-                        disabled={lightLoading || characters.length < 2}
+                        disabled={lightLoading || expeditionCarrierOptions.length < 2}
                       >
-                        {characters.length < 2 && (
-                          <option value="">Brak innej postaci</option>
+                        {expeditionCarrierOptions.length < 2 && (
+                          <option value="">Brak innego członka ekspedycji</option>
                         )}
-                        {characters
-                          .filter(character => character.id !== lightState.characterId)
-                          .map(character => (
-                            <option key={character.id} value={character.id}>
-                              {character.name}
+                        {expeditionCarrierOptions
+                          .filter(member => member.key !== activeLightCarrierKey)
+                          .map(member => (
+                            <option key={member.key} value={member.key}>
+                              {member.name}
+                              {member.type === 'npc' ? ' (NPC)' : ''}
                             </option>
                           ))}
                       </select>
@@ -2215,20 +2378,17 @@ function App() {
                     <select
                       value={lightCharacterId}
                       onChange={e => setLightCharacterId(e.target.value)}
-                      disabled={lightLoading || availableLightItems.length === 0}
+                      disabled={lightLoading || lightCarrierChoices.length === 0}
                     >
-                      {availableLightItems.length === 0 && (
+                      {lightCarrierChoices.length === 0 && (
                         <option value="">Brak źródeł światła</option>
                       )}
-                      {characters
-                        .filter(character =>
-                          availableLightItems.some(item => item.characterId === character.id)
-                        )
-                        .map(character => (
-                          <option key={character.id} value={character.id}>
-                            {character.name}
-                          </option>
-                        ))}
+                      {lightCarrierChoices.map(member => (
+                        <option key={member.key} value={member.key}>
+                          {member.name}
+                          {member.type === 'npc' ? ' (NPC)' : ''}
+                        </option>
+                      ))}
                     </select>
                   </label>
 
@@ -2237,17 +2397,21 @@ function App() {
                     <select
                       value={lightItemId}
                       onChange={e => setLightItemId(e.target.value)}
-                      disabled={lightLoading || lightItemsForSelectedCharacter.length === 0}
+                      disabled={lightLoading || lightItemsForSelectedMember.length === 0}
                     >
-                      {lightItemsForSelectedCharacter.length === 0 && (
+                      {lightItemsForSelectedMember.length === 0 && (
                         <option value="">Brak źródła</option>
                       )}
-                      {lightItemsForSelectedCharacter.map(item => {
-                        const fuel = lightFuelStatus(item)
+                      {lightItemsForSelectedMember.map(choice => {
+                        const fuel = lightFuelStatusForChoice(choice)
                         return (
-                          <option key={item.id} value={item.id}>
-                            {item.name} × {item.quantity} • {item.lightMinutes} min
-                            {fuel ? ` • paliwo: ${fuel.name} ${fuel.available}/${fuel.required}${fuel.available < fuel.required ? ' • BRAK PALIWA' : ''}` : ''}
+                          <option key={choice.itemId} value={choice.itemId}>
+                            {choice.itemName} × {choice.quantity} • {choice.lightMinutes} min
+                            {fuel
+                              ? ` • paliwo: ${fuel.name} ${fuel.available}/${fuel.required}${
+                                  fuel.available < fuel.required ? ' • BRAK PALIWA' : ''
+                                }`
+                              : ''}
                           </option>
                         )
                       })}
