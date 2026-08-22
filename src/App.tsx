@@ -124,7 +124,6 @@ const nav = [
   ['NPC', Shield],
   ['Zwierzęta', Beef],
   ['Bastiony', Castle],
-  ['Ekwipunek wspólny', Backpack],
   ['Biblioteka', Package],
   ['Podsumowanie', Coins],
 ] as const
@@ -1037,6 +1036,30 @@ function App() {
   )
 
 
+  function formatSlotRule(item: {
+    slotsPerUnit: number
+    slotGroupSize: number
+    freeQuantity: number
+  }) {
+    const slots = Number(item.slotsPerUnit)
+    const group = Math.max(1, Number(item.slotGroupSize || 1))
+    const free = Math.max(0, Number(item.freeQuantity || 0))
+    const slotText = Number.isInteger(slots)
+      ? String(slots)
+      : String(Number(slots.toFixed(2)))
+
+    if (group > 1 && free > 0) {
+      return `${slotText} slot / ${group} szt. • pierwsze ${free} bez slotu`
+    }
+    if (group > 1) {
+      return `${slotText} slot / ${group} szt.`
+    }
+    if (free > 0) {
+      return `${slotText} slot./szt. • pierwsze ${free} bez slotu`
+    }
+    return `${slotText} slot./szt.`
+  }
+
   const slotUsageForNpcItem = useCallback((item: NpcItem) => {
     const quantity = Math.max(0, item.quantity - (item.freeQuantity ?? 0))
     if (quantity <= 0) return 0
@@ -1233,29 +1256,50 @@ function App() {
     [catalogEntryForItem]
   )
 
-  const animalCoins = useMemo(() => {
-    return animalItems.reduce((sum, item) => {
-      const catalogName = catalogEntryForItem(item.catalogItemId)?.name ?? ''
-      const itemKey = normalizeInventoryName(item.name)
-      const catalogKey = normalizeInventoryName(catalogName)
+  function isCoinInventoryItem(
+    item: { name: string; catalogItemId: string | null }
+  ) {
+    const catalogName = catalogEntryForItem(item.catalogItemId)?.name ?? ''
+    const itemKey = normalizeInventoryName(item.name)
+    const catalogKey = normalizeInventoryName(catalogName)
 
-      if (
-        ['coin', 'coins'].includes(itemKey) ||
-        ['coin', 'coins'].includes(catalogKey)
-      ) {
-        return sum + item.quantity
-      }
+    return (
+      ['coin', 'coins'].includes(itemKey) ||
+      ['coin', 'coins'].includes(catalogKey)
+    )
+  }
 
-      return sum
-    }, 0)
-  }, [animalItems, catalogEntryForItem])
-
-  const totalGold = useMemo(
-    () =>
-      characters.reduce((sum, character) => sum + character.gold, 0) +
-      animalCoins,
-    [characters, animalCoins]
+  const characterGold = useMemo(
+    () => characters.reduce((sum, character) => sum + character.gold, 0),
+    [characters]
   )
+
+  const npcCoins = useMemo(
+    () =>
+      npcItems
+        .filter(item => isCoinInventoryItem(item))
+        .reduce((sum, item) => sum + item.quantity, 0),
+    [npcItems, catalog]
+  )
+
+  const animalCoins = useMemo(
+    () =>
+      animalItems
+        .filter(item => isCoinInventoryItem(item))
+        .reduce((sum, item) => sum + item.quantity, 0),
+    [animalItems, catalog]
+  )
+
+  const bastionCoins = useMemo(
+    () =>
+      bastionItems
+        .filter(item => isCoinInventoryItem(item))
+        .reduce((sum, item) => sum + item.quantity, 0),
+    [bastionItems, catalog]
+  )
+
+  const expeditionGold = characterGold + npcCoins + animalCoins
+  const totalWealth = expeditionGold + bastionCoins
 
 
   function normalizeInventoryName(value: string) {
@@ -3537,7 +3581,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3I.2 • zatwierdzanie ilości</span>
+              Etap 3I.3 • sloty, majątek i UI ekwipunku</span>
           </div>
 
         </aside>
@@ -3702,11 +3746,27 @@ function App() {
 
             <Metric
               icon={<Coins />}
-              label="Majątek"
-              value={`${totalGold.toLocaleString(
-                'pl-PL'
-              )} gp`}
-              sub={animalCoins > 0 ? `łącznie • w tym ${animalCoins} gp na zwierzętach` : 'łącznie'}
+              label="Majątek postaci"
+              value={`${characterGold.toLocaleString('pl-PL')} gp`}
+              sub="złoto zapisane przy postaciach"
+            />
+
+            <Metric
+              icon={<Coins />}
+              label="Majątek ekspedycji"
+              value={`${expeditionGold.toLocaleString('pl-PL')} gp`}
+              sub="postacie + NPC + zwierzęta"
+            />
+
+            <Metric
+              icon={<Coins />}
+              label="Majątek całkowity"
+              value={`${totalWealth.toLocaleString('pl-PL')} gp`}
+              sub={
+                bastionCoins > 0
+                  ? `w tym ${bastionCoins.toLocaleString('pl-PL')} gp w Vault`
+                  : 'łącznie z bastionami'
+              }
             />
 
           </section>
@@ -4243,52 +4303,6 @@ function App() {
 
             </div>
 
-            <div className="panel wide">
-
-              <div className="panel-title">
-                <Coins size={18} />
-                Podsumowanie majątku
-              </div>
-
-              <div className="wealth-grid">
-
-                <div>
-                  <span>
-                    Złoto postaci + zwierząt
-                  </span>
-                  <b>{totalGold.toLocaleString('pl-PL')} gp</b>
-                </div>
-
-                <div>
-                  <span>
-                    Wspólne — ekspedycja
-                  </span>
-                  <b>600 gp</b>
-                </div>
-
-                <div>
-                  <span>
-                    W siedzibie
-                  </span>
-                  <b>1 850 gp</b>
-                </div>
-
-                <div>
-                  <span>
-                    Łącznie
-                  </span>
-                  <b>
-                    {(totalGold + 600 + 1850).toLocaleString(
-                      'pl-PL'
-                    )}{' '}
-                    gp
-                  </b>
-                </div>
-
-              </div>
-
-            </div>
-
           </section>
             </>
           )}
@@ -4478,7 +4492,7 @@ function App() {
                                           }
                                         />
                                         {' • '}
-                                        {item.slotsPerUnit} slot./szt.
+                                        {formatSlotRule(item)}
                                         {item.category === 'food' && ' • ŻYWNOŚĆ'}
                                         {item.category === 'light' &&
                                           ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
@@ -4739,7 +4753,7 @@ function App() {
                                                   changeInventoryQuantity('animal', item.id, value)
                                                 }
                                               />
-                                              {' • '}{Number(slotUsageForAnimalItem(item).toFixed(2))} slot.
+                                              {' • '}{formatSlotRule(item)}
                                               {item.category === 'food' && ' • ŻYWNOŚĆ'}
                                               {item.category === 'light' && ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
                                               {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
@@ -4893,10 +4907,10 @@ function App() {
                                           value={item.quantity}
                                           disabled={item.isActiveLight}
                                           onCommit={value =>
-                                            changeInventoryQuantity('character', item.id, value)
+                                            changeInventoryQuantity('npc', item.id, value)
                                           }
                                         />
-                                        {' • '}{item.slotsPerUnit} slot./szt.
+                                        {' • '}{formatSlotRule(item)}
                                         {item.category === 'food' && ' • ŻYWNOŚĆ'}
                                         {item.category === 'light' &&
                                           ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
@@ -5110,7 +5124,7 @@ function App() {
                                               changeInventoryQuantity('bastion', item.id, value)
                                             }
                                           />
-                                          {' • '}{Number(bastionItemSlots(item).toFixed(2))} slot.
+                                          {' • '}{formatSlotRule(item)}
                                           {item.category === 'food' && ' • ŻYWNOŚĆ'}
                                           {item.category === 'light' && ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
                                           {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
@@ -6371,7 +6385,6 @@ function InventoryQuantityInput({
 
   async function commit() {
     if (disabled || !changed || saving) return
-
     setSaving(true)
     try {
       await onCommit(parsed)
@@ -6386,27 +6399,38 @@ function InventoryQuantityInput({
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 4,
+        gap: 5,
         margin: '0 4px',
       }}
     >
       <input
-        type="number"
-        min="0"
-        step="1"
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
         value={draft}
         disabled={disabled || saving}
-        onChange={e => setDraft(e.target.value)}
+        onChange={e => setDraft(e.target.value.replace(/[^0-9]/g, ''))}
         title={
           disabled
             ? 'Nie można zmieniać ilości aktywnego źródła światła.'
             : 'Wpisz nową ilość i zatwierdź zielonym ptaszkiem.'
         }
         style={{
-          width: 68,
-          minWidth: 68,
-          display: 'inline-block',
-          padding: '4px 6px',
+          width: 58,
+          minWidth: 58,
+          padding: '5px 7px',
+          borderRadius: 6,
+          border: '1px solid rgba(138, 101, 48, 0.72)',
+          background: disabled
+            ? 'rgba(69, 64, 52, 0.58)'
+            : 'rgba(18, 16, 13, 0.96)',
+          color: disabled
+            ? 'rgba(218, 193, 139, 0.48)'
+            : '#e6cf9c',
+          boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.55)',
+          outline: 'none',
+          fontWeight: 700,
+          textAlign: 'center',
         }}
       />
 
@@ -6417,18 +6441,17 @@ function InventoryQuantityInput({
         title={changed ? 'Zatwierdź nową ilość' : 'Ilość bez zmian'}
         aria-label="Zatwierdź ilość"
         style={{
-          width: 28,
-          height: 28,
-          minWidth: 28,
+          width: 29,
+          height: 29,
+          minWidth: 29,
           padding: 0,
           borderRadius: 6,
-          border: '1px solid rgba(74, 138, 72, 0.85)',
+          border: '1px solid rgba(72, 126, 62, 0.88)',
           background: changed
-            ? 'rgba(55, 112, 55, 0.28)'
-            : 'rgba(55, 112, 55, 0.10)',
-          color: changed ? '#8fd08b' : 'rgba(143, 208, 139, 0.38)',
-          cursor:
-            disabled || saving || !changed ? 'default' : 'pointer',
+            ? 'linear-gradient(180deg, rgba(54, 104, 48, 0.78), rgba(35, 72, 32, 0.82))'
+            : 'rgba(39, 68, 35, 0.26)',
+          color: changed ? '#9dd590' : 'rgba(157, 213, 144, 0.35)',
+          cursor: disabled || saving || !changed ? 'default' : 'pointer',
           fontWeight: 900,
           lineHeight: 1,
         }}
