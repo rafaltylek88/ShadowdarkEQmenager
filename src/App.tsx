@@ -47,6 +47,16 @@ import { createNpcItem, deleteNpcItem, loadNpcItems, updateNpcItem } from './lib
 import type { NpcItem } from './lib/npcItems'
 import { createAnimal, deleteAnimal, loadAnimals, updateAnimal } from './lib/animals'
 import type { Animal } from './lib/animals'
+import {
+  MOUNT_CATALOG,
+  MOUNT_PERSONALITIES,
+  MOUNT_PROPERTY_INFO,
+  MOUNT_RARITY_LABEL,
+  mountPropertyText,
+  personalityBehavior,
+  personalityLabel,
+} from './lib/mountCatalog'
+import type { MountCatalogEntry } from './lib/mountCatalog'
 import { createAnimalItem, deleteAnimalItem, loadAnimalItems, updateAnimalItem } from './lib/animalItems'
 import type { AnimalItem } from './lib/animalItems'
 import {
@@ -179,6 +189,8 @@ function App() {
   const [animalName, setAnimalName] = useState('')
   const [animalType, setAnimalType] = useState('')
   const [animalBaseSlots, setAnimalBaseSlots] = useState(10)
+  const [animalPersonality, setAnimalPersonality] = useState<Animal['personality']>('')
+  const [selectedMountCatalogName, setSelectedMountCatalogName] = useState('')
 
   const [animalItems, setAnimalItems] = useState<AnimalItem[]>([])
   const [animalItemsLoading, setAnimalItemsLoading] = useState(false)
@@ -2038,14 +2050,25 @@ function App() {
     setAnimalName('')
     setAnimalType('')
     setAnimalBaseSlots(10)
+    setAnimalPersonality('')
+    setSelectedMountCatalogName('')
     setShowAnimal(true)
   }
+
+  function applyMountCatalogEntry(entry: MountCatalogEntry) {
+    setSelectedMountCatalogName(entry.name)
+    setAnimalType(entry.name)
+    setAnimalBaseSlots(entry.gearSlots)
+  }
+
 
   function openEditAnimal(animal: Animal) {
     setEditingAnimal(animal)
     setAnimalName(animal.name)
     setAnimalType(animal.animalType)
     setAnimalBaseSlots(animal.baseSlots)
+    setAnimalPersonality(animal.personality ?? '')
+    setSelectedMountCatalogName('')
     setShowAnimal(true)
   }
 
@@ -2061,10 +2084,11 @@ function App() {
           name: animalName,
           animalType,
           baseSlots: animalBaseSlots,
+          personality: animalPersonality,
         })
         flash('Zwierzę zostało zaktualizowane.')
       } else {
-        await createAnimal(activeId, animalName, animalType, animalBaseSlots)
+        await createAnimal(activeId, animalName, animalType, animalBaseSlots, animalPersonality)
         flash('Zwierzę zostało dodane.')
       }
 
@@ -2660,7 +2684,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3C.2 • majątek i przedmioty magiczne</span>
+              Etap 3D • katalog zwierząt i personality</span>
           </div>
 
         </aside>
@@ -3591,6 +3615,23 @@ function App() {
                               {hasWagon ? ' • Wóz: +15 slotów' : ' • bez wozu'}
                             </p>
 
+                            <div
+                              style={{
+                                marginTop: 10,
+                                padding: '9px 11px',
+                                border: '1px solid rgba(180, 135, 60, 0.25)',
+                                borderRadius: 8,
+                                background: 'rgba(110, 83, 42, 0.08)',
+                              }}
+                            >
+                              <strong style={{ fontSize: 12 }}>PERSONALITY: {personalityLabel(animal.personality)}</strong>
+                              {personalityBehavior(animal.personality) && (
+                                <span className="muted" style={{ display: 'block', marginTop: 4 }}>
+                                  {personalityBehavior(animal.personality)}
+                                </span>
+                              )}
+                            </div>
+
                             <div style={{ marginTop: 16 }}>
                               {currentItems.length === 0 ? (
                                 <p className="muted">Brak wyposażenia.</p>
@@ -3849,17 +3890,7 @@ function App() {
                         <article
                           className="entity-card"
                           key={entry.id}
-                          style={
-                            entry.isMagical
-                              ? {
-                                  border: '1px solid rgba(72, 118, 164, 0.82)',
-                                  background:
-                                    'linear-gradient(135deg, rgba(55, 91, 132, 0.20), rgba(43, 62, 92, 0.14))',
-                                  boxShadow:
-                                    'inset 0 0 0 1px rgba(145, 190, 232, 0.08)',
-                                }
-                              : undefined
-                          }
+                          style={inventoryHighlightStyle(entry.category, entry.isMagical)}
                         >
                           <div className="entity-head">
                             <strong>{entry.name}</strong>
@@ -3879,6 +3910,59 @@ function App() {
                     </div>
                   </>
                 )}
+              </section>
+
+              <section className="panel" style={{ marginTop: 16 }}>
+                <div className="panel-title">
+                  <Beef size={18} />
+                  Katalog zwierząt
+                  <span style={{ marginLeft: 'auto' }}>{MOUNT_CATALOG.length} pozycji</span>
+                </div>
+
+                <p className="muted" style={{ marginBottom: 16 }}>
+                  Gotowy katalog mountów. Udźwig uwzględnia już właściwość Sturdy (S).
+                  Personality wybierasz przy dodawaniu konkretnego zwierzęcia do kampanii.
+                </p>
+
+                <div className="entity-grid">
+                  {MOUNT_CATALOG.map(mount => (
+                    <article className="entity-card" key={mount.name}>
+                      <div className="entity-head">
+                        <strong>{mount.name}</strong>
+                        <span>{MOUNT_RARITY_LABEL[mount.rarity]}</span>
+                      </div>
+                      <p className="muted" style={{ marginTop: 10 }}>
+                        Koszt {mount.cost} • {mount.gearSlots} slotów • {mountPropertyText(mount.properties)}
+                      </p>
+                      {mount.properties.length > 0 && (
+                        <div style={{ display: 'grid', gap: 4, marginTop: 10 }}>
+                          {mount.properties.map(code => (
+                            <span className="muted" key={code}>
+                              <strong>{code}</strong> — {MOUNT_PROPERTY_INFO[code].description}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: 18 }}>
+                  <div className="panel-title" style={{ marginBottom: 10 }}>
+                    Personality
+                  </div>
+                  <div className="entity-grid">
+                    {MOUNT_PERSONALITIES.map(personality => (
+                      <article className="entity-card" key={personality.value}>
+                        <div className="entity-head">
+                          <strong>{personality.label}</strong>
+                          <span>{personality.roll}</span>
+                        </div>
+                        <p className="muted" style={{ marginTop: 8 }}>{personality.behavior}</p>
+                      </article>
+                    ))}
+                  </div>
+                </div>
               </section>
             </>
           )}
@@ -3907,6 +3991,50 @@ function App() {
           <p className="eyebrow">{editingAnimal ? 'EDYCJA ZWIERZĘCIA' : 'NOWE ZWIERZĘ'}</p>
           <h2>{editingAnimal ? 'Edytuj zwierzę' : 'Dodaj zwierzę'}</h2>
 
+          {!editingAnimal && (
+            <label>
+              Gotowy katalog zwierząt
+              <select
+                value={selectedMountCatalogName}
+                onChange={e => {
+                  const selected = MOUNT_CATALOG.find(entry => entry.name === e.target.value)
+                  setSelectedMountCatalogName(e.target.value)
+                  if (selected) applyMountCatalogEntry(selected)
+                }}
+              >
+                <option value="">— własne / ręczne —</option>
+                {MOUNT_CATALOG.map(entry => (
+                  <option key={entry.name} value={entry.name}>
+                    {entry.name} • {entry.cost} • {MOUNT_RARITY_LABEL[entry.rarity]} • {entry.gearSlots} slotów
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {selectedMountCatalogName && (() => {
+            const selected = MOUNT_CATALOG.find(entry => entry.name === selectedMountCatalogName)
+            if (!selected) return null
+            return (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  border: '1px solid rgba(180, 135, 60, 0.32)',
+                  borderRadius: 8,
+                  background: 'rgba(110, 83, 42, 0.10)',
+                }}
+              >
+                <strong>{selected.name}</strong>
+                <span className="muted" style={{ display: 'block', marginTop: 4 }}>
+                  Koszt: {selected.cost} • Rzadkość: {MOUNT_RARITY_LABEL[selected.rarity]} • Udźwig: {selected.gearSlots}
+                </span>
+                <span className="muted" style={{ display: 'block', marginTop: 4 }}>
+                  Właściwości: {mountPropertyText(selected.properties)}
+                </span>
+              </div>
+            )
+          })()}
+
           <label>
             Nazwa
             <input autoFocus value={animalName} onChange={e => setAnimalName(e.target.value)} />
@@ -3931,6 +4059,25 @@ function App() {
               onChange={e => setAnimalBaseSlots(Math.max(0, Number(e.target.value) || 0))}
             />
           </label>
+
+          <label>
+            Personality
+            <select
+              value={animalPersonality}
+              onChange={e => setAnimalPersonality(e.target.value as Animal['personality'])}
+            >
+              <option value="">Nieustalona</option>
+              {MOUNT_PERSONALITIES.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label} ({option.roll}) — {option.behavior}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <p className="muted">
+            Personality: 2d6 + CHA mod. Good-Tempered (G) dodaje +2 do tego rzutu.
+          </p>
 
           <p className="muted">
             Wóz nie zajmuje slotów zwierzęcia i zwiększa jego udźwig o 15.
