@@ -112,6 +112,38 @@ export async function createItem(input: {
 }): Promise<CharacterItem> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
 
+  if (input.catalogItemId) {
+    let existingQuery = supabase
+      .from('character_items')
+      .select('*')
+      .eq('character_id', input.characterId)
+      .eq('catalog_item_id', input.catalogItemId)
+      .eq('is_active_light', false)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    const { data: existing, error: existingError } = await existingQuery
+    if (existingError) throw existingError
+
+    if (existing) {
+      const { data: stacked, error: stackError } = await supabase
+        .from('character_items')
+        .update({
+          quantity: Number(existing.quantity ?? 0) + Math.max(1, input.quantity),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+        .select('*')
+        .single()
+
+      if (stackError) throw stackError
+      await syncCharacterUsedSlots(input.characterId)
+
+      return mapItem(stacked)
+    }
+  }
+
   const { data, error } = await supabase
     .from('character_items')
     .insert({

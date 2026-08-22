@@ -77,6 +77,40 @@ export async function createAnimalItem(input: {
 }): Promise<AnimalItem> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
 
+  if (input.catalogItemId) {
+    let existingQuery = supabase
+      .from('animal_items')
+      .select('*')
+      .eq('animal_id', input.animalId)
+      .eq('catalog_item_id', input.catalogItemId)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    const { data: existing, error: existingError } = await existingQuery
+    if (existingError) throw existingError
+
+    if (existing) {
+      const { data: stacked, error: stackError } = await supabase
+        .from('animal_items')
+        .update({
+          quantity: Number(existing.quantity ?? 0) + Math.max(1, input.quantity),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+        .select('*')
+        .single()
+
+      if (stackError) throw stackError
+      const { error: recalcError } = await supabase.rpc('recalculate_animal_slots', {
+        p_animal_id: input.animalId,
+      })
+      if (recalcError) throw recalcError
+
+      return mapAnimalItem(stacked)
+    }
+  }
+
   const { data, error } = await supabase
     .from('animal_items')
     .insert({
