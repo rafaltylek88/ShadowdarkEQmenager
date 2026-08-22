@@ -8,6 +8,8 @@ export type Animal = {
   baseSlots: number
   usedSlots: number
   personality: 'horrid' | 'ornery' | 'reliable' | 'lovely' | ''
+  lastFedAt: string | null
+  lastFeedMethod: 'ration' | 'pasture' | null
   createdBy?: string
   createdAt?: string
   updatedAt?: string
@@ -22,6 +24,8 @@ function mapAnimal(row: any): Animal {
     baseSlots: Number(row.base_slots ?? 10),
     usedSlots: Number(row.used_slots ?? 0),
     personality: (row.personality ?? '') as Animal['personality'],
+    lastFedAt: row.last_fed_at ?? null,
+    lastFeedMethod: row.last_feed_method ?? null,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

@@ -45,3 +45,34 @@ export async function transferMemberRation(
 
   if (error) throw error
 }
+
+
+export type AnimalFeedMethod = 'ration' | 'pasture'
+
+export type FeedAnimalsResult = {
+  fedAt: string
+  animalsFed: number
+  method: AnimalFeedMethod
+}
+
+export async function feedAnimals(
+  campaignId: string,
+  method: AnimalFeedMethod
+): Promise<FeedAnimalsResult> {
+  if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
+
+  const { data, error } = await supabase.rpc('feed_animals', {
+    p_campaign_id: campaignId,
+    p_method: method,
+  })
+
+  if (error) throw error
+
+  const row = (data ?? {}) as any
+
+  return {
+    fedAt: row.fed_at ?? new Date().toISOString(),
+    animalsFed: Number(row.animals_fed ?? 0),
+    method: (row.method ?? method) as AnimalFeedMethod,
+  }
+}
