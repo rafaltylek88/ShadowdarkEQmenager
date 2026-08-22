@@ -232,6 +232,8 @@ function App() {
   const [catalogWeaponProperties, setCatalogWeaponProperties] = useState('')
   const [catalogArmorClass, setCatalogArmorClass] = useState('')
   const [catalogArmorProperties, setCatalogArmorProperties] = useState('')
+  const [catalogIsMagical, setCatalogIsMagical] = useState(false)
+  const [catalogMagicDescription, setCatalogMagicDescription] = useState('')
   const [showCatalogImport, setShowCatalogImport] = useState(false)
   const [catalogImportText, setCatalogImportText] = useState('')
 
@@ -961,7 +963,20 @@ function App() {
   ])
 
   const inventoryHighlightStyle = useCallback(
-    (category: ItemCategory) => {
+    (category: ItemCategory, isMagical = false) => {
+      if (isMagical) {
+        return {
+          border: '1px solid rgba(72, 118, 164, 0.82)',
+          borderRadius: 8,
+          padding: '10px 12px',
+          alignItems: 'center',
+          background:
+            'linear-gradient(135deg, rgba(55, 91, 132, 0.25), rgba(43, 62, 92, 0.18))',
+          boxShadow:
+            'inset 0 0 0 1px rgba(145, 190, 232, 0.10)',
+        }
+      }
+
       if (category === 'light') {
         return {
           border: '1px solid rgba(196, 154, 48, 0.72)',
@@ -997,9 +1012,48 @@ function App() {
     []
   )
 
+  const catalogEntryForItem = useCallback(
+    (catalogItemId: string | null) =>
+      catalogItemId
+        ? catalog.find(entry => entry.id === catalogItemId) ?? null
+        : null,
+    [catalog]
+  )
+
+  const isMagicalInventoryItem = useCallback(
+    (catalogItemId: string | null) =>
+      Boolean(catalogEntryForItem(catalogItemId)?.isMagical),
+    [catalogEntryForItem]
+  )
+
+  const magicDescriptionForItem = useCallback(
+    (catalogItemId: string | null) =>
+      catalogEntryForItem(catalogItemId)?.magicDescription ?? null,
+    [catalogEntryForItem]
+  )
+
+  const animalCoins = useMemo(() => {
+    return animalItems.reduce((sum, item) => {
+      const catalogName = catalogEntryForItem(item.catalogItemId)?.name ?? ''
+      const itemKey = normalizeInventoryName(item.name)
+      const catalogKey = normalizeInventoryName(catalogName)
+
+      if (
+        ['coin', 'coins'].includes(itemKey) ||
+        ['coin', 'coins'].includes(catalogKey)
+      ) {
+        return sum + item.quantity
+      }
+
+      return sum
+    }, 0)
+  }, [animalItems, catalogEntryForItem])
+
   const totalGold = useMemo(
-    () => characters.reduce((sum, character) => sum + character.gold, 0),
-    [characters]
+    () =>
+      characters.reduce((sum, character) => sum + character.gold, 0) +
+      animalCoins,
+    [characters, animalCoins]
   )
 
 
@@ -1859,6 +1913,8 @@ function App() {
     setCatalogWeaponProperties('')
     setCatalogArmorClass('')
     setCatalogArmorProperties('')
+    setCatalogIsMagical(false)
+    setCatalogMagicDescription('')
     setShowCatalogItem(true)
   }
 
@@ -1879,6 +1935,8 @@ function App() {
         weaponProperties: catalogCategory === 'weapon' ? catalogWeaponProperties : null,
         armorClass: catalogCategory === 'armor' ? catalogArmorClass : null,
         armorProperties: catalogCategory === 'armor' ? catalogArmorProperties : null,
+        isMagical: catalogIsMagical,
+        magicDescription: catalogIsMagical ? catalogMagicDescription : null,
       })
       setCatalog(prev => [...prev.filter(i => i.id !== created.id), created].sort((a, b) => a.name.localeCompare(b.name, 'pl')))
       applyCatalogItem(created)
@@ -2342,6 +2400,8 @@ function App() {
       if (entry.armorClass) parts.push(`KP/AC ${entry.armorClass}`)
       if (entry.armorProperties) parts.push(entry.armorProperties)
     }
+    if (entry.isMagical) parts.push('MAGICZNY')
+    if (entry.isMagical && entry.magicDescription) parts.push(entry.magicDescription)
     return parts.join(' • ')
   }
 
@@ -2390,7 +2450,8 @@ function App() {
       const cols = line.split(';').map(value => value.trim())
       const [name, categoryRaw = 'normal', slotsRaw = '1', lightRaw = '',
         weaponDamage = '', weaponRange = '', weaponProperties = '',
-        armorClass = '', armorProperties = '', slotGroupRaw = '1', freeQuantityRaw = '0'] = cols
+        armorClass = '', armorProperties = '', slotGroupRaw = '1',
+        freeQuantityRaw = '0', magicalRaw = 'false', magicDescription = ''] = cols
 
       if (!name) throw new Error(`Brak nazwy przedmiotu w wierszu ${index + 1 + start}.`)
 
@@ -2407,9 +2468,11 @@ function App() {
       const freeQuantity = Math.max(0, Number(freeQuantityRaw.replace(',', '.')) || 0)
 
       const lightParsed = lightRaw === '' ? null : Number(lightRaw.replace(',', '.'))
+      const isMagical = ['1', 'true', 'tak', 'yes'].includes(magicalRaw.toLowerCase())
 
       return {
-        name, category, slotsPerUnit, slotGroupSize, freeQuantity,
+        name, category, slotsPerUnit, slotGroupSize, freeQuantity, isMagical,
+        magicDescription: isMagical ? magicDescription || null : null,
         lightMinutes: category === 'light' && lightParsed != null && Number.isFinite(lightParsed) ? lightParsed : null,
         weaponDamage: category === 'weapon' ? weaponDamage || null : null,
         weaponRange: category === 'weapon' ? weaponRange || null : null,
@@ -2448,11 +2511,12 @@ function App() {
   }
 
   function exportCatalogCsv() {
-    const header = 'name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties;slot_group_size;free_quantity'
+    const header = 'name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties;slot_group_size;free_quantity;magical;magic_description'
     const rows = catalog.map(entry =>
       [entry.name, entry.category, entry.slotsPerUnit, entry.lightMinutes ?? '',
        entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '',
-       entry.armorClass ?? '', entry.armorProperties ?? '', entry.slotGroupSize, entry.freeQuantity]
+       entry.armorClass ?? '', entry.armorProperties ?? '', entry.slotGroupSize, entry.freeQuantity,
+       entry.isMagical ? 'true' : 'false', entry.magicDescription ?? '']
         .map(value => String(value).split(';').join(',')).join(';')
     )
 
@@ -2596,7 +2660,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3C.1 • sloty ekspedycji i oznaczenia</span>
+              Etap 3C.2 • majątek i przedmioty magiczne</span>
           </div>
 
         </aside>
@@ -2761,7 +2825,7 @@ function App() {
               value={`${totalGold.toLocaleString(
                 'pl-PL'
               )} gp`}
-              sub="łącznie"
+              sub={animalCoins > 0 ? `łącznie • w tym ${animalCoins} gp na zwierzętach` : 'łącznie'}
             />
 
           </section>
@@ -3207,7 +3271,7 @@ function App() {
 
                 <div>
                   <span>
-                    Złoto osobiste
+                    Złoto postaci + zwierząt
                   </span>
                   <b>{totalGold.toLocaleString('pl-PL')} gp</b>
                 </div>
@@ -3362,7 +3426,7 @@ function App() {
                                     <div
                                       key={item.id}
                                       className="slot-line"
-                                      style={inventoryHighlightStyle(item.category)}
+                                      style={inventoryHighlightStyle(item.category, isMagicalInventoryItem(item.catalogItemId))}
                                     >
                                       <span>
                                         <strong>{item.name}</strong>
@@ -3377,11 +3441,19 @@ function App() {
                                           ` • broń${item.weaponDamage ? ` • obrażenia ${item.weaponDamage}` : ''}${item.weaponRange ? ` • zasięg ${item.weaponRange}` : ''}`}
                                         {item.category === 'armor' &&
                                           ` • pancerz${item.armorClass ? ` • KP/AC ${item.armorClass}` : ''}`}
+                                        {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
+                                        {isMagicalInventoryItem(item.catalogItemId) &&
+                                          magicDescriptionForItem(item.catalogItemId) &&
+                                          ` • ${magicDescriptionForItem(item.catalogItemId)}`}
                                         {item.category === 'weapon' && item.weaponProperties &&
                                           ` • ${item.weaponProperties}`}
                                         {item.category === 'armor' && item.armorProperties &&
                                           ` • ${item.armorProperties}`}
                                         {item.isActiveLight && ' • AKTYWNE ŚWIATŁO'}
+                                        {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
+                                        {isMagicalInventoryItem(item.catalogItemId) &&
+                                          magicDescriptionForItem(item.catalogItemId) &&
+                                          ` • ${magicDescriptionForItem(item.catalogItemId)}`}
                                       </span>
 
                                       <span className="button-row">
@@ -3543,7 +3615,7 @@ function App() {
                                                 boxShadow:
                                                   'inset 0 0 0 1px rgba(224, 190, 112, 0.10)',
                                               }
-                                            : inventoryHighlightStyle(item.category)
+                                            : inventoryHighlightStyle(item.category, isMagicalInventoryItem(item.catalogItemId))
                                         }
                                       >
                                         <span>
@@ -3560,6 +3632,10 @@ function App() {
                                               {' • '}{Number(slotUsageForAnimalItem(item).toFixed(2))} slot.
                                               {item.category === 'food' && ' • ŻYWNOŚĆ'}
                                               {item.category === 'light' && ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
+                                              {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
+                                              {isMagicalInventoryItem(item.catalogItemId) &&
+                                                magicDescriptionForItem(item.catalogItemId) &&
+                                                ` • ${magicDescriptionForItem(item.catalogItemId)}`}
                                               {isSaddleName(item.name) && ' • pierwsze siodło bez slotu'}
                                             </>
                                           )}
@@ -3689,7 +3765,7 @@ function App() {
                                     <div
                                       key={item.id}
                                       className="slot-line"
-                                      style={inventoryHighlightStyle(item.category)}
+                                      style={inventoryHighlightStyle(item.category, isMagicalInventoryItem(item.catalogItemId))}
                                     >
                                       <span>
                                         <strong>{item.name}</strong>
@@ -3770,10 +3846,27 @@ function App() {
 
                     <div className="entity-grid">
                       {catalog.map(entry => (
-                        <article className="entity-card" key={entry.id}>
+                        <article
+                          className="entity-card"
+                          key={entry.id}
+                          style={
+                            entry.isMagical
+                              ? {
+                                  border: '1px solid rgba(72, 118, 164, 0.82)',
+                                  background:
+                                    'linear-gradient(135deg, rgba(55, 91, 132, 0.20), rgba(43, 62, 92, 0.14))',
+                                  boxShadow:
+                                    'inset 0 0 0 1px rgba(145, 190, 232, 0.08)',
+                                }
+                              : undefined
+                          }
+                        >
                           <div className="entity-head">
                             <strong>{entry.name}</strong>
-                            <span>{catalogCategoryLabel(entry.category)}</span>
+                            <span>
+                              {catalogCategoryLabel(entry.category)}
+                              {entry.isMagical ? ' • MAGICZNY' : ''}
+                            </span>
                           </div>
                           <p className="muted" style={{ marginTop: 10 }}>{catalogItemDetails(entry)}</p>
                           <div className="button-row">
@@ -4236,6 +4329,43 @@ function App() {
             </>
           )}
 
+          <label
+            style={{
+              display: 'flex',
+              gap: 10,
+              alignItems: 'center',
+              padding: '10px 12px',
+              border: '1px solid rgba(72, 118, 164, 0.55)',
+              borderRadius: 8,
+              background: 'rgba(55, 91, 132, 0.12)',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={catalogIsMagical}
+              onChange={e => setCatalogIsMagical(e.target.checked)}
+              style={{ width: 'auto', margin: 0 }}
+            />
+            <span>
+              <strong>Magiczny przedmiot</strong>
+              <span className="muted" style={{ display: 'block', marginTop: 2 }}>
+                Oznacz przedmiot niebieskim wyróżnieniem w bibliotece i ekwipunku.
+              </span>
+            </span>
+          </label>
+
+          {catalogIsMagical && (
+            <label>
+              Opis magicznych właściwości
+              <textarea
+                rows={5}
+                value={catalogMagicDescription}
+                onChange={e => setCatalogMagicDescription(e.target.value)}
+                placeholder="np. +1 do ataków; świeci bladym światłem; raz dziennie pozwala..."
+              />
+            </label>
+          )}
+
           <button className="primary full" onClick={saveCatalogItem} disabled={!catalogName.trim()}>
             Dodaj do katalogu
           </button>
@@ -4249,7 +4379,7 @@ function App() {
           <p className="eyebrow">IMPORT BIBLIOTEKI</p>
           <h2>Importuj przedmioty z CSV</h2>
           <p className="muted">
-            Każdy wiersz: nazwa;typ;sloty;czas światła;obrażenia;zasięg;właściwości broni;KP/AC;właściwości pancerza;wielkość grupy slotu;darmowa ilość.
+            Każdy wiersz: nazwa;typ;sloty;czas światła;obrażenia;zasięg;właściwości broni;KP/AC;właściwości pancerza;wielkość grupy slotu;darmowa ilość;magiczny;opis magii.
           </p>
           <textarea
             rows={12}
