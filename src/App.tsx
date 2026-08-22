@@ -77,8 +77,8 @@ import {
   transferCampaignLight,
 } from './lib/light'
 import type { CampaignLight, LightMemberType } from './lib/light'
-import { feedExpedition, transferMemberRation } from './lib/rations'
-import type { MemberType } from './lib/rations'
+import { feedAnimals, feedExpedition, transferMemberRation } from './lib/rations'
+import type { AnimalFeedMethod, MemberType } from './lib/rations'
 
 const initialCampaigns: Campaign[] = [
   {
@@ -256,6 +256,8 @@ function App() {
   const [lightTransferCharacterId, setLightTransferCharacterId] = useState('')
   const [lightNow, setLightNow] = useState(() => Date.now())
   const [feedingExpedition, setFeedingExpedition] = useState(false)
+  const [feedingAnimals, setFeedingAnimals] = useState(false)
+  const [animalFeedMethod, setAnimalFeedMethod] = useState<AnimalFeedMethod>('ration')
   const [transferringRation, setTransferringRation] = useState(false)
   const [rationTransferFromKey, setRationTransferFromKey] = useState('')
   const [rationTransferToKey, setRationTransferToKey] = useState('')
@@ -1113,6 +1115,24 @@ function App() {
     return counts
   }, [npcs, npcItems, catalog])
 
+
+  const animalRationCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    animals.forEach(animal => counts.set(animal.id, 0))
+
+    for (const item of animalItems) {
+      if (item.category !== 'food' || !isRationName(item.name, item.catalogItemId)) continue
+      counts.set(item.animalId, (counts.get(item.animalId) ?? 0) + item.quantity)
+    }
+
+    return counts
+  }, [animals, animalItems, catalog])
+
+  const animalsMissingRations = useMemo(
+    () => animals.filter(animal => (animalRationCounts.get(animal.id) ?? 0) < 1),
+    [animals, animalRationCounts]
+  )
+
   type ExpeditionMember = {
     key: string
     type: MemberType
@@ -1237,6 +1257,39 @@ function App() {
       hour: '2-digit',
       minute: '2-digit',
     })
+  }
+
+  async function handleFeedAnimals() {
+    if (!activeId) {
+      setError('Najpierw wybierz kampanię.')
+      return
+    }
+
+    if (!animals.length) {
+      setError('W kampanii nie ma zwierząt do nakarmienia.')
+      return
+    }
+
+    setFeedingAnimals(true)
+
+    try {
+      const result = await feedAnimals(activeId, animalFeedMethod)
+      await Promise.all([refreshAnimalItems(), refreshAnimals()])
+
+      flash(
+        result.method === 'pasture'
+          ? `Nakarmiono ${result.animalsFed} zwierząt na pastwisku. Racje nie zostały zużyte.`
+          : `Nakarmiono ${result.animalsFed} zwierząt racjami. Każde zużyło 1 własną rację.`
+      )
+    } catch (e: any) {
+      setError(
+        e?.message ||
+          e?.details ||
+          'Nie udało się nakarmić zwierząt.'
+      )
+    } finally {
+      setFeedingAnimals(false)
+    }
   }
 
   async function handleFeedExpedition() {
@@ -1678,6 +1731,154 @@ function App() {
       setLightLoading(false)
     }
   }
+
+
+  type LightInventoryRow = {
+    id: string
+    catalogItemId: string | null
+    name: string
+    quantity: number
+    category: ItemCategory
+    lightMinutes: number | null
+  }
+
+  const calculateLightSecondsForOwner = useCallback(
+    (
+      ownerItems: LightInventoryRow[],
+      activeSourceId: string | null,
+      activeForOwner: boolean
+    ) => {
+      let seconds = 0
+      const seenReusable = new Set<string>()
+
+      const normalized = (value: string) => normalizeInventoryName(value)
+
+      for (const item of ownerItems) {
+        if (item.category !== 'light' || item.quantity <= 0 || !item.lightMinutes) continue
+
+        const rule = catalogEntryForItem(item.catalogItemId)
+        const isActiveSource = activeForOwner && activeSourceId === item.id
+
+        if (rule && !rule.lightConsumesSource && rule.lightFuelItemName) {
+          const reusableKey = rule.id || normalized(item.name)
+          if (seenReusable.has(reusableKey)) {
+            if (isActiveSource) seconds += lightRemainingSeconds
+            continue
+          }
+          seenReusable.add(reusableKey)
+
+          const fuelCatalogIds = new Set(
+            catalog
+              .filter(
+                entry =>
+                  normalized(entry.name) === normalized(rule.lightFuelItemName ?? '')
+              )
+              .map(entry => entry.id)
+          )
+
+          const fuelQuantity = ownerItems
+            .filter(candidate => {
+              if (
+                candidate.catalogItemId &&
+                fuelCatalogIds.has(candidate.catalogItemId)
+              ) {
+                return true
+              }
+
+              return normalized(candidate.name) === normalized(rule.lightFuelItemName ?? '')
+            })
+            .reduce((sum, candidate) => sum + candidate.quantity, 0)
+
+          const fuelUses = Math.floor(
+            fuelQuantity / Math.max(1, rule.lightFuelQuantity || 1)
+          )
+
+          seconds += fuelUses * item.lightMinutes * 60
+          if (isActiveSource) seconds += lightRemainingSeconds
+          continue
+        }
+
+        if (isActiveSource) {
+          seconds += lightRemainingSeconds
+          const unusedQuantity = Math.max(0, item.quantity - 1)
+          seconds += unusedQuantity * item.lightMinutes * 60
+        } else {
+          seconds += item.quantity * item.lightMinutes * 60
+        }
+      }
+
+      return seconds
+    },
+    [
+      catalog,
+      catalogEntryForItem,
+      lightRemainingSeconds,
+      normalizeInventoryName,
+    ]
+  )
+
+  const characterLightSeconds = useMemo(
+    () =>
+      characters.reduce((sum, character) => {
+        const ownerItems = itemsForCharacter(character.id)
+        const active =
+          lightState?.carrierType === 'character' &&
+          lightState.characterId === character.id
+
+        return (
+          sum +
+          calculateLightSecondsForOwner(
+            ownerItems,
+            active ? lightState?.sourceItemId ?? null : null,
+            active
+          )
+        )
+      }, 0),
+    [
+      characters,
+      itemsForCharacter,
+      lightState,
+      calculateLightSecondsForOwner,
+    ]
+  )
+
+  const npcLightSeconds = useMemo(
+    () =>
+      npcs.reduce((sum, npc) => {
+        const ownerItems = itemsForNpc(npc.id)
+        const active =
+          lightState?.carrierType === 'npc' &&
+          lightState.npcId === npc.id
+
+        return (
+          sum +
+          calculateLightSecondsForOwner(
+            ownerItems,
+            active ? lightState?.sourceNpcItemId ?? null : null,
+            active
+          )
+        )
+      }, 0),
+    [npcs, itemsForNpc, lightState, calculateLightSecondsForOwner]
+  )
+
+  const animalLightSeconds = useMemo(
+    () =>
+      animals.reduce(
+        (sum, animal) =>
+          sum +
+          calculateLightSecondsForOwner(
+            itemsForAnimal(animal.id),
+            null,
+            false
+          ),
+        0
+      ),
+    [animals, itemsForAnimal, calculateLightSecondsForOwner]
+  )
+
+  const expeditionLightSeconds =
+    characterLightSeconds + npcLightSeconds + animalLightSeconds
 
 
   async function createCampaign() {
@@ -2684,7 +2885,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3D • katalog zwierząt i personality</span>
+              Etap 3E • zapas światła i karmienie zwierząt</span>
           </div>
 
         </aside>
@@ -2833,13 +3034,17 @@ function App() {
 
             <Metric
               icon={<Flame />}
-              label="Światło"
-              value={formatTimer(lightRemainingSeconds)}
-              sub={
-                lightIsActive || lightState?.status === 'paused'
-                  ? `${lightCarrierName} • ${lightSourceName}`
-                  : 'brak aktywnego światła'
-              }
+              label="Światło postaci"
+              value={formatTimer(characterLightSeconds)}
+              sub="łączny czas źródeł światła wszystkich postaci"
+              accent
+            />
+
+            <Metric
+              icon={<Flame />}
+              label="Światło ekspedycji"
+              value={formatTimer(expeditionLightSeconds)}
+              sub="postacie + NPC + zapasy na zwierzętach"
               accent
             />
 
@@ -3148,6 +3353,83 @@ function App() {
                 <Utensils size={16} />
                 {feedingExpedition ? 'Karmienie…' : 'Nakarm ekspedycję'}
               </button>
+
+
+              <div
+                style={{
+                  marginTop: 16,
+                  paddingTop: 14,
+                  borderTop: '1px solid rgba(180, 135, 60, 0.28)',
+                }}
+              >
+                <div className="panel-title" style={{ marginBottom: 10 }}>
+                  <Beef size={17} />
+                  Karmienie zwierząt
+                </div>
+
+                {animals.length === 0 ? (
+                  <p className="muted">Brak zwierząt w ekspedycji.</p>
+                ) : (
+                  <>
+                    <label>
+                      Sposób karmienia
+                      <select
+                        value={animalFeedMethod}
+                        onChange={e =>
+                          setAnimalFeedMethod(e.target.value as AnimalFeedMethod)
+                        }
+                        disabled={feedingAnimals}
+                      >
+                        <option value="ration">
+                          Racje — każde zwierzę zużywa 1 własną rację
+                        </option>
+                        <option value="pasture">
+                          Pastwisko — bez zużywania racji
+                        </option>
+                      </select>
+                    </label>
+
+                    {animalFeedMethod === 'ration' &&
+                      animalsMissingRations.length > 0 && (
+                        <div className="setup-banner" style={{ marginBottom: 10 }}>
+                          <Beef size={17} />
+                          <div>
+                            <strong>Brakuje racji u zwierząt</strong>
+                            <span>
+                              {animalsMissingRations
+                                .map(animal => animal.name)
+                                .join(', ')}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                    {animalFeedMethod === 'pasture' && (
+                      <p className="muted">
+                        Pastwisko karmi wszystkie zwierzęta i nie zużywa żadnych
+                        racji z ich ekwipunku.
+                      </p>
+                    )}
+
+                    <button
+                      className="secondary full"
+                      onClick={handleFeedAnimals}
+                      disabled={
+                        feedingAnimals ||
+                        (animalFeedMethod === 'ration' &&
+                          animalsMissingRations.length > 0)
+                      }
+                    >
+                      <Beef size={16} />
+                      {feedingAnimals
+                        ? 'Karmienie zwierząt…'
+                        : animalFeedMethod === 'pasture'
+                          ? 'Nakarm zwierzęta na pastwisku'
+                          : 'Nakarm zwierzęta racjami'}
+                    </button>
+                  </>
+                )}
+              </div>
 
             </div>
 
@@ -3631,6 +3913,16 @@ function App() {
                                 </span>
                               )}
                             </div>
+
+                            <div className="slot-line" style={{ marginTop: 10 }}>
+                              <span>Ostatnio nakarmione</span>
+                              <b>{formatLastFed(animal.lastFedAt)}</b>
+                            </div>
+                            {animal.lastFeedMethod && (
+                              <p className="muted" style={{ marginTop: 4 }}>
+                                Sposób: {animal.lastFeedMethod === 'pasture' ? 'pastwisko' : 'racja'}
+                              </p>
+                            )}
 
                             <div style={{ marginTop: 16 }}>
                               {currentItems.length === 0 ? (
