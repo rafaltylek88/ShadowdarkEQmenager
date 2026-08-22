@@ -7,6 +7,7 @@ export type Animal = {
   animalType: string
   baseSlots: number
   usedSlots: number
+  personality: 'horrid' | 'ornery' | 'reliable' | 'lovely' | ''
   createdBy?: string
   createdAt?: string
   updatedAt?: string
@@ -20,6 +21,7 @@ function mapAnimal(row: any): Animal {
     animalType: row.animal_type ?? '',
     baseSlots: Number(row.base_slots ?? 10),
     usedSlots: Number(row.used_slots ?? 0),
+    personality: (row.personality ?? '') as Animal['personality'],
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -43,7 +45,8 @@ export async function createAnimal(
   campaignId: string,
   name: string,
   animalType: string,
-  baseSlots: number
+  baseSlots: number,
+  personality: Animal['personality'] = ''
 ): Promise<Animal> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
 
@@ -60,6 +63,7 @@ export async function createAnimal(
       animal_type: animalType.trim(),
       base_slots: Math.max(0, baseSlots),
       used_slots: 0,
+      personality: personality || null,
       created_by: userData.user.id,
     })
     .select('*')
@@ -75,6 +79,7 @@ export async function updateAnimal(
     name: string
     animalType: string
     baseSlots: number
+    personality: Animal['personality']
   }
 ): Promise<Animal> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
@@ -85,6 +90,7 @@ export async function updateAnimal(
       name: changes.name.trim(),
       animal_type: changes.animalType.trim(),
       base_slots: Math.max(0, changes.baseSlots),
+      personality: changes.personality || null,
     })
     .eq('id', id)
     .select('*')
