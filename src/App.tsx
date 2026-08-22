@@ -97,6 +97,7 @@ import { loadBastionItems } from './lib/bastionItems'
 import type { BastionItem } from './lib/bastionItems'
 import { buyInventoryItem, sellInventoryItem } from './lib/trade'
 import type { InventoryOwnerType } from './lib/trade'
+import { setInventoryItemQuantity, transferInventoryItem } from './lib/inventoryOps'
 
 const initialCampaigns: Campaign[] = [
   {
@@ -343,6 +344,16 @@ function App() {
   const [sellSp, setSellSp] = useState(0)
   const [sellCp, setSellCp] = useState(0)
   const [sellingItem, setSellingItem] = useState(false)
+
+  const [showTransferItem, setShowTransferItem] = useState(false)
+  const [transferFromType, setTransferFromType] = useState<InventoryOwnerType>('character')
+  const [transferFromOwnerId, setTransferFromOwnerId] = useState('')
+  const [transferItemId, setTransferItemId] = useState('')
+  const [transferItemName, setTransferItemName] = useState('')
+  const [transferMaxQuantity, setTransferMaxQuantity] = useState(1)
+  const [transferQuantity, setTransferQuantity] = useState(1)
+  const [transferToKey, setTransferToKey] = useState('')
+  const [transferringItem, setTransferringItem] = useState(false)
 
   const isCloudMode = Boolean(supabaseEnabled && session)
 
@@ -2541,6 +2552,126 @@ function App() {
     return `${gp} GP ${sp} SP ${cp} CP`
   }
 
+  const inventoryDestinations = useMemo(
+    () => [
+      ...characters.map(character => ({
+        key: `character:${character.id}`,
+        type: 'character' as InventoryOwnerType,
+        id: character.id,
+        label: `${character.name} • Postać`,
+      })),
+      ...npcs.map(npc => ({
+        key: `npc:${npc.id}`,
+        type: 'npc' as InventoryOwnerType,
+        id: npc.id,
+        label: `${npc.name} • NPC`,
+      })),
+      ...animals.map(animal => ({
+        key: `animal:${animal.id}`,
+        type: 'animal' as InventoryOwnerType,
+        id: animal.id,
+        label: `${animal.name} • Zwierzę`,
+      })),
+      ...bastions
+        .filter(bastion =>
+          bastionUpgrades.some(
+            upgrade =>
+              upgrade.bastionId === bastion.id &&
+              upgrade.upgradeId === 'vault'
+          )
+        )
+        .map(bastion => ({
+          key: `bastion:${bastion.id}`,
+          type: 'bastion' as InventoryOwnerType,
+          id: bastion.id,
+          label: `${bastion.name} • Vault`,
+        })),
+    ],
+    [characters, npcs, animals, bastions, bastionUpgrades]
+  )
+
+  function openTransferItem(
+    fromType: InventoryOwnerType,
+    fromOwnerId: string,
+    item: { id: string; name: string; quantity: number }
+  ) {
+    setTransferFromType(fromType)
+    setTransferFromOwnerId(fromOwnerId)
+    setTransferItemId(item.id)
+    setTransferItemName(item.name)
+    setTransferMaxQuantity(item.quantity)
+    setTransferQuantity(1)
+
+    const firstTarget = inventoryDestinations.find(
+      destination =>
+        destination.key !== `${fromType}:${fromOwnerId}` &&
+        (!isWagonName(item.name) || destination.type === 'animal')
+    )
+
+    setTransferToKey(firstTarget?.key ?? '')
+    setShowTransferItem(true)
+  }
+
+  async function executeTransferItem() {
+    if (!activeId || !transferItemId || !transferToKey) {
+      setError('Wybierz ekwipunek docelowy.')
+      return
+    }
+
+    const target = inventoryDestinations.find(
+      destination => destination.key === transferToKey
+    )
+
+    if (!target) {
+      setError('Nie znaleziono ekwipunku docelowego.')
+      return
+    }
+
+    setTransferringItem(true)
+    try {
+      await transferInventoryItem({
+        campaignId: activeId,
+        fromType: transferFromType,
+        itemId: transferItemId,
+        toType: target.type,
+        toId: target.id,
+        quantity: Math.min(
+          transferMaxQuantity,
+          Math.max(1, transferQuantity)
+        ),
+      })
+
+      setShowTransferItem(false)
+      await refreshAllInventoriesAfterTrade()
+      flash(`Przeniesiono "${transferItemName}" → ${target.label}.`)
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się przenieść przedmiotu.')
+    } finally {
+      setTransferringItem(false)
+    }
+  }
+
+  async function changeInventoryQuantity(
+    ownerType: InventoryOwnerType,
+    itemId: string,
+    quantity: number
+  ) {
+    if (!activeId) return
+
+    try {
+      await setInventoryItemQuantity({
+        campaignId: activeId,
+        ownerType,
+        itemId,
+        quantity,
+      })
+      await refreshAllInventoriesAfterTrade()
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zmienić ilości.')
+      await refreshAllInventoriesAfterTrade()
+    }
+  }
+
   function hasVault(bastionId: string) {
     return upgradesForBastion(bastionId).some(upgrade => upgrade.upgradeId === 'vault')
   }
@@ -3406,7 +3537,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3H • Vault i handel</span>
+              Etap 3I • transfer i szybka ilość</span>
           </div>
 
         </aside>
@@ -4387,10 +4518,17 @@ function App() {
 
                                         <button
                                           className="secondary"
-                                          onClick={() => openEditItem(item)}
+                                          onClick={() =>
+                                            openTransferItem(
+                                              'character',
+                                              character.id,
+                                              item
+                                            )
+                                          }
+                                          disabled={item.isActiveLight}
                                         >
-                                          <Pencil size={14} />
-                                          Edytuj
+                                          <ArrowRightLeft size={14} />
+                                          Przenieś
                                         </button>
 
                                         <button
@@ -4583,7 +4721,14 @@ function App() {
                                             </>
                                           ) : (
                                             <>
-                                              {' × '}{item.quantity}
+                                              {' • ilość: '}
+                                              <InventoryQuantityInput
+                                                value={item.quantity}
+                                                disabled={wagon}
+                                                onCommit={value =>
+                                                  changeInventoryQuantity('animal', item.id, value)
+                                                }
+                                              />
                                               {' • '}{Number(slotUsageForAnimalItem(item).toFixed(2))} slot.
                                               {item.category === 'food' && ' • ŻYWNOŚĆ'}
                                               {item.category === 'light' && ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
@@ -4597,12 +4742,13 @@ function App() {
                                         </span>
 
                                         <span className="button-row">
-                                          {!wagon && (
-                                            <button className="secondary" onClick={() => openEditAnimalItem(item)}>
-                                              <Pencil size={14} />
-                                              Edytuj
-                                            </button>
-                                          )}
+                                          <button
+                                            className="secondary"
+                                            onClick={() => openTransferItem('animal', animal.id, item)}
+                                          >
+                                            <ArrowRightLeft size={14} />
+                                            Przenieś
+                                          </button>
                                           <button className="secondary" onClick={() => openSellItem('animal', item)}>
                                             <Coins size={14} />
                                             Sprzedaj
@@ -4732,7 +4878,14 @@ function App() {
                                     >
                                       <span>
                                         <strong>{item.name}</strong>
-                                        {' × '}{item.quantity}
+                                        {' • ilość: '}
+                                        <InventoryQuantityInput
+                                          value={item.quantity}
+                                          disabled={item.isActiveLight}
+                                          onCommit={value =>
+                                            changeInventoryQuantity('character', item.id, value)
+                                          }
+                                        />
                                         {' • '}{item.slotsPerUnit} slot./szt.
                                         {item.category === 'food' && ' • ŻYWNOŚĆ'}
                                         {item.category === 'light' &&
@@ -4744,9 +4897,13 @@ function App() {
                                       </span>
 
                                       <span className="button-row">
-                                        <button className="secondary" onClick={() => openEditNpcItem(item)}>
-                                          <Pencil size={14} />
-                                          Edytuj
+                                        <button
+                                          className="secondary"
+                                          onClick={() => openTransferItem('npc', npc.id, item)}
+                                          disabled={item.isActiveLight}
+                                        >
+                                          <ArrowRightLeft size={14} />
+                                          Przenieś
                                         </button>
                                         <button className="secondary" onClick={() => openSellItem('npc', item)}>
                                           <Coins size={14} />
@@ -4935,18 +5092,39 @@ function App() {
                                         )}
                                       >
                                         <span>
-                                          <strong>{item.name}</strong> × {item.quantity}
+                                          <strong>{item.name}</strong>
+                                          {' • ilość: '}
+                                          <InventoryQuantityInput
+                                            value={item.quantity}
+                                            onCommit={value =>
+                                              changeInventoryQuantity('bastion', item.id, value)
+                                            }
+                                          />
                                           {' • '}{Number(bastionItemSlots(item).toFixed(2))} slot.
                                           {item.category === 'food' && ' • ŻYWNOŚĆ'}
                                           {item.category === 'light' && ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
                                           {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
                                         </span>
+                                        <span className="button-row">
+                                          <button
+                                            className="secondary"
+                                            onClick={() =>
+                                              openTransferItem(
+                                                'bastion',
+                                                bastion.id,
+                                                item
+                                              )
+                                            }
+                                          >
+                                            <ArrowRightLeft size={14} /> Przenieś
+                                          </button>
                                         <button
                                           className="secondary"
                                           onClick={() => openSellItem('bastion', item)}
                                         >
                                           <Coins size={14} /> Sprzedaj
                                         </button>
+                                        </span>
                                       </div>
                                     ))}
                                   </div>
@@ -5124,6 +5302,78 @@ function App() {
         </main>
 
       </div>
+
+      {showTransferItem && (
+        <Modal onClose={() => setShowTransferItem(false)}>
+          <p className="eyebrow">PRZENOSZENIE</p>
+          <h2>Przenieś: {transferItemName}</h2>
+
+          <label>
+            Ilość
+            <input
+              type="number"
+              min="1"
+              max={transferMaxQuantity}
+              value={transferQuantity}
+              onChange={e =>
+                setTransferQuantity(
+                  Math.min(
+                    transferMaxQuantity,
+                    Math.max(1, Number(e.target.value) || 1)
+                  )
+                )
+              }
+            />
+          </label>
+
+          <label>
+            Do ekwipunku
+            <select
+              value={transferToKey}
+              onChange={e => setTransferToKey(e.target.value)}
+            >
+              <option value="">— wybierz —</option>
+              {inventoryDestinations
+                .filter(destination => {
+                  if (
+                    destination.key ===
+                    `${transferFromType}:${transferFromOwnerId}`
+                  ) {
+                    return false
+                  }
+
+                  if (
+                    isWagonName(transferItemName) &&
+                    destination.type !== 'animal'
+                  ) {
+                    return false
+                  }
+
+                  return true
+                })
+                .map(destination => (
+                  <option key={destination.key} value={destination.key}>
+                    {destination.label}
+                  </option>
+                ))}
+            </select>
+          </label>
+
+          <p className="muted">
+            Przeniesienie nie zmienia majątku. Sprawdzana jest pojemność
+            ekwipunku docelowego. Wóz można przenieść wyłącznie do innego
+            zwierzęcia.
+          </p>
+
+          <button
+            className="primary full"
+            onClick={executeTransferItem}
+            disabled={transferringItem || !transferToKey}
+          >
+            {transferringItem ? 'Przenoszenie…' : 'Przenieś'}
+          </button>
+        </Modal>
+      )}
 
       {showBuyItem && (
         <Modal onClose={() => setShowBuyItem(false)}>
@@ -6087,6 +6337,59 @@ function StatInput({
         }
       />
     </label>
+  )
+}
+
+function InventoryQuantityInput({
+  value,
+  disabled = false,
+  onCommit,
+}: {
+  value: number
+  disabled?: boolean
+  onCommit: (value: number) => void | Promise<void>
+}) {
+  const [draft, setDraft] = useState(String(value))
+
+  useEffect(() => {
+    setDraft(String(value))
+  }, [value])
+
+  function commit() {
+    const parsed = Math.max(0, Math.floor(Number(draft) || 0))
+    setDraft(String(parsed))
+    if (parsed !== value) {
+      void onCommit(parsed)
+    }
+  }
+
+  return (
+    <input
+      type="number"
+      min="0"
+      step="1"
+      value={draft}
+      disabled={disabled}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          e.currentTarget.blur()
+        }
+      }}
+      title={
+        disabled
+          ? 'Nie można zmieniać ilości aktywnego źródła światła.'
+          : 'Wpisz ilość i zatwierdź Enterem lub kliknij poza pole.'
+      }
+      style={{
+        width: 68,
+        minWidth: 68,
+        display: 'inline-block',
+        margin: '0 4px',
+        padding: '4px 6px',
+      }}
+    />
   )
 }
 
