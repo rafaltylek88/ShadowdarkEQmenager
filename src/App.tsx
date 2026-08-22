@@ -3537,7 +3537,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3I • transfer i szybka ilość</span>
+              Etap 3I.2 • zatwierdzanie ilości</span>
           </div>
 
         </aside>
@@ -4465,8 +4465,18 @@ function App() {
                                     >
                                       <span>
                                         <strong>{item.name}</strong>
-                                        {' × '}
-                                        {item.quantity}
+                                        {' • ilość: '}
+                                        <InventoryQuantityInput
+                                          value={item.quantity}
+                                          disabled={item.isActiveLight}
+                                          onCommit={value =>
+                                            changeInventoryQuantity(
+                                              'character',
+                                              item.id,
+                                              value
+                                            )
+                                          }
+                                        />
                                         {' • '}
                                         {item.slotsPerUnit} slot./szt.
                                         {item.category === 'food' && ' • ŻYWNOŚĆ'}
@@ -6350,46 +6360,82 @@ function InventoryQuantityInput({
   onCommit: (value: number) => void | Promise<void>
 }) {
   const [draft, setDraft] = useState(String(value))
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setDraft(String(value))
   }, [value])
 
-  function commit() {
-    const parsed = Math.max(0, Math.floor(Number(draft) || 0))
-    setDraft(String(parsed))
-    if (parsed !== value) {
-      void onCommit(parsed)
+  const parsed = Math.max(0, Math.floor(Number(draft) || 0))
+  const changed = parsed !== value
+
+  async function commit() {
+    if (disabled || !changed || saving) return
+
+    setSaving(true)
+    try {
+      await onCommit(parsed)
+      setDraft(String(parsed))
+    } finally {
+      setSaving(false)
     }
   }
 
   return (
-    <input
-      type="number"
-      min="0"
-      step="1"
-      value={draft}
-      disabled={disabled}
-      onChange={e => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={e => {
-        if (e.key === 'Enter') {
-          e.currentTarget.blur()
-        }
-      }}
-      title={
-        disabled
-          ? 'Nie można zmieniać ilości aktywnego źródła światła.'
-          : 'Wpisz ilość i zatwierdź Enterem lub kliknij poza pole.'
-      }
+    <span
       style={{
-        width: 68,
-        minWidth: 68,
-        display: 'inline-block',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
         margin: '0 4px',
-        padding: '4px 6px',
       }}
-    />
+    >
+      <input
+        type="number"
+        min="0"
+        step="1"
+        value={draft}
+        disabled={disabled || saving}
+        onChange={e => setDraft(e.target.value)}
+        title={
+          disabled
+            ? 'Nie można zmieniać ilości aktywnego źródła światła.'
+            : 'Wpisz nową ilość i zatwierdź zielonym ptaszkiem.'
+        }
+        style={{
+          width: 68,
+          minWidth: 68,
+          display: 'inline-block',
+          padding: '4px 6px',
+        }}
+      />
+
+      <button
+        type="button"
+        onClick={() => void commit()}
+        disabled={disabled || saving || !changed}
+        title={changed ? 'Zatwierdź nową ilość' : 'Ilość bez zmian'}
+        aria-label="Zatwierdź ilość"
+        style={{
+          width: 28,
+          height: 28,
+          minWidth: 28,
+          padding: 0,
+          borderRadius: 6,
+          border: '1px solid rgba(74, 138, 72, 0.85)',
+          background: changed
+            ? 'rgba(55, 112, 55, 0.28)'
+            : 'rgba(55, 112, 55, 0.10)',
+          color: changed ? '#8fd08b' : 'rgba(143, 208, 139, 0.38)',
+          cursor:
+            disabled || saving || !changed ? 'default' : 'pointer',
+          fontWeight: 900,
+          lineHeight: 1,
+        }}
+      >
+        {saving ? '…' : '✓'}
+      </button>
+    </span>
   )
 }
 
