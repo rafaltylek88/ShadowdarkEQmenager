@@ -1,12 +1,16 @@
 import { supabase } from './supabase'
 
 export type LightStatus = 'off' | 'running' | 'paused'
+export type LightMemberType = 'character' | 'npc'
 
 export type CampaignLight = {
   campaignId: string
+  carrierType: LightMemberType | null
   characterId: string | null
+  npcId: string | null
   carrierName: string | null
   sourceItemId: string | null
+  sourceNpcItemId: string | null
   sourceName: string | null
   durationSeconds: number
   remainingSeconds: number
@@ -18,9 +22,12 @@ export type CampaignLight = {
 function mapLight(row: any): CampaignLight {
   return {
     campaignId: row.campaign_id,
+    carrierType: row.carrier_type ?? (row.npc_id ? 'npc' : row.character_id ? 'character' : null),
     characterId: row.character_id ?? null,
+    npcId: row.npc_id ?? null,
     carrierName: row.carrier_name ?? null,
     sourceItemId: row.source_item_id ?? null,
+    sourceNpcItemId: row.source_npc_item_id ?? null,
     sourceName: row.source_name ?? null,
     durationSeconds: Number(row.duration_seconds ?? 0),
     remainingSeconds: Number(row.remaining_seconds ?? 0),
@@ -30,9 +37,7 @@ function mapLight(row: any): CampaignLight {
   }
 }
 
-export async function loadCampaignLight(
-  campaignId: string
-): Promise<CampaignLight | null> {
+export async function loadCampaignLight(campaignId: string): Promise<CampaignLight | null> {
   if (!supabase) return null
 
   const { data, error } = await supabase
@@ -62,45 +67,36 @@ async function callLightRpc(
 
 export function startCampaignLight(
   campaignId: string,
+  memberType: LightMemberType,
   itemId: string
 ): Promise<CampaignLight> {
-  return callLightRpc('start_campaign_light', {
+  return callLightRpc('start_member_light', {
     p_campaign_id: campaignId,
+    p_member_type: memberType,
     p_item_id: itemId,
   })
 }
 
-export function pauseCampaignLight(
-  campaignId: string
-): Promise<CampaignLight> {
-  return callLightRpc('pause_campaign_light', {
-    p_campaign_id: campaignId,
-  })
+export function pauseCampaignLight(campaignId: string): Promise<CampaignLight> {
+  return callLightRpc('pause_campaign_light', { p_campaign_id: campaignId })
 }
 
-export function resumeCampaignLight(
-  campaignId: string
-): Promise<CampaignLight> {
-  return callLightRpc('resume_campaign_light', {
-    p_campaign_id: campaignId,
-  })
+export function resumeCampaignLight(campaignId: string): Promise<CampaignLight> {
+  return callLightRpc('resume_campaign_light', { p_campaign_id: campaignId })
 }
 
-export function extinguishCampaignLight(
-  campaignId: string
-): Promise<CampaignLight> {
-  return callLightRpc('extinguish_campaign_light', {
-    p_campaign_id: campaignId,
-  })
+export function extinguishCampaignLight(campaignId: string): Promise<CampaignLight> {
+  return callLightRpc('extinguish_campaign_light', { p_campaign_id: campaignId })
 }
-
 
 export function transferCampaignLight(
   campaignId: string,
-  characterId: string
+  memberType: LightMemberType,
+  memberId: string
 ): Promise<CampaignLight> {
-  return callLightRpc('transfer_campaign_light', {
+  return callLightRpc('transfer_member_light', {
     p_campaign_id: campaignId,
-    p_character_id: characterId,
+    p_member_type: memberType,
+    p_member_id: memberId,
   })
 }

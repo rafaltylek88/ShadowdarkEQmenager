@@ -18,6 +18,7 @@ export type NpcItem = {
   weaponProperties: string | null
   armorClass: string | null
   armorProperties: string | null
+  isActiveLight: boolean
   createdAt?: string
   updatedAt?: string
 }
@@ -40,6 +41,7 @@ function mapNpcItem(row: any): NpcItem {
     weaponProperties: row.weapon_properties ?? null,
     armorClass: row.armor_class ?? null,
     armorProperties: row.armor_properties ?? null,
+    isActiveLight: Boolean(row.is_active_light),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
