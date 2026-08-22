@@ -80,6 +80,19 @@ import {
 import type { CampaignLight, LightMemberType } from './lib/light'
 import { feedAnimals, feedExpedition, transferMemberRation } from './lib/rations'
 import type { AnimalFeedMethod, MemberType } from './lib/rations'
+import {
+  BASTION_TYPES,
+  BASTION_UPGRADES,
+  addBastionUpgrade,
+  createBastion,
+  deleteBastion,
+  loadBastions,
+  loadBastionUpgrades,
+  removeBastionUpgrade,
+  repairBastion,
+  setBastionHp,
+} from './lib/bastions'
+import type { Bastion, BastionTypeId, BastionUpgrade } from './lib/bastions'
 
 const initialCampaigns: Campaign[] = [
   {
@@ -105,7 +118,7 @@ const nav = [
   ['Postacie', Users],
   ['NPC', Shield],
   ['Zwierzęta', Beef],
-  ['Siedziby', Castle],
+  ['Bastiony', Castle],
   ['Ekwipunek wspólny', Backpack],
   ['Biblioteka', Package],
   ['Podsumowanie', Coins],
@@ -284,6 +297,23 @@ function App() {
   const [rationTransferFromKey, setRationTransferFromKey] = useState('')
   const [rationTransferToKey, setRationTransferToKey] = useState('')
 
+  const [bastions, setBastions] = useState<Bastion[]>([])
+  const [bastionUpgrades, setBastionUpgrades] = useState<BastionUpgrade[]>([])
+  const [bastionsLoading, setBastionsLoading] = useState(false)
+  const [showBastion, setShowBastion] = useState(false)
+  const [bastionName, setBastionName] = useState('')
+  const [bastionOwnerId, setBastionOwnerId] = useState('')
+  const [bastionTypeId, setBastionTypeId] = useState<BastionTypeId>('house')
+  const [showBastionHp, setShowBastionHp] = useState(false)
+  const [editingBastionHp, setEditingBastionHp] = useState<Bastion | null>(null)
+  const [bastionHpValue, setBastionHpValue] = useState(0)
+  const [showBastionRepair, setShowBastionRepair] = useState(false)
+  const [repairingBastion, setRepairingBastion] = useState<Bastion | null>(null)
+  const [bastionRepairHp, setBastionRepairHp] = useState(1)
+  const [showBastionUpgrade, setShowBastionUpgrade] = useState(false)
+  const [upgradingBastion, setUpgradingBastion] = useState<Bastion | null>(null)
+  const [bastionUpgradeId, setBastionUpgradeId] = useState('')
+
   const isCloudMode = Boolean(supabaseEnabled && session)
 
   const refreshCampaigns = useCallback(async () => {
@@ -395,6 +425,28 @@ function App() {
       setError(e?.message || e?.details || 'Nie udało się pobrać ekwipunku zwierząt.')
     } finally {
       setAnimalItemsLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
+  const refreshBastions = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setBastions([])
+      setBastionUpgrades([])
+      return
+    }
+
+    setBastionsLoading(true)
+    try {
+      const [nextBastions, nextUpgrades] = await Promise.all([
+        loadBastions(activeId),
+        loadBastionUpgrades(activeId),
+      ])
+      setBastions(nextBastions)
+      setBastionUpgrades(nextUpgrades)
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się pobrać bastionów.')
+    } finally {
+      setBastionsLoading(false)
     }
   }, [activeId, isCloudMode])
 
@@ -618,6 +670,10 @@ function App() {
   }, [refreshAnimalItems])
 
   useEffect(() => {
+    refreshBastions()
+  }, [refreshBastions])
+
+  useEffect(() => {
     refreshItems()
   }, [refreshItems])
 
@@ -754,6 +810,30 @@ function App() {
       sb.removeChannel(channel)
     }
   }, [session, activeId, refreshAnimalItems, refreshAnimals])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+
+    const channel = sb
+      .channel(`bastions-${activeId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'bastions', filter: `campaign_id=eq.${activeId}` },
+        refreshBastions
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'bastion_upgrades' },
+        refreshBastions
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshBastions])
+
 
 
 
@@ -2375,6 +2455,118 @@ function App() {
   }
 
 
+  function bastionTypeFor(bastion: Bastion) {
+    return BASTION_TYPES.find(type => type.id === bastion.typeId) ?? BASTION_TYPES[0]
+  }
+
+  function upgradesForBastion(bastionId: string) {
+    return bastionUpgrades.filter(upgrade => upgrade.bastionId === bastionId)
+  }
+
+  function openNewBastion() {
+    setBastionName('')
+    setBastionOwnerId(characters[0]?.id ?? '')
+    setBastionTypeId('house')
+    setShowBastion(true)
+  }
+
+  async function saveBastion() {
+    if (!activeId || !bastionName.trim() || !bastionOwnerId) {
+      setError('Podaj nazwę bastionu i właściciela.')
+      return
+    }
+
+    try {
+      await createBastion(activeId, bastionOwnerId, bastionName, bastionTypeId)
+      setShowBastion(false)
+      flash('Bastion został dodany.')
+      await Promise.all([refreshBastions(), refreshCharacters()])
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się utworzyć bastionu.')
+    }
+  }
+
+  async function removeBastion(bastion: Bastion) {
+    if (!window.confirm(`Usunąć bastion "${bastion.name}" wraz z ulepszeniami?`)) return
+    try {
+      await deleteBastion(bastion.id)
+      flash('Bastion został usunięty.')
+      await refreshBastions()
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się usunąć bastionu.')
+    }
+  }
+
+  function openBastionHp(bastion: Bastion) {
+    setEditingBastionHp(bastion)
+    setBastionHpValue(bastion.currentHp)
+    setShowBastionHp(true)
+  }
+
+  async function saveBastionHp() {
+    if (!editingBastionHp) return
+    try {
+      await setBastionHp(editingBastionHp.id, bastionHpValue)
+      setShowBastionHp(false)
+      setEditingBastionHp(null)
+      flash('HP bastionu zaktualizowane.')
+      await refreshBastions()
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zmienić HP bastionu.')
+    }
+  }
+
+  function openBastionRepair(bastion: Bastion) {
+    setRepairingBastion(bastion)
+    setBastionRepairHp(Math.min(1, Math.max(0, bastion.maxHp - bastion.currentHp)))
+    setShowBastionRepair(true)
+  }
+
+  async function saveBastionRepair() {
+    if (!repairingBastion) return
+    try {
+      const result = await repairBastion(repairingBastion.id, bastionRepairHp)
+      setShowBastionRepair(false)
+      setRepairingBastion(null)
+      flash(`Naprawiono ${result.repaired} HP. Koszt: ${result.costGp} gp. Czas: 1 tydzień.`)
+      await Promise.all([refreshBastions(), refreshCharacters()])
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się naprawić bastionu.')
+    }
+  }
+
+  function openBastionUpgrade(bastion: Bastion) {
+    const installed = new Set(upgradesForBastion(bastion.id).map(item => item.upgradeId))
+    const firstAvailable = BASTION_UPGRADES.find(item => !installed.has(item.id))
+    setUpgradingBastion(bastion)
+    setBastionUpgradeId(firstAvailable?.id ?? '')
+    setShowBastionUpgrade(true)
+  }
+
+  async function saveBastionUpgrade() {
+    if (!upgradingBastion || !bastionUpgradeId) return
+    try {
+      await addBastionUpgrade(upgradingBastion.id, bastionUpgradeId)
+      setShowBastionUpgrade(false)
+      setUpgradingBastion(null)
+      flash('Ulepszenie zostało dodane. Budowa trwa 1 tydzień.')
+      await Promise.all([refreshBastions(), refreshCharacters()])
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się dodać ulepszenia.')
+    }
+  }
+
+  async function removeInstalledBastionUpgrade(upgrade: BastionUpgrade) {
+    if (!window.confirm('Usunąć to ulepszenie z bastionu?')) return
+    try {
+      await removeBastionUpgrade(upgrade.id)
+      flash('Ulepszenie zostało usunięte.')
+      await refreshBastions()
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się usunąć ulepszenia.')
+    }
+  }
+
   function openNewAnimal() {
     setEditingAnimal(null)
     setAnimalName('')
@@ -3014,7 +3206,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3F • statystyki, Quickpull i ostrzeżenia</span>
+              Etap 3G • bastiony</span>
           </div>
 
         </aside>
@@ -4350,6 +4542,169 @@ function App() {
             </>
           )}
 
+          {activeView === 'Bastiony' && (
+            <>
+              <section className="hero parchment-panel">
+                <div>
+                  <p className="eyebrow">BASTIONY</p>
+                  <h1>{active?.name ?? 'Brak kampanii'}</h1>
+                  <p>
+                    Bastion należy do postaci. Ma własne AC i HP. Przy 0 HP jego mury są przełamane.
+                    Naprawa trwa 1 tydzień i kosztuje 1 gp za każde odzyskane HP. Zwykła broń nie uszkadza bastionów; mogą je uszkadzać machiny oblężnicze, niszczące żywioły (np. ogień) i ogromne stworzenia. Bastion daje bezpieczne schronienie przed pogodą, klimatem i losowymi spotkaniami. Disasters są pominięte.
+                  </p>
+                </div>
+
+                <button className="primary" onClick={openNewBastion} disabled={!activeId || characters.length === 0}>
+                  <Plus size={16} />
+                  Nowy bastion
+                </button>
+              </section>
+
+              <section className="dashboard-grid">
+                <div className="panel wide">
+                  <div className="panel-title">
+                    <Castle size={18} />
+                    Bastiony kampanii
+                  </div>
+
+                  {bastionsLoading ? (
+                    <p className="muted">Ładowanie bastionów…</p>
+                  ) : bastions.length === 0 ? (
+                    <div className="empty-state">
+                      <p>Brak bastionów. Każdy bastion musi należeć do jednej Postaci.</p>
+                      {characters.length === 0 ? (
+                        <p className="muted">Najpierw dodaj Postać.</p>
+                      ) : (
+                        <button className="primary" onClick={openNewBastion}>
+                          <Plus size={16} />
+                          Dodaj pierwszy bastion
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gap: 16 }}>
+                      {bastions.map(bastion => {
+                        const type = bastionTypeFor(bastion)
+                        const installed = upgradesForBastion(bastion.id)
+                        const owner = characters.find(character => character.id === bastion.ownerCharacterId)
+                        const hpPercent = bastion.maxHp > 0 ? (bastion.currentHp / bastion.maxHp) * 100 : 0
+
+                        return (
+                          <article className="entity-card" key={bastion.id}>
+                            <div className="entity-head">
+                              <div>
+                                <strong>{bastion.name}</strong>
+                                <span style={{ display: 'block', marginTop: 4 }}>
+                                  {type.name} • właściciel: {owner?.name ?? '—'}
+                                </span>
+                              </div>
+
+                              <div className="button-row">
+                                <button className="secondary" onClick={() => openBastionHp(bastion)}>
+                                  <Pencil size={14} /> HP
+                                </button>
+                                <button
+                                  className="secondary"
+                                  onClick={() => openBastionRepair(bastion)}
+                                  disabled={bastion.currentHp >= bastion.maxHp}
+                                >
+                                  Napraw
+                                </button>
+                                <button
+                                  className="secondary"
+                                  onClick={() => openBastionUpgrade(bastion)}
+                                  disabled={installed.length >= bastion.maxUpgrades}
+                                >
+                                  <Plus size={14} /> Ulepszenie
+                                </button>
+                                <button className="danger" onClick={() => removeBastion(bastion)}>
+                                  <Trash2 size={14} /> Usuń
+                                </button>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(110px, 1fr))', gap: 10, marginTop: 14 }}>
+                              <div><span className="muted">AC</span><strong style={{ display: 'block' }}>{bastion.ac}</strong></div>
+                              <div><span className="muted">HP</span><strong style={{ display: 'block' }}>{bastion.currentHp}/{bastion.maxHp}</strong></div>
+                              <div><span className="muted">Ulepszenia</span><strong style={{ display: 'block' }}>{installed.length}/{bastion.maxUpgrades}</strong></div>
+                              <div><span className="muted">Budowa</span><strong style={{ display: 'block' }}>{bastion.buildTime}</strong></div>
+                            </div>
+
+                            <div className="progress small" style={{ marginTop: 10 }}>
+                              <i style={{ width: `${Math.max(0, Math.min(100, hpPercent))}%` }} />
+                            </div>
+
+                            {bastion.currentHp === 0 && (
+                              <div className="setup-banner" style={{ marginTop: 10 }}>
+                                <Shield size={16} />
+                                <div>
+                                  <strong>MURY PRZEŁAMANE</strong>
+                                  <span>Bastion ma 0 HP.</span>
+                                </div>
+                              </div>
+                            )}
+
+                            <p className="muted" style={{ marginTop: 10 }}>
+                              Koszt typu: {type.cost.toLocaleString('pl-PL')} gp • {type.description}
+                            </p>
+
+                            <div style={{ marginTop: 14 }}>
+                              <strong>Ulepszenia</strong>
+                              {installed.length === 0 ? (
+                                <p className="muted">Brak ulepszeń.</p>
+                              ) : (
+                                <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+                                  {installed.map(installedUpgrade => {
+                                    const rule = BASTION_UPGRADES.find(item => item.id === installedUpgrade.upgradeId)
+                                    if (!rule) return null
+                                    return (
+                                      <div className="slot-line" key={installedUpgrade.id}>
+                                        <span><strong>{rule.name}</strong> • {rule.cost} gp • {rule.description}</span>
+                                        <button className="danger" onClick={() => removeInstalledBastionUpgrade(installedUpgrade)}>
+                                          <Trash2 size={13} /> Usuń
+                                        </button>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </article>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="panel" style={{ marginTop: 16 }}>
+                <div className="panel-title"><Building2 size={18} /> Typy bastionów</div>
+                <div className="entity-grid">
+                  {BASTION_TYPES.map(type => (
+                    <article className="entity-card" key={type.id}>
+                      <div className="entity-head"><strong>{type.name}</strong><span>{type.cost.toLocaleString('pl-PL')} gp</span></div>
+                      <p className="muted">AC {type.ac} • HP {type.hp} • {type.upgrades} ulepszeń • {type.buildTime}</p>
+                      <p className="muted">{type.description}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section className="panel" style={{ marginTop: 16 }}>
+                <div className="panel-title"><KeyRound size={18} /> Ulepszenia bastionów</div>
+                <p className="muted">Każde ulepszenie buduje się 1 tydzień. W jednym bastionie można mieć tylko po jednym egzemplarzu każdego ulepszenia.</p>
+                <div className="entity-grid">
+                  {BASTION_UPGRADES.map(upgrade => (
+                    <article className="entity-card" key={upgrade.id}>
+                      <div className="entity-head"><strong>{upgrade.name}</strong><span>{upgrade.cost} gp</span></div>
+                      <p className="muted">{upgrade.description}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
+
           {activeView === 'Biblioteka' && (
             <>
               <section className="hero parchment-panel">
@@ -4471,7 +4826,7 @@ function App() {
             </>
           )}
 
-          {activeView !== 'Dashboard' && activeView !== 'Postacie' && activeView !== 'NPC' && activeView !== 'Zwierzęta' && activeView !== 'Biblioteka' && (
+          {activeView !== 'Dashboard' && activeView !== 'Postacie' && activeView !== 'NPC' && activeView !== 'Zwierzęta' && activeView !== 'Bastiony' && activeView !== 'Biblioteka' && (
             <section className="hero parchment-panel">
               <div>
                 <p className="eyebrow">{activeView.toUpperCase()}</p>
@@ -4484,6 +4839,95 @@ function App() {
         </main>
 
       </div>
+
+      {showBastion && (
+        <Modal onClose={() => setShowBastion(false)}>
+          <p className="eyebrow">NOWY BASTION</p>
+          <h2>Zbuduj bastion</h2>
+
+          <label>
+            Nazwa bastionu
+            <input autoFocus value={bastionName} onChange={e => setBastionName(e.target.value)} />
+          </label>
+
+          <label>
+            Właściciel
+            <select value={bastionOwnerId} onChange={e => setBastionOwnerId(e.target.value)}>
+              {characters.map(character => (
+                <option key={character.id} value={character.id}>{character.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Typ
+            <select value={bastionTypeId} onChange={e => setBastionTypeId(e.target.value as BastionTypeId)}>
+              {BASTION_TYPES.map(type => (
+                <option key={type.id} value={type.id}>
+                  {type.name} • {type.cost.toLocaleString('pl-PL')} gp • AC {type.ac} • HP {type.hp}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {(() => {
+            const type = BASTION_TYPES.find(item => item.id === bastionTypeId) ?? BASTION_TYPES[0]
+            return <p className="muted">Budowa: {type.buildTime} • limit ulepszeń: {type.upgrades}. Koszt zostanie automatycznie odjęty od złota właściciela.</p>
+          })()}
+
+          <button className="primary full" onClick={saveBastion} disabled={!bastionName.trim() || !bastionOwnerId}>
+            Dodaj bastion
+          </button>
+        </Modal>
+      )}
+
+      {showBastionHp && editingBastionHp && (
+        <Modal onClose={() => { setShowBastionHp(false); setEditingBastionHp(null) }}>
+          <p className="eyebrow">HP BASTIONU</p>
+          <h2>{editingBastionHp.name}</h2>
+          <label>
+            Aktualne HP
+            <input type="number" min="0" max={editingBastionHp.maxHp} value={bastionHpValue} onChange={e => setBastionHpValue(Number(e.target.value) || 0)} />
+          </label>
+          <p className="muted">0 HP oznacza przełamanie murów bastionu.</p>
+          <button className="primary full" onClick={saveBastionHp}>Zapisz HP</button>
+        </Modal>
+      )}
+
+      {showBastionRepair && repairingBastion && (
+        <Modal onClose={() => { setShowBastionRepair(false); setRepairingBastion(null) }}>
+          <p className="eyebrow">NAPRAWA</p>
+          <h2>{repairingBastion.name}</h2>
+          <label>
+            HP do naprawy
+            <input type="number" min="1" max={Math.max(1, repairingBastion.maxHp-repairingBastion.currentHp)} value={bastionRepairHp} onChange={e => setBastionRepairHp(Math.max(1, Number(e.target.value) || 1))} />
+          </label>
+          <p className="muted">Koszt: {bastionRepairHp} gp • czas: 1 tydzień. Zasada: 1 gp za każde odzyskane HP.</p>
+          <button className="primary full" onClick={saveBastionRepair}>Napraw</button>
+        </Modal>
+      )}
+
+      {showBastionUpgrade && upgradingBastion && (
+        <Modal onClose={() => { setShowBastionUpgrade(false); setUpgradingBastion(null) }}>
+          <p className="eyebrow">ULEPSZENIE BASTIONU</p>
+          <h2>{upgradingBastion.name}</h2>
+          <label>
+            Ulepszenie
+            <select value={bastionUpgradeId} onChange={e => setBastionUpgradeId(e.target.value)}>
+              {BASTION_UPGRADES
+                .filter(rule => !upgradesForBastion(upgradingBastion.id).some(installed => installed.upgradeId === rule.id))
+                .map(rule => (
+                  <option key={rule.id} value={rule.id}>{rule.name} • {rule.cost} gp</option>
+                ))}
+            </select>
+          </label>
+          {(() => {
+            const rule = BASTION_UPGRADES.find(item => item.id === bastionUpgradeId)
+            return rule ? <p className="muted">{rule.description} • Budowa: 1 tydzień. Koszt zostanie odjęty od złota właściciela.</p> : null
+          })()}
+          <button className="primary full" onClick={saveBastionUpgrade} disabled={!bastionUpgradeId}>Dodaj ulepszenie</button>
+        </Modal>
+      )}
 
       {showAnimal && (
         <Modal
