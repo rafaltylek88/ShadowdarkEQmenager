@@ -927,6 +927,76 @@ function App() {
     [animalItems]
   )
 
+
+  const expeditionSlots = useMemo(() => {
+    const npcUsed = npcs.reduce(
+      (sum, npc) => sum + usedSlotsForNpc(npc.id),
+      0
+    )
+    const npcMax = npcs.reduce(
+      (sum, npc) => sum + npc.maxSlots,
+      0
+    )
+
+    const animalUsed = animals.reduce(
+      (sum, animal) => sum + usedSlotsForAnimal(animal.id),
+      0
+    )
+    const animalMax = animals.reduce(
+      (sum, animal) => sum + animalMaxSlots(animal),
+      0
+    )
+
+    return {
+      used: characterSlots.used + npcUsed + animalUsed,
+      max: characterSlots.max + npcMax + animalMax,
+    }
+  }, [
+    characterSlots,
+    npcs,
+    animals,
+    usedSlotsForNpc,
+    usedSlotsForAnimal,
+    animalMaxSlots,
+  ])
+
+  const inventoryHighlightStyle = useCallback(
+    (category: ItemCategory) => {
+      if (category === 'light') {
+        return {
+          border: '1px solid rgba(196, 154, 48, 0.72)',
+          borderRadius: 8,
+          padding: '10px 12px',
+          alignItems: 'center',
+          background:
+            'linear-gradient(135deg, rgba(173, 132, 32, 0.20), rgba(92, 76, 35, 0.16))',
+          boxShadow:
+            'inset 0 0 0 1px rgba(242, 208, 102, 0.08)',
+        }
+      }
+
+      if (category === 'food') {
+        return {
+          border: '1px solid rgba(78, 122, 65, 0.75)',
+          borderRadius: 8,
+          padding: '10px 12px',
+          alignItems: 'center',
+          background:
+            'linear-gradient(135deg, rgba(64, 104, 56, 0.22), rgba(50, 78, 47, 0.16))',
+          boxShadow:
+            'inset 0 0 0 1px rgba(142, 181, 110, 0.08)',
+        }
+      }
+
+      return {
+        borderTop: '1px solid rgba(180, 135, 60, 0.25)',
+        paddingTop: 8,
+        alignItems: 'center',
+      }
+    },
+    []
+  )
+
   const totalGold = useMemo(
     () => characters.reduce((sum, character) => sum + character.gold, 0),
     [characters]
@@ -2526,7 +2596,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3C • zwierzęta i wozy</span>
+              Etap 3C.1 • sloty ekspedycji i oznaczenia</span>
           </div>
 
         </aside>
@@ -2663,6 +2733,14 @@ function App() {
               label="Sloty postaci"
               value={`${Number(characterSlots.used.toFixed(2))} / ${characterSlots.max}`}
               sub={`${Number(Math.max(0, characterSlots.max - characterSlots.used).toFixed(2))} wolnych`}
+            />
+
+
+            <Metric
+              icon={<Package />}
+              label="Sloty ekspedycji"
+              value={`${Number(expeditionSlots.used.toFixed(2))} / ${Number(expeditionSlots.max.toFixed(2))}`}
+              sub={`${Number(Math.max(0, expeditionSlots.max - expeditionSlots.used).toFixed(2))} wolnych • postacie + NPC + zwierzęta + wozy`}
             />
 
             <Metric
@@ -3284,11 +3362,7 @@ function App() {
                                     <div
                                       key={item.id}
                                       className="slot-line"
-                                      style={{
-                                        borderTop: '1px solid rgba(180, 135, 60, 0.25)',
-                                        paddingTop: 8,
-                                        alignItems: 'center',
-                                      }}
+                                      style={inventoryHighlightStyle(item.category)}
                                     >
                                       <span>
                                         <strong>{item.name}</strong>
@@ -3296,9 +3370,9 @@ function App() {
                                         {item.quantity}
                                         {' • '}
                                         {item.slotsPerUnit} slot./szt.
-                                        {item.category === 'food' && ' • żywność'}
+                                        {item.category === 'food' && ' • ŻYWNOŚĆ'}
                                         {item.category === 'light' &&
-                                          ` • światło ${item.lightMinutes ?? 60} min`}
+                                          ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
                                         {item.category === 'weapon' &&
                                           ` • broń${item.weaponDamage ? ` • obrażenia ${item.weaponDamage}` : ''}${item.weaponRange ? ` • zasięg ${item.weaponRange}` : ''}`}
                                         {item.category === 'armor' &&
@@ -3469,12 +3543,7 @@ function App() {
                                                 boxShadow:
                                                   'inset 0 0 0 1px rgba(224, 190, 112, 0.10)',
                                               }
-                                            : {
-                                                borderTop:
-                                                  '1px solid rgba(180, 135, 60, 0.25)',
-                                                paddingTop: 8,
-                                                alignItems: 'center',
-                                              }
+                                            : inventoryHighlightStyle(item.category)
                                         }
                                       >
                                         <span>
@@ -3489,6 +3558,8 @@ function App() {
                                             <>
                                               {' × '}{item.quantity}
                                               {' • '}{Number(slotUsageForAnimalItem(item).toFixed(2))} slot.
+                                              {item.category === 'food' && ' • ŻYWNOŚĆ'}
+                                              {item.category === 'light' && ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
                                               {isSaddleName(item.name) && ' • pierwsze siodło bez slotu'}
                                             </>
                                           )}
@@ -3618,19 +3689,15 @@ function App() {
                                     <div
                                       key={item.id}
                                       className="slot-line"
-                                      style={{
-                                        borderTop: '1px solid rgba(180, 135, 60, 0.25)',
-                                        paddingTop: 8,
-                                        alignItems: 'center',
-                                      }}
+                                      style={inventoryHighlightStyle(item.category)}
                                     >
                                       <span>
                                         <strong>{item.name}</strong>
                                         {' × '}{item.quantity}
                                         {' • '}{item.slotsPerUnit} slot./szt.
-                                        {item.category === 'food' && ' • żywność'}
+                                        {item.category === 'food' && ' • ŻYWNOŚĆ'}
                                         {item.category === 'light' &&
-                                          ` • światło ${item.lightMinutes ?? 60} min`}
+                                          ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
                                         {item.category === 'weapon' &&
                                           ` • broń${item.weaponDamage ? ` • obrażenia ${item.weaponDamage}` : ''}`}
                                         {item.category === 'armor' &&
