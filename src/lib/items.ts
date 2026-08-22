@@ -18,6 +18,7 @@ export type CharacterItem = {
   slotGroupSize: number
   freeQuantity: number
   isActiveLight: boolean
+  isQuickpull: boolean
   category: ItemCategory
   lightMinutes: number | null
   weaponDamage: string | null
@@ -41,6 +42,7 @@ function mapItem(row: any): CharacterItem {
     slotGroupSize: Math.max(1, Number(row.slot_group_size ?? 1)),
     freeQuantity: Math.max(0, Number(row.free_quantity ?? 0)),
     isActiveLight: Boolean(row.is_active_light),
+    isQuickpull: Boolean(row.is_quickpull),
     category: row.category as ItemCategory,
     lightMinutes: row.light_minutes == null ? null : Number(row.light_minutes),
     weaponDamage: row.weapon_damage ?? null,
@@ -122,6 +124,7 @@ export async function createItem(input: {
       slot_group_size: Math.max(1, input.slotGroupSize ?? 1),
       free_quantity: Math.max(0, input.freeQuantity ?? 0),
       is_active_light: false,
+      is_quickpull: false,
       category: input.category,
       light_minutes: input.category === 'light' ? input.lightMinutes ?? 60 : null,
       weapon_damage:
