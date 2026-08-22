@@ -1269,7 +1269,7 @@ function App() {
     )
   }
 
-  const characterGold = useMemo(
+  const charactersWealth = useMemo(
     () => characters.reduce((sum, character) => sum + character.gold, 0),
     [characters]
   )
@@ -1298,7 +1298,7 @@ function App() {
     [bastionItems, catalog]
   )
 
-  const expeditionGold = characterGold + npcCoins + animalCoins
+  const expeditionGold = charactersWealth + npcCoins + animalCoins
   const totalWealth = expeditionGold + bastionCoins
 
 
@@ -3747,7 +3747,7 @@ function App() {
             <Metric
               icon={<Coins />}
               label="Majątek postaci"
-              value={`${characterGold.toLocaleString('pl-PL')} gp`}
+              value={`${charactersWealth.toLocaleString('pl-PL')} gp`}
               sub="złoto zapisane przy postaciach"
             />
 
