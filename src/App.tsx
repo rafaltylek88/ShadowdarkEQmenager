@@ -4403,9 +4403,6 @@ function App() {
                                         <button
                                           className="danger"
                                           onClick={() => removeItem(item)}
-                                        <button
-                                          className="danger"
-                                          onClick={() => removeItem(item)}
                                         >
                                           <Trash2 size={14} />
                                           Usuń
