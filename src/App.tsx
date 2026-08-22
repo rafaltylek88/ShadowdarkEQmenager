@@ -66,6 +66,7 @@ import {
   updateItem,
 } from './lib/items'
 import type { CharacterItem, ItemCategory } from './lib/items'
+import { setCharacterItemQuickpull } from './lib/quickpull'
 import { createCatalogItem, deleteCatalogItem, loadCatalog } from './lib/catalog'
 import type { CatalogItem, CatalogItemCategory } from './lib/catalog'
 import {
@@ -110,6 +111,22 @@ const nav = [
   ['Podsumowanie', Coins],
 ] as const
 
+function statModifier(stat: number) {
+  if (stat <= 3) return -4
+  if (stat <= 5) return -3
+  if (stat <= 7) return -2
+  if (stat <= 9) return -1
+  if (stat <= 11) return 0
+  if (stat <= 13) return 1
+  if (stat <= 15) return 2
+  if (stat <= 17) return 3
+  return 4
+}
+
+function formatModifier(value: number) {
+  return value >= 0 ? `+${value}` : String(value)
+}
+
 function readLocalCampaigns(): Campaign[] {
   try {
     const saved = localStorage.getItem('sdm.campaigns')
@@ -153,6 +170,11 @@ function App() {
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
   const [characterName, setCharacterName] = useState('')
   const [characterStrength, setCharacterStrength] = useState(10)
+  const [characterDexterity, setCharacterDexterity] = useState(10)
+  const [characterConstitution, setCharacterConstitution] = useState(10)
+  const [characterIntelligence, setCharacterIntelligence] = useState(10)
+  const [characterWisdom, setCharacterWisdom] = useState(10)
+  const [characterCharisma, setCharacterCharisma] = useState(10)
   const [characterGold, setCharacterGold] = useState(0)
 
   const [npcs, setNpcs] = useState<Npc[]>([])
@@ -974,6 +996,73 @@ function App() {
     usedSlotsForNpc,
     usedSlotsForAnimal,
     animalMaxSlots,
+  ])
+
+  const expeditionWarnings = useMemo(() => {
+    const result: Array<{ key: string; severity: 'warning' | 'danger'; text: string }> = []
+
+    for (const character of characters) {
+      const used = usedSlotsForCharacter(character.id)
+      const max = Math.max(10, character.strength)
+      const rations = characterRationCounts.get(character.id) ?? 0
+      const qpCount = items.filter(item => item.characterId === character.id && item.isQuickpull).length
+      const qpLimit = Math.max(0, statModifier(character.dexterity))
+
+      if (rations < 1) {
+        result.push({
+          key: `cf-${character.id}`,
+          severity: 'danger',
+          text: `${character.name}: brak racji.`,
+        })
+      }
+
+      if (used >= max) {
+        result.push({
+          key: `cs-${character.id}`,
+          severity: used > max ? 'danger' : 'warning',
+          text: `${character.name}: ekwipunek ${Number(used.toFixed(2))}/${max} slotów.`,
+        })
+      }
+
+      if (qpCount > qpLimit) {
+        result.push({
+          key: `cq-${character.id}`,
+          severity: 'danger',
+          text: `${character.name}: Quickpull ${qpCount}/${qpLimit} — przekroczony limit DEX.`,
+        })
+      }
+    }
+
+    for (const npc of npcs) {
+      const used = usedSlotsForNpc(npc.id)
+      const rations = npcRationCounts.get(npc.id) ?? 0
+
+      if (rations < 1) {
+        result.push({
+          key: `nf-${npc.id}`,
+          severity: 'danger',
+          text: `${npc.name} (NPC): brak racji.`,
+        })
+      }
+
+      if (used >= npc.maxSlots) {
+        result.push({
+          key: `ns-${npc.id}`,
+          severity: used > npc.maxSlots ? 'danger' : 'warning',
+          text: `${npc.name} (NPC): ekwipunek ${Number(used.toFixed(2))}/${npc.maxSlots} slotów.`,
+        })
+      }
+    }
+
+    return result
+  }, [
+    characters,
+    npcs,
+    items,
+    characterRationCounts,
+    npcRationCounts,
+    usedSlotsForCharacter,
+    usedSlotsForNpc,
   ])
 
   const inventoryHighlightStyle = useCallback(
@@ -1994,6 +2083,11 @@ function App() {
     setEditingCharacter(null)
     setCharacterName('')
     setCharacterStrength(10)
+    setCharacterDexterity(10)
+    setCharacterConstitution(10)
+    setCharacterIntelligence(10)
+    setCharacterWisdom(10)
+    setCharacterCharisma(10)
     setCharacterGold(0)
     setShowCharacter(true)
   }
@@ -2002,6 +2096,11 @@ function App() {
     setEditingCharacter(character)
     setCharacterName(character.name)
     setCharacterStrength(character.strength)
+    setCharacterDexterity(character.dexterity)
+    setCharacterConstitution(character.constitution)
+    setCharacterIntelligence(character.intelligence)
+    setCharacterWisdom(character.wisdom)
+    setCharacterCharisma(character.charisma)
     setCharacterGold(character.gold)
     setShowCharacter(true)
   }
@@ -2022,12 +2121,23 @@ function App() {
         await updateCharacter(editingCharacter.id, {
           name: characterName,
           strength: characterStrength,
+          dexterity: characterDexterity,
+          constitution: characterConstitution,
+          intelligence: characterIntelligence,
+          wisdom: characterWisdom,
+          charisma: characterCharisma,
           gold: characterGold,
           usedSlots: usedSlotsForCharacter(editingCharacter.id),
         })
         flash('Postać została zaktualizowana.')
       } else {
-        await createCharacter(activeId, characterName, characterStrength, characterGold)
+        await createCharacter(activeId, characterName, characterStrength, characterGold, {
+          dexterity: characterDexterity,
+          constitution: characterConstitution,
+          intelligence: characterIntelligence,
+          wisdom: characterWisdom,
+          charisma: characterCharisma,
+        })
         flash('Postać została dodana.')
       }
 
@@ -2037,6 +2147,24 @@ function App() {
     } catch (e: any) {
       console.error('SAVE CHARACTER ERROR:', e)
       setError(e?.message || e?.details || 'Nie udało się zapisać postaci.')
+    }
+  }
+
+  function quickpullLimit(character: Character) {
+    return Math.max(0, statModifier(character.dexterity))
+  }
+
+  function quickpullCount(characterId: string) {
+    return itemsForCharacter(characterId).filter(item => item.isQuickpull).length
+  }
+
+  async function toggleQuickpull(character: Character, item: CharacterItem) {
+    try {
+      await setCharacterItemQuickpull(item.id, !item.isQuickpull)
+      await refreshItems()
+      flash(item.isQuickpull ? `"${item.name}" usunięto z Quickpull.` : `"${item.name}" oznaczono jako Quickpull.`)
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zmienić Quickpull.')
     }
   }
 
@@ -2885,7 +3013,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3E • zapas światła i karmienie zwierząt</span>
+              Etap 3F • statystyki, Quickpull i ostrzeżenia</span>
           </div>
 
         </aside>
@@ -3060,6 +3188,31 @@ function App() {
           </section>
 
           <section className="dashboard-grid">
+
+            <div className="panel wide">
+              <div className="panel-title">
+                <Shield size={18} />
+                Ostrzeżenia ekspedycji
+                <span style={{ marginLeft: 'auto' }}>{expeditionWarnings.length}</span>
+              </div>
+
+              {expeditionWarnings.length === 0 ? (
+                <p className="muted">Brak ostrzeżeń dla Postaci i NPC.</p>
+              ) : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {expeditionWarnings.map(warning => (
+                    <div key={warning.key} className="setup-banner">
+                      <Shield size={16} />
+                      <div>
+                        <strong>{warning.severity === 'danger' ? 'UWAGA' : 'OSTRZEŻENIE'}</strong>
+                        <span>{warning.text}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
 
             <div className="panel light-panel">
 
@@ -3668,7 +3821,7 @@ function App() {
                               <div>
                                 <strong>{character.name}</strong>
                                 <span style={{ display: 'block', marginTop: 4 }}>
-                                  SIŁA {character.strength} • {character.gold} gp
+                                  {character.gold} gp • Quickpull {quickpullCount(character.id)}/{quickpullLimit(character)}
                                 </span>
                                 <span style={{ display: 'block', marginTop: 4 }}>
                                   Ostatnio nakarmiona: {formatLastFed(character.lastFedAt)}
@@ -3703,6 +3856,38 @@ function App() {
                               </div>
                             </div>
 
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(6, minmax(72px, 1fr))',
+                                gap: 6,
+                                marginTop: 12,
+                              }}
+                            >
+                              {[
+                                ['STR', character.strength],
+                                ['DEX', character.dexterity],
+                                ['CON', character.constitution],
+                                ['INT', character.intelligence],
+                                ['WIS', character.wisdom],
+                                ['CHA', character.charisma],
+                              ].map(([label, value]) => (
+                                <div
+                                  key={String(label)}
+                                  style={{
+                                    border: '1px solid rgba(180, 135, 60, 0.28)',
+                                    borderRadius: 7,
+                                    padding: '7px 8px',
+                                    textAlign: 'center',
+                                    background: 'rgba(110, 83, 42, 0.07)',
+                                  }}
+                                >
+                                  <strong style={{ display: 'block' }}>{label}</strong>
+                                  <span>{value} ({formatModifier(statModifier(Number(value)))})</span>
+                                </div>
+                              ))}
+                            </div>
+
                             <div className="slot-line" style={{ marginTop: 12 }}>
                               <span>Sloty ekwipunku</span>
                               <b>
@@ -3732,7 +3917,20 @@ function App() {
                                     <div
                                       key={item.id}
                                       className="slot-line"
-                                      style={inventoryHighlightStyle(item.category, isMagicalInventoryItem(item.catalogItemId))}
+                                      style={{
+                                        ...inventoryHighlightStyle(
+                                          item.category,
+                                          isMagicalInventoryItem(item.catalogItemId)
+                                        ),
+                                        ...(item.isQuickpull
+                                          ? {
+                                              outline: '2px solid rgba(218, 183, 103, 0.95)',
+                                              outlineOffset: '2px',
+                                              boxShadow:
+                                                '0 0 0 1px rgba(83, 63, 30, 0.85), inset 0 0 0 1px rgba(235, 207, 132, 0.14)',
+                                            }
+                                          : {}),
+                                      }}
                                     >
                                       <span>
                                         <strong>{item.name}</strong>
@@ -3756,6 +3954,7 @@ function App() {
                                         {item.category === 'armor' && item.armorProperties &&
                                           ` • ${item.armorProperties}`}
                                         {item.isActiveLight && ' • AKTYWNE ŚWIATŁO'}
+                                        {item.isQuickpull && ' • QUICKPULL'}
                                         {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
                                         {isMagicalInventoryItem(item.catalogItemId) &&
                                           magicDescriptionForItem(item.catalogItemId) &&
@@ -3773,6 +3972,18 @@ function App() {
                                             Zużyj 1
                                           </button>
                                         )}
+
+                                        <button
+                                          className="secondary"
+                                          onClick={() => toggleQuickpull(character, item)}
+                                          disabled={
+                                            !item.isQuickpull &&
+                                            quickpullCount(character.id) >= quickpullLimit(character)
+                                          }
+                                          title={`Quickpull ${quickpullCount(character.id)}/${quickpullLimit(character)}`}
+                                        >
+                                          {item.isQuickpull ? 'Usuń Quickpull' : 'Quickpull'}
+                                        </button>
 
                                         <button
                                           className="secondary"
@@ -4590,24 +4801,41 @@ function App() {
             />
           </label>
 
-          <label>
-            SIŁA
-            <input
-              type="number"
-              min="1"
-              max="30"
-              value={characterStrength}
-              onChange={e =>
-                setCharacterStrength(
-                  Math.min(30, Math.max(1, Number(e.target.value) || 1))
-                )
-              }
-            />
-          </label>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 10,
+            }}
+          >
+            {[
+              ['SIŁA', characterStrength, setCharacterStrength],
+              ['ZRĘCZNOŚĆ', characterDexterity, setCharacterDexterity],
+              ['KONDYCJA', characterConstitution, setCharacterConstitution],
+              ['INTELIGENCJA', characterIntelligence, setCharacterIntelligence],
+              ['MĄDROŚĆ', characterWisdom, setCharacterWisdom],
+              ['CHARYZMA', characterCharisma, setCharacterCharisma],
+            ].map(([label, value, setter]) => (
+              <label key={String(label)}>
+                {label} • mod {formatModifier(statModifier(Number(value)))}
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={Number(value)}
+                  onChange={e =>
+                    (setter as (value: number) => void)(
+                      Math.min(30, Math.max(1, Number(e.target.value) || 1))
+                    )
+                  }
+                />
+              </label>
+            ))}
+          </div>
 
           <p className="muted">
-            Sloty ekwipunku:{' '}
-            <strong>{Math.max(10, characterStrength)}</strong>
+            Sloty ekwipunku: <strong>{Math.max(10, characterStrength)}</strong>
+            {' • '}Quickpull: <strong>{Math.max(0, statModifier(characterDexterity))}</strong>
           </p>
 
           <label>
