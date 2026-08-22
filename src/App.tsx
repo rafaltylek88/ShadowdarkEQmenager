@@ -998,73 +998,6 @@ function App() {
     animalMaxSlots,
   ])
 
-  const expeditionWarnings = useMemo(() => {
-    const result: Array<{ key: string; severity: 'warning' | 'danger'; text: string }> = []
-
-    for (const character of characters) {
-      const used = usedSlotsForCharacter(character.id)
-      const max = Math.max(10, character.strength)
-      const rations = characterRationCounts.get(character.id) ?? 0
-      const qpCount = items.filter(item => item.characterId === character.id && item.isQuickpull).length
-      const qpLimit = Math.max(0, statModifier(character.dexterity))
-
-      if (rations < 1) {
-        result.push({
-          key: `cf-${character.id}`,
-          severity: 'danger',
-          text: `${character.name}: brak racji.`,
-        })
-      }
-
-      if (used >= max) {
-        result.push({
-          key: `cs-${character.id}`,
-          severity: used > max ? 'danger' : 'warning',
-          text: `${character.name}: ekwipunek ${Number(used.toFixed(2))}/${max} slotów.`,
-        })
-      }
-
-      if (qpCount > qpLimit) {
-        result.push({
-          key: `cq-${character.id}`,
-          severity: 'danger',
-          text: `${character.name}: Quickpull ${qpCount}/${qpLimit} — przekroczony limit DEX.`,
-        })
-      }
-    }
-
-    for (const npc of npcs) {
-      const used = usedSlotsForNpc(npc.id)
-      const rations = npcRationCounts.get(npc.id) ?? 0
-
-      if (rations < 1) {
-        result.push({
-          key: `nf-${npc.id}`,
-          severity: 'danger',
-          text: `${npc.name} (NPC): brak racji.`,
-        })
-      }
-
-      if (used >= npc.maxSlots) {
-        result.push({
-          key: `ns-${npc.id}`,
-          severity: used > npc.maxSlots ? 'danger' : 'warning',
-          text: `${npc.name} (NPC): ekwipunek ${Number(used.toFixed(2))}/${npc.maxSlots} slotów.`,
-        })
-      }
-    }
-
-    return result
-  }, [
-    characters,
-    npcs,
-    items,
-    characterRationCounts,
-    npcRationCounts,
-    usedSlotsForCharacter,
-    usedSlotsForNpc,
-  ])
-
   const inventoryHighlightStyle = useCallback(
     (category: ItemCategory, isMagical = false) => {
       if (isMagical) {
@@ -1203,6 +1136,74 @@ function App() {
 
     return counts
   }, [npcs, npcItems, catalog])
+
+
+  const expeditionWarnings = useMemo(() => {
+    const result: Array<{ key: string; severity: 'warning' | 'danger'; text: string }> = []
+
+    for (const character of characters) {
+      const used = usedSlotsForCharacter(character.id)
+      const max = Math.max(10, character.strength)
+      const rations = characterRationCounts.get(character.id) ?? 0
+      const qpCount = items.filter(item => item.characterId === character.id && item.isQuickpull).length
+      const qpLimit = Math.max(0, statModifier(character.dexterity))
+
+      if (rations < 1) {
+        result.push({
+          key: `cf-${character.id}`,
+          severity: 'danger',
+          text: `${character.name}: brak racji.`,
+        })
+      }
+
+      if (used >= max) {
+        result.push({
+          key: `cs-${character.id}`,
+          severity: used > max ? 'danger' : 'warning',
+          text: `${character.name}: ekwipunek ${Number(used.toFixed(2))}/${max} slotów.`,
+        })
+      }
+
+      if (qpCount > qpLimit) {
+        result.push({
+          key: `cq-${character.id}`,
+          severity: 'danger',
+          text: `${character.name}: Quickpull ${qpCount}/${qpLimit} — przekroczony limit DEX.`,
+        })
+      }
+    }
+
+    for (const npc of npcs) {
+      const used = usedSlotsForNpc(npc.id)
+      const rations = npcRationCounts.get(npc.id) ?? 0
+
+      if (rations < 1) {
+        result.push({
+          key: `nf-${npc.id}`,
+          severity: 'danger',
+          text: `${npc.name} (NPC): brak racji.`,
+        })
+      }
+
+      if (used >= npc.maxSlots) {
+        result.push({
+          key: `ns-${npc.id}`,
+          severity: used > npc.maxSlots ? 'danger' : 'warning',
+          text: `${npc.name} (NPC): ekwipunek ${Number(used.toFixed(2))}/${npc.maxSlots} slotów.`,
+        })
+      }
+    }
+
+    return result
+  }, [
+    characters,
+    npcs,
+    items,
+    characterRationCounts,
+    npcRationCounts,
+    usedSlotsForCharacter,
+    usedSlotsForNpc,
+  ])
 
 
   const animalRationCounts = useMemo(() => {
@@ -4808,29 +4809,12 @@ function App() {
               gap: 10,
             }}
           >
-            {[
-              ['SIŁA', characterStrength, setCharacterStrength],
-              ['ZRĘCZNOŚĆ', characterDexterity, setCharacterDexterity],
-              ['KONDYCJA', characterConstitution, setCharacterConstitution],
-              ['INTELIGENCJA', characterIntelligence, setCharacterIntelligence],
-              ['MĄDROŚĆ', characterWisdom, setCharacterWisdom],
-              ['CHARYZMA', characterCharisma, setCharacterCharisma],
-            ].map(([label, value, setter]) => (
-              <label key={String(label)}>
-                {label} • mod {formatModifier(statModifier(Number(value)))}
-                <input
-                  type="number"
-                  min="1"
-                  max="30"
-                  value={Number(value)}
-                  onChange={e =>
-                    (setter as (value: number) => void)(
-                      Math.min(30, Math.max(1, Number(e.target.value) || 1))
-                    )
-                  }
-                />
-              </label>
-            ))}
+            <StatInput label="SIŁA" value={characterStrength} onChange={setCharacterStrength} />
+            <StatInput label="ZRĘCZNOŚĆ" value={characterDexterity} onChange={setCharacterDexterity} />
+            <StatInput label="KONDYCJA" value={characterConstitution} onChange={setCharacterConstitution} />
+            <StatInput label="INTELIGENCJA" value={characterIntelligence} onChange={setCharacterIntelligence} />
+            <StatInput label="MĄDROŚĆ" value={characterWisdom} onChange={setCharacterWisdom} />
+            <StatInput label="CHARYZMA" value={characterCharisma} onChange={setCharacterCharisma} />
           </div>
 
           <p className="muted">
@@ -5215,6 +5199,31 @@ function Modal({
         {children}
       </div>
     </div>
+  )
+}
+
+function StatInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <label>
+      {label} • mod {formatModifier(statModifier(value))}
+      <input
+        type="number"
+        min="1"
+        max="30"
+        value={value}
+        onChange={e =>
+          onChange(Math.min(30, Math.max(1, Number(e.target.value) || 1)))
+        }
+      />
+    </label>
   )
 }
 
