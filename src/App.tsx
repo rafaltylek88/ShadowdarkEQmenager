@@ -2700,6 +2700,57 @@ function App() {
     setShowCharacter(true)
   }
 
+  function resetCharacterDraft() {
+    if (editingCharacter) {
+      setCharacterName(editingCharacter.name)
+      setCharacterStrength(editingCharacter.strength)
+      setCharacterDexterity(editingCharacter.dexterity)
+      setCharacterConstitution(editingCharacter.constitution)
+      setCharacterIntelligence(editingCharacter.intelligence)
+      setCharacterWisdom(editingCharacter.wisdom)
+      setCharacterCharisma(editingCharacter.charisma)
+      setCharacterGold(editingCharacter.gold)
+      setCharacterCurrentHp(editingCharacter.currentHp)
+      setCharacterMaxHp(editingCharacter.maxHp)
+      setCharacterAncestry(editingCharacter.ancestry)
+      setCharacterClassName(editingCharacter.className)
+      setCharacterLevel(editingCharacter.level)
+      setCharacterXp(editingCharacter.xp)
+      setCharacterXpNext(editingCharacter.xpNext)
+      setCharacterTitle(editingCharacter.title)
+      setCharacterAlignment(editingCharacter.alignment)
+      setCharacterBackground(editingCharacter.background)
+      setCharacterDeity(editingCharacter.deity)
+      setCharacterTalentsSpells(editingCharacter.talentsSpells)
+      setCharacterBackstory(editingCharacter.backstory)
+      setCharacterPortraitUrl(editingCharacter.portraitUrl)
+      return
+    }
+
+    setCharacterName('')
+    setCharacterStrength(10)
+    setCharacterDexterity(10)
+    setCharacterConstitution(10)
+    setCharacterIntelligence(10)
+    setCharacterWisdom(10)
+    setCharacterCharisma(10)
+    setCharacterGold(0)
+    setCharacterCurrentHp(1)
+    setCharacterMaxHp(1)
+    setCharacterAncestry('')
+    setCharacterClassName('')
+    setCharacterLevel(1)
+    setCharacterXp(0)
+    setCharacterXpNext(10)
+    setCharacterTitle('')
+    setCharacterAlignment('')
+    setCharacterBackground('')
+    setCharacterDeity('')
+    setCharacterTalentsSpells('')
+    setCharacterBackstory('')
+    setCharacterPortraitUrl('')
+  }
+
   async function saveCharacter() {
     if (!activeId) {
       setError('Najpierw wybierz kampanię.')
@@ -4690,7 +4741,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3P.1 • pełna karta sesyjna</span>
+              Etap 3P.2 • pełnoekranowa edycja postaci</span>
           </div>
 
         </aside>
@@ -8273,242 +8324,570 @@ function App() {
       )}
 
       {showCharacter && (
-        <Modal
-          onClose={() => {
+        <div
+          className="modal-backdrop"
+          onMouseDown={() => {
             setShowCharacter(false)
             setEditingCharacter(null)
           }}
+          style={{
+            padding: 8,
+            overflow: 'auto',
+            alignItems: 'flex-start',
+          }}
         >
-          <p className="eyebrow">
-            {editingCharacter ? 'EDYCJA POSTACI' : 'NOWA POSTAĆ'}
-          </p>
-
-          <h2>
-            {editingCharacter ? 'Edytuj postać' : 'Dodaj postać'}
-          </h2>
-
-          <label>
-            Imię postaci
-            <input
-              autoFocus
-              value={characterName}
-              onChange={e => setCharacterName(e.target.value)}
-              placeholder="np. Aric"
-            />
-          </label>
-
           <div
+            className="character-edit-modal parchment-panel"
+            onMouseDown={e => e.stopPropagation()}
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: 10,
+              width: 'min(1540px, calc(100vw - 16px))',
+              minHeight: 'calc(100vh - 16px)',
+              maxHeight: 'none',
+              margin: '0 auto',
+              padding: 18,
+              borderRadius: 8,
+              position: 'relative',
+              overflow: 'visible',
             }}
           >
-            <label>
-              Ancestry / Pochodzenie
-              <input
-                value={characterAncestry}
-                onChange={e => setCharacterAncestry(e.target.value)}
-                placeholder="np. Wood Elf"
-              />
-            </label>
-
-            <label>
-              Class / Klasa
-              <input
-                value={characterClassName}
-                onChange={e => setCharacterClassName(e.target.value)}
-                placeholder="np. Ranger"
-              />
-            </label>
-
-            <label>
-              Level / Poziom
-              <input
-                type="number"
-                min="1"
-                value={characterLevel}
-                onChange={e => setCharacterLevel(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-              />
-            </label>
-
-            <label>
-              Title / Tytuł
-              <input
-                value={characterTitle}
-                onChange={e => setCharacterTitle(e.target.value)}
-                placeholder="np. Stranger"
-              />
-            </label>
-
-            <label>
-              Alignment / Charakter
-              <input
-                value={characterAlignment}
-                onChange={e => setCharacterAlignment(e.target.value)}
-                placeholder="np. Neutral"
-              />
-            </label>
-
-            <label>
-              Background / Pochodzenie społeczne
-              <input
-                value={characterBackground}
-                onChange={e => setCharacterBackground(e.target.value)}
-                placeholder="np. Mercenary"
-              />
-            </label>
-
-            <label>
-              Deity / Bóstwo
-              <input
-                value={characterDeity}
-                onChange={e => setCharacterDeity(e.target.value)}
-                placeholder="np. Gede"
-              />
-            </label>
-
-            <label>
-              URL portretu
-              <input
-                value={characterPortraitUrl}
-                onChange={e => setCharacterPortraitUrl(e.target.value)}
-                placeholder="https://..."
-              />
-            </label>
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: 10,
-            }}
-          >
-            <label>
-              XP
-              <input
-                type="number"
-                min="0"
-                value={characterXp}
-                onChange={e => setCharacterXp(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-              />
-            </label>
-
-            <label>
-              XP do następnego poziomu
-              <input
-                type="number"
-                min="1"
-                value={characterXpNext}
-                onChange={e => setCharacterXpNext(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-              />
-            </label>
-          </div>
-
-          <label>
-            Talenty / Zaklęcia / Języki / Biegłości
-            <textarea
-              value={characterTalentsSpells}
-              onChange={e => setCharacterTalentsSpells(e.target.value)}
-              placeholder="Np. WEAPONS: Dagger, Longbow...&#10;LANGUAGES: Common, Elvish...&#10;Ranger: HERBALISM..."
-              rows={7}
-            />
-          </label>
-
-          <label>
-            Historia postaci
-            <textarea
-              value={characterBackstory}
-              onChange={e => setCharacterBackstory(e.target.value)}
-              placeholder="Historia, ważne wydarzenia, cele, relacje, notatki..."
-              rows={7}
-            />
-          </label>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: 10,
-            }}
-          >
-            <StatInput label="SIŁA" value={characterStrength} onChange={setCharacterStrength} />
-            <StatInput label="ZRĘCZNOŚĆ" value={characterDexterity} onChange={setCharacterDexterity} />
-            <StatInput label="KONDYCJA" value={characterConstitution} onChange={setCharacterConstitution} />
-            <StatInput label="INTELIGENCJA" value={characterIntelligence} onChange={setCharacterIntelligence} />
-            <StatInput label="MĄDROŚĆ" value={characterWisdom} onChange={setCharacterWisdom} />
-            <StatInput label="CHARYZMA" value={characterCharisma} onChange={setCharacterCharisma} />
-          </div>
-
-          <p className="muted">
-            Sloty ekwipunku: <strong>{Math.max(10, characterStrength)}</strong>
-            {' • '}Quickpull: <strong>{Math.max(0, statModifier(characterDexterity))}</strong>
-          </p>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: 10,
-            }}
-          >
-            <label>
-              Aktualne HP
-              <input
-                type="number"
-                min="0"
-                max={characterMaxHp}
-                value={characterCurrentHp}
-                onChange={e =>
-                  setCharacterCurrentHp(
-                    Math.min(
-                      characterMaxHp,
-                      Math.max(0, Math.floor(Number(e.target.value) || 0))
-                    )
-                  )
-                }
-              />
-            </label>
-
-            <label>
-              Maksymalne HP
-              <input
-                type="number"
-                min="1"
-                value={characterMaxHp}
-                onChange={e => {
-                  const next = Math.max(
-                    1,
-                    Math.floor(Number(e.target.value) || 1)
-                  )
-                  setCharacterMaxHp(next)
-                  setCharacterCurrentHp(current => Math.min(current, next))
-                }}
-              />
-            </label>
-          </div>
-
-          <label>
-            Złoto (gp)
-            <input
-              type="number"
-              min="0"
-              value={characterGold}
-              onChange={e =>
-                setCharacterGold(Math.max(0, Number(e.target.value) || 0))
+            <style>{`
+              .character-edit-modal {
+                --field-bg: rgba(13, 12, 10, 0.94);
+                --field-border: rgba(145, 104, 42, 0.76);
+                --field-text: #ead8ad;
+                --field-muted: #aa9874;
               }
-            />
-          </label>
+              .character-edit-modal label {
+                color: var(--field-muted);
+                font-size: 12px;
+                line-height: 1.25;
+              }
+              .character-edit-modal input,
+              .character-edit-modal textarea,
+              .character-edit-modal select {
+                width: 100%;
+                box-sizing: border-box;
+                margin-top: 5px;
+                border: 1px solid var(--field-border) !important;
+                border-radius: 5px !important;
+                background: var(--field-bg) !important;
+                color: var(--field-text) !important;
+                box-shadow: inset 0 1px 3px rgba(0,0,0,.58) !important;
+                outline: none !important;
+                font: inherit;
+              }
+              .character-edit-modal input,
+              .character-edit-modal select {
+                min-height: 38px;
+                padding: 7px 10px;
+              }
+              .character-edit-modal textarea {
+                min-height: 118px;
+                padding: 9px 10px;
+                resize: vertical;
+              }
+              .character-edit-modal input:focus,
+              .character-edit-modal textarea:focus,
+              .character-edit-modal select:focus {
+                border-color: rgba(211, 163, 70, .94) !important;
+                box-shadow: 0 0 0 2px rgba(170, 119, 39, .15),
+                  inset 0 1px 3px rgba(0,0,0,.58) !important;
+              }
+              .character-edit-modal input::placeholder,
+              .character-edit-modal textarea::placeholder {
+                color: rgba(190, 170, 132, .46);
+              }
+              .character-edit-modal input[type="number"] {
+                color-scheme: dark;
+              }
+              .character-edit-modal select {
+                color-scheme: dark;
+              }
+              @media (max-width: 1120px) {
+                .character-editor-top,
+                .character-editor-middle,
+                .character-editor-stats,
+                .character-editor-bottom {
+                  grid-template-columns: 1fr !important;
+                }
+              }
+            `}</style>
 
-          <button
-            className="primary full"
-            onClick={saveCharacter}
-            disabled={!characterName.trim()}
-          >
-            {editingCharacter ? 'Zapisz zmiany' : 'Dodaj postać'}
-          </button>
-        </Modal>
+            <button
+              className="close"
+              onClick={() => {
+                setShowCharacter(false)
+                setEditingCharacter(null)
+              }}
+              style={{ top: 12, right: 12 }}
+            >
+              <X />
+            </button>
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12,
+                paddingRight: 42,
+                marginBottom: 14,
+              }}
+            >
+              <div>
+                <p className="eyebrow" style={{ marginBottom: 3 }}>
+                  {editingCharacter ? 'EDYCJA POSTACI' : 'NOWA POSTAĆ'}
+                </p>
+                <h2 style={{ margin: 0 }}>
+                  {editingCharacter ? 'Edytuj postać' : 'Dodaj postać'}
+                </h2>
+              </div>
+            </div>
+
+            <div
+              className="character-editor-top"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '280px minmax(0, 1.45fr) minmax(280px, .9fr)',
+                gap: 14,
+                alignItems: 'stretch',
+              }}
+            >
+              <section
+                style={{
+                  border: '1px solid rgba(180,135,60,.34)',
+                  borderRadius: 7,
+                  padding: 8,
+                  background: 'rgba(20,17,13,.52)',
+                }}
+              >
+                <div
+                  style={{
+                    aspectRatio: '4 / 5',
+                    border: '1px solid rgba(197,148,58,.58)',
+                    borderRadius: 6,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(8,8,7,.9)',
+                  }}
+                >
+                  {editingCharacter?.portraitUrl ? (
+                    <img
+                      src={editingCharacter.portraitUrl}
+                      alt={`Portret ${editingCharacter.name}`}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
+                    />
+                  ) : (
+                    <div className="muted" style={{ textAlign: 'center' }}>
+                      <Users size={42} />
+                      <div style={{ marginTop: 8 }}>PORTRET</div>
+                    </div>
+                  )}
+                </div>
+
+                {editingCharacter ? (
+                  <label
+                    className="secondary"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      marginTop: 8,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Users size={15} />
+                    Zmień portret
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      style={{ display: 'none' }}
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (file) void uploadCharacterPortrait(editingCharacter, file)
+                        e.currentTarget.value = ''
+                      }}
+                    />
+                  </label>
+                ) : (
+                  <div className="muted" style={{ textAlign: 'center', marginTop: 10 }}>
+                    Portret dodasz po zapisaniu postaci.
+                  </div>
+                )}
+
+                <div className="muted" style={{ textAlign: 'center', fontSize: 11, marginTop: 6 }}>
+                  PNG / JPG / WEBP • maks. 5 MB
+                </div>
+              </section>
+
+              <section
+                style={{
+                  border: '1px solid rgba(180,135,60,.34)',
+                  borderRadius: 7,
+                  padding: 12,
+                  background: 'rgba(20,17,13,.52)',
+                }}
+              >
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 10 }}>
+                  <label>
+                    Imię postaci
+                    <input
+                      autoFocus
+                      value={characterName}
+                      onChange={e => setCharacterName(e.target.value)}
+                      placeholder="np. Rosarien"
+                    />
+                  </label>
+
+                  <label>
+                    Ancestry / Pochodzenie
+                    <input
+                      value={characterAncestry}
+                      onChange={e => setCharacterAncestry(e.target.value)}
+                      placeholder="np. Wood Elf"
+                    />
+                  </label>
+
+                  <label>
+                    Class / Klasa
+                    <input
+                      value={characterClassName}
+                      onChange={e => setCharacterClassName(e.target.value)}
+                      placeholder="np. Ranger"
+                    />
+                  </label>
+
+                  <label>
+                    Level / Poziom
+                    <input
+                      type="number"
+                      min="1"
+                      value={characterLevel}
+                      onChange={e => setCharacterLevel(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                    />
+                  </label>
+
+                  <label>
+                    Title / Tytuł
+                    <input
+                      value={characterTitle}
+                      onChange={e => setCharacterTitle(e.target.value)}
+                      placeholder="np. Stranger"
+                    />
+                  </label>
+
+                  <label>
+                    Alignment / Charakter
+                    <input
+                      value={characterAlignment}
+                      onChange={e => setCharacterAlignment(e.target.value)}
+                      placeholder="np. Neutral"
+                    />
+                  </label>
+
+                  <label>
+                    Background / Pochodzenie społeczne
+                    <input
+                      value={characterBackground}
+                      onChange={e => setCharacterBackground(e.target.value)}
+                      placeholder="np. Mercenary"
+                    />
+                  </label>
+
+                  <label>
+                    Deity / Bóstwo
+                    <input
+                      value={characterDeity}
+                      onChange={e => setCharacterDeity(e.target.value)}
+                      placeholder="np. Gede"
+                    />
+                  </label>
+
+                  <label>
+                    XP do następnego poziomu
+                    <input
+                      type="number"
+                      min="1"
+                      value={characterXpNext}
+                      onChange={e => setCharacterXpNext(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                    />
+                  </label>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto auto auto auto', gap: 7, alignItems: 'end', marginTop: 10 }}>
+                  <label>
+                    XP
+                    <input
+                      type="number"
+                      min="0"
+                      value={characterXp}
+                      onChange={e => setCharacterXp(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                    />
+                  </label>
+                  {[-10, -1, 1, 10].map(delta => (
+                    <button
+                      key={delta}
+                      className="secondary"
+                      type="button"
+                      onClick={() => setCharacterXp(value => Math.max(0, value + delta))}
+                      style={{ minHeight: 38, minWidth: 48 }}
+                    >
+                      {delta > 0 ? `+${delta}` : delta}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3,minmax(0,1fr))',
+                  gridTemplateRows: '1fr auto',
+                  gap: 8,
+                }}
+              >
+                <div style={{ border: '1px solid rgba(150,58,43,.62)', borderRadius: 7, padding: 12, background: 'rgba(88,25,20,.23)' }}>
+                  <span className="muted">HP</span>
+                  <strong style={{ display: 'block', fontSize: 25, marginTop: 6 }}>
+                    {characterCurrentHp}/{characterMaxHp}
+                  </strong>
+                </div>
+
+                <div style={{ border: '1px solid rgba(62,103,145,.62)', borderRadius: 7, padding: 12, background: 'rgba(23,45,67,.25)' }}>
+                  <span className="muted">AC</span>
+                  <strong style={{ display: 'block', fontSize: 25, marginTop: 6 }}>
+                    {editingCharacter ? armorClassForCharacter(editingCharacter) : 10 + statModifier(characterDexterity)}
+                  </strong>
+                </div>
+
+                <div style={{ border: '1px solid rgba(98,116,47,.62)', borderRadius: 7, padding: 12, background: 'rgba(54,67,28,.22)' }}>
+                  <span className="muted">W RĘKACH</span>
+                  <strong style={{ display: 'block', marginTop: 6, lineHeight: 1.35 }}>
+                    {editingCharacter ? handsDisplayForCharacter(editingCharacter.id) : '—'}
+                  </strong>
+                </div>
+
+                <div
+                  style={{
+                    gridColumn: '1 / -1',
+                    border: '1px solid rgba(180,135,60,.34)',
+                    borderRadius: 7,
+                    padding: 12,
+                    background: 'rgba(20,17,13,.52)',
+                  }}
+                >
+                  <div className="slot-line">
+                    <span>SLOTY EKWIPUNKU</span>
+                    <b>
+                      {editingCharacter
+                        ? `${Number(usedSlotsForCharacter(editingCharacter.id).toFixed(2))}/${Math.max(10, characterStrength)}`
+                        : `0/${Math.max(10, characterStrength)}`}
+                    </b>
+                  </div>
+                  <div className="progress small">
+                    <i
+                      style={{
+                        width: editingCharacter
+                          ? `${Math.min(100, (usedSlotsForCharacter(editingCharacter.id) / Math.max(10, characterStrength)) * 100)}%`
+                          : '0%',
+                      }}
+                    />
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div
+              className="character-editor-middle"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '.9fr 1.05fr 1.15fr',
+                gap: 12,
+                marginTop: 12,
+              }}
+            >
+              <section style={{ border: '1px solid rgba(180,135,60,.34)', borderRadius: 7, padding: 12, background: 'rgba(20,17,13,.52)' }}>
+                <div className="panel-title">STATYSTYKI</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 76px 94px', gap: 8, paddingBottom: 6, borderBottom: '1px solid rgba(180,135,60,.28)' }}>
+                  <span className="muted">STAT</span>
+                  <span className="muted" style={{ textAlign: 'right' }}>WARTOŚĆ</span>
+                  <span className="muted" style={{ textAlign: 'right' }}>MODYFIKATOR</span>
+                </div>
+                {[
+                  ['SIŁA', characterStrength, setCharacterStrength],
+                  ['ZRĘCZNOŚĆ', characterDexterity, setCharacterDexterity],
+                  ['KONDYCJA', characterConstitution, setCharacterConstitution],
+                  ['INTELIGENCJA', characterIntelligence, setCharacterIntelligence],
+                  ['MĄDROŚĆ', characterWisdom, setCharacterWisdom],
+                  ['CHARYZMA', characterCharisma, setCharacterCharisma],
+                ].map(([label, value, setter]) => (
+                  <div
+                    key={String(label)}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 76px 94px',
+                      gap: 8,
+                      alignItems: 'center',
+                      padding: '5px 0',
+                      borderBottom: '1px solid rgba(180,135,60,.18)',
+                    }}
+                  >
+                    <strong>{String(label)}</strong>
+                    <input
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={Number(value)}
+                      onChange={e =>
+                        (setter as (v: number) => void)(
+                          Math.min(30, Math.max(1, Number(e.target.value) || 1))
+                        )
+                      }
+                      style={{ minHeight: 30, marginTop: 0, textAlign: 'right', padding: '4px 7px' }}
+                    />
+                    <strong style={{ textAlign: 'right' }}>
+                      {formatModifier(statModifier(Number(value)))}
+                    </strong>
+                  </div>
+                ))}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+                  <div style={{ border: '1px solid rgba(180,135,60,.26)', borderRadius: 6, padding: 8 }}>
+                    <span className="muted">Sloty ekwipunku</span>
+                    <strong style={{ display: 'block', marginTop: 4 }}>{Math.max(10, characterStrength)}</strong>
+                  </div>
+                  <div style={{ border: '1px solid rgba(180,135,60,.26)', borderRadius: 6, padding: 8 }}>
+                    <span className="muted">Quickpull (DEX)</span>
+                    <strong style={{ display: 'block', marginTop: 4 }}>{Math.max(0, statModifier(characterDexterity))}</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section style={{ border: '1px solid rgba(180,135,60,.34)', borderRadius: 7, padding: 12, background: 'rgba(20,17,13,.52)' }}>
+                <div className="panel-title">TALENTY / ZAKLĘCIA / JĘZYKI / BIEGŁOŚCI</div>
+                <label>
+                  Wpisy postaci
+                  <textarea
+                    value={characterTalentsSpells}
+                    onChange={e => setCharacterTalentsSpells(e.target.value)}
+                    placeholder={'Np. WEAPONS: Dagger, Longbow...\nLANGUAGES: Common, Elvish...\nRanger: HERBALISM, WAYFINDER...'}
+                    style={{ minHeight: 270 }}
+                  />
+                </label>
+              </section>
+
+              <section style={{ border: '1px solid rgba(180,135,60,.34)', borderRadius: 7, padding: 12, background: 'rgba(20,17,13,.52)' }}>
+                <div className="panel-title">HISTORIA POSTACI</div>
+                <label>
+                  Historia, cele, relacje i notatki
+                  <textarea
+                    value={characterBackstory}
+                    onChange={e => setCharacterBackstory(e.target.value)}
+                    placeholder="Historia, ważne wydarzenia, cele, relacje, notatki..."
+                    style={{ minHeight: 270 }}
+                  />
+                </label>
+              </section>
+            </div>
+
+            <div
+              className="character-editor-bottom"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3,minmax(0,1fr))',
+                gap: 12,
+                marginTop: 12,
+                alignItems: 'end',
+              }}
+            >
+              <section style={{ border: '1px solid rgba(180,135,60,.34)', borderRadius: 7, padding: 12, background: 'rgba(20,17,13,.52)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }}>
+                  <label>
+                    Maksymalne HP
+                    <input
+                      type="number"
+                      min="1"
+                      value={characterMaxHp}
+                      onChange={e => {
+                        const next = Math.max(1, Math.floor(Number(e.target.value) || 1))
+                        setCharacterMaxHp(next)
+                        setCharacterCurrentHp(current => Math.min(current, next))
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Aktualne HP
+                    <input
+                      type="number"
+                      min="0"
+                      max={characterMaxHp}
+                      value={characterCurrentHp}
+                      onChange={e =>
+                        setCharacterCurrentHp(
+                          Math.min(characterMaxHp, Math.max(0, Math.floor(Number(e.target.value) || 0)))
+                        )
+                      }
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section style={{ border: '1px solid rgba(180,135,60,.34)', borderRadius: 7, padding: 12, background: 'rgba(20,17,13,.52)' }}>
+                <label>
+                  Złoto (postać)
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={characterGold}
+                    onChange={e => setCharacterGold(Math.max(0, Number(e.target.value) || 0))}
+                  />
+                </label>
+              </section>
+
+              <section
+                style={{
+                  border: '1px solid rgba(180,135,60,.34)',
+                  borderRadius: 7,
+                  padding: 12,
+                  background: 'rgba(20,17,13,.52)',
+                  display: 'flex',
+                  gap: 8,
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                  minHeight: 66,
+                }}
+              >
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => {
+                    setShowCharacter(false)
+                    setEditingCharacter(null)
+                  }}
+                >
+                  Anuluj
+                </button>
+                <button className="secondary" type="button" onClick={resetCharacterDraft}>
+                  Resetuj zmiany
+                </button>
+                <button
+                  className="primary"
+                  onClick={saveCharacter}
+                  disabled={!characterName.trim()}
+                  style={{ minWidth: 150 }}
+                >
+                  {editingCharacter ? 'Zapisz postać' : 'Dodaj postać'}
+                </button>
+              </section>
+            </div>
+          </div>
+        </div>
       )}
 
       {showItem && (
