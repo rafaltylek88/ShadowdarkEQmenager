@@ -14,6 +14,18 @@ export type Character = {
   gold: number
   currentHp: number
   maxHp: number
+  ancestry: string
+  className: string
+  level: number
+  xp: number
+  xpNext: number
+  title: string
+  alignment: string
+  background: string
+  deity: string
+  talentsSpells: string
+  backstory: string
+  portraitUrl: string
   lastFedAt: string | null
   createdBy?: string
   createdAt?: string
@@ -35,6 +47,18 @@ function mapCharacter(row: any): Character {
     gold: Number(row.gold ?? 0),
     currentHp: Math.max(0, Number(row.current_hp ?? 1)),
     maxHp: Math.max(1, Number(row.max_hp ?? 1)),
+    ancestry: row.ancestry ?? '',
+    className: row.class_name ?? '',
+    level: Math.max(1, Number(row.level ?? 1)),
+    xp: Math.max(0, Number(row.xp ?? 0)),
+    xpNext: Math.max(1, Number(row.xp_next ?? 10)),
+    title: row.title ?? '',
+    alignment: row.alignment ?? '',
+    background: row.background ?? '',
+    deity: row.deity ?? '',
+    talentsSpells: row.talents_spells ?? '',
+    backstory: row.backstory ?? '',
+    portraitUrl: row.portrait_url ?? '',
     lastFedAt: row.last_fed_at ?? null,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -64,6 +88,18 @@ export async function createCharacter(
     charisma: number
     currentHp?: number
     maxHp?: number
+    ancestry?: string
+    className?: string
+    level?: number
+    xp?: number
+    xpNext?: number
+    title?: string
+    alignment?: string
+    background?: string
+    deity?: string
+    talentsSpells?: string
+    backstory?: string
+    portraitUrl?: string
   }
 ): Promise<Character> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
@@ -85,6 +121,18 @@ export async function createCharacter(
       Math.max(0, Math.floor(stats?.currentHp ?? stats?.maxHp ?? 1)),
       Math.max(1, Math.floor(stats?.maxHp ?? 1))
     ),
+    ancestry: stats?.ancestry?.trim() ?? '',
+    class_name: stats?.className?.trim() ?? '',
+    level: Math.max(1, Math.floor(stats?.level ?? 1)),
+    xp: Math.max(0, Math.floor(stats?.xp ?? 0)),
+    xp_next: Math.max(1, Math.floor(stats?.xpNext ?? 10)),
+    title: stats?.title?.trim() ?? '',
+    alignment: stats?.alignment?.trim() ?? '',
+    background: stats?.background?.trim() ?? '',
+    deity: stats?.deity?.trim() ?? '',
+    talents_spells: stats?.talentsSpells?.trim() ?? '',
+    backstory: stats?.backstory?.trim() ?? '',
+    portrait_url: stats?.portraitUrl?.trim() ?? '',
     used_slots: 0,
     created_by: userData.user.id,
   }).select('*').single()
@@ -106,6 +154,18 @@ export async function updateCharacter(
     gold: number
     currentHp: number
     maxHp: number
+    ancestry: string
+    className: string
+    level: number
+    xp: number
+    xpNext: number
+    title: string
+    alignment: string
+    background: string
+    deity: string
+    talentsSpells: string
+    backstory: string
+    portraitUrl: string
     usedSlots: number
   }
 ): Promise<Character> {
@@ -124,6 +184,18 @@ export async function updateCharacter(
       Math.max(0, Math.floor(changes.currentHp)),
       Math.max(1, Math.floor(changes.maxHp))
     ),
+    ancestry: changes.ancestry.trim(),
+    class_name: changes.className.trim(),
+    level: Math.max(1, Math.floor(changes.level)),
+    xp: Math.max(0, Math.floor(changes.xp)),
+    xp_next: Math.max(1, Math.floor(changes.xpNext)),
+    title: changes.title.trim(),
+    alignment: changes.alignment.trim(),
+    background: changes.background.trim(),
+    deity: changes.deity.trim(),
+    talents_spells: changes.talentsSpells.trim(),
+    backstory: changes.backstory.trim(),
+    portrait_url: changes.portraitUrl.trim(),
     used_slots: changes.usedSlots,
   }).eq('id', id).select('*').single()
   if (error) throw error
