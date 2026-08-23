@@ -67,6 +67,7 @@ import {
 } from './lib/items'
 import type { CharacterItem, ItemCategory } from './lib/items'
 import { setCharacterItemQuickpull } from './lib/quickpull'
+import { setCharacterItemEquipped } from './lib/equipment'
 import { createCatalogItem, deleteCatalogItem, loadCatalog } from './lib/catalog'
 import type { CatalogItem, CatalogItemCategory } from './lib/catalog'
 import {
@@ -200,6 +201,8 @@ function App() {
   const [characterWisdom, setCharacterWisdom] = useState(10)
   const [characterCharisma, setCharacterCharisma] = useState(10)
   const [characterGold, setCharacterGold] = useState(0)
+  const [characterCurrentHp, setCharacterCurrentHp] = useState(1)
+  const [characterMaxHp, setCharacterMaxHp] = useState(1)
 
   const [npcs, setNpcs] = useState<Npc[]>([])
   const [npcsLoading, setNpcsLoading] = useState(false)
@@ -2621,6 +2624,8 @@ function App() {
     setCharacterWisdom(10)
     setCharacterCharisma(10)
     setCharacterGold(0)
+    setCharacterMaxHp(1)
+    setCharacterCurrentHp(1)
     setShowCharacter(true)
   }
 
@@ -2634,6 +2639,8 @@ function App() {
     setCharacterWisdom(character.wisdom)
     setCharacterCharisma(character.charisma)
     setCharacterGold(character.gold)
+    setCharacterMaxHp(character.maxHp)
+    setCharacterCurrentHp(character.currentHp)
     setShowCharacter(true)
   }
 
@@ -2659,6 +2666,8 @@ function App() {
           wisdom: characterWisdom,
           charisma: characterCharisma,
           gold: characterGold,
+          currentHp: Math.min(characterCurrentHp, characterMaxHp),
+          maxHp: characterMaxHp,
           usedSlots: usedSlotsForCharacter(editingCharacter.id),
         })
         flash(`Zaktualizowano Postać: ${characterName}.`, 'character')
@@ -2669,6 +2678,8 @@ function App() {
           intelligence: characterIntelligence,
           wisdom: characterWisdom,
           charisma: characterCharisma,
+          currentHp: Math.min(characterCurrentHp, characterMaxHp),
+          maxHp: characterMaxHp,
         })
         flash(`Dodano Postać: ${characterName}.`, 'character')
       }
@@ -2716,6 +2727,82 @@ function App() {
     setSelectedCharacterId(null)
     setActiveView('Postacie')
     setMobileNav(false)
+  }
+
+  function equippedItemsForCharacter(characterId: string) {
+    return itemsForCharacter(characterId).filter(item => item.isEquipped)
+  }
+
+  function equippedWeaponForCharacter(characterId: string) {
+    return equippedItemsForCharacter(characterId).find(
+      item => item.category === 'weapon'
+    ) ?? null
+  }
+
+  function parseArmorBase(
+    armorClass: string | null,
+    dexModifier: number
+  ): number | null {
+    if (!armorClass) return null
+
+    const normalized = armorClass
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .replace('dexterity', 'dex')
+
+    if (/^\s*\+/.test(normalized)) return null
+
+    const baseMatch = normalized.match(/-?\d+/)
+    if (!baseMatch) return null
+
+    const base = Number(baseMatch[0])
+    return normalized.includes('dex') ? base + dexModifier : base
+  }
+
+  function armorClassForCharacter(character: Character) {
+    const dex = statModifier(character.dexterity)
+    const equipped = equippedItemsForCharacter(character.id)
+    const armors = equipped.filter(item => item.category === 'armor')
+
+    const bodyArmor = armors.find(
+      item => !/^\s*\+/.test(item.armorClass ?? '')
+    )
+
+    const baseAc = bodyArmor
+      ? parseArmorBase(bodyArmor.armorClass, dex) ?? 10 + dex
+      : 10 + dex
+
+    const shieldBonus = armors
+      .filter(item => /^\s*\+/.test(item.armorClass ?? ''))
+      .reduce((sum, item) => {
+        const match = (item.armorClass ?? '').match(/[+-]?\d+/)
+        return sum + (match ? Number(match[0]) : 0)
+      }, 0)
+
+    return baseAc + shieldBonus
+  }
+
+  async function toggleEquippedItem(
+    character: Character,
+    item: CharacterItem
+  ) {
+    try {
+      await setCharacterItemEquipped(item.id, !item.isEquipped)
+      await refreshItems()
+
+      flash(
+        item.isEquipped
+          ? `${character.name} — zdjęto/odłożono ${item.name}.`
+          : `${character.name} — wyposażono ${item.name}.`,
+        'inventory'
+      )
+    } catch (e: any) {
+      setError(
+        e?.message ||
+          e?.details ||
+          'Nie udało się zmienić aktywnego wyposażenia.'
+      )
+    }
   }
 
   function quickpullLimit(character: Character) {
@@ -3098,6 +3185,8 @@ function App() {
         wisdom: character.wisdom,
         charisma: character.charisma,
         gold: normalized,
+        currentHp: character.currentHp,
+        maxHp: character.maxHp,
         usedSlots: character.usedSlots,
       })
 
@@ -4312,7 +4401,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3N.2 • uporządkowane widoki</span>
+              Etap 3O • HP, AC i aktywne wyposażenie</span>
           </div>
 
         </aside>
@@ -5028,6 +5117,23 @@ function App() {
                         </div>
 
                         <div className="slot-line">
+                          <span>HP</span>
+                          <b>{character.currentHp}/{character.maxHp}</b>
+                        </div>
+
+                        <div className="slot-line" style={{ marginTop: 8 }}>
+                          <span>AC</span>
+                          <b>{armorClassForCharacter(character)}</b>
+                        </div>
+
+                        <div className="slot-line" style={{ marginTop: 8 }}>
+                          <span>Broń</span>
+                          <b>
+                            {equippedWeaponForCharacter(character.id)?.name ?? '—'}
+                          </b>
+                        </div>
+
+                        <div className="slot-line" style={{ marginTop: 8 }}>
                           <span>SIŁA {character.strength}</span>
                           <b>{displayedUsedSlots}/{maxSlots}</b>
                         </div>
@@ -5212,6 +5318,11 @@ function App() {
                                   {character.gold} gp • Quickpull {quickpullCount(character.id)}/{quickpullLimit(character)}
                                 </span>
                                 <span style={{ display: 'block', marginTop: 4 }}>
+                                  HP <strong>{character.currentHp}/{character.maxHp}</strong>
+                                  {' • '}AC <strong>{armorClassForCharacter(character)}</strong>
+                                  {' • '}Broń: <strong>{equippedWeaponForCharacter(character.id)?.name ?? '—'}</strong>
+                                </span>
+                                <span style={{ display: 'block', marginTop: 4 }}>
                                   Ostatnio nakarmiona: {formatLastFed(character.lastFedAt)}
                                   {' • '}Racje: {characterRationCounts.get(character.id) ?? 0}
                                 </span>
@@ -5283,6 +5394,57 @@ function App() {
                               ))}
                             </div>
 
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                                gap: 8,
+                                marginTop: 12,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  border: '1px solid rgba(180, 135, 60, 0.28)',
+                                  borderRadius: 7,
+                                  padding: '8px 10px',
+                                  background: 'rgba(110, 83, 42, 0.07)',
+                                }}
+                              >
+                                <span className="muted">HP</span>
+                                <strong style={{ display: 'block', marginTop: 3 }}>
+                                  {character.currentHp}/{character.maxHp}
+                                </strong>
+                              </div>
+
+                              <div
+                                style={{
+                                  border: '1px solid rgba(180, 135, 60, 0.28)',
+                                  borderRadius: 7,
+                                  padding: '8px 10px',
+                                  background: 'rgba(110, 83, 42, 0.07)',
+                                }}
+                              >
+                                <span className="muted">AC</span>
+                                <strong style={{ display: 'block', marginTop: 3 }}>
+                                  {armorClassForCharacter(character)}
+                                </strong>
+                              </div>
+
+                              <div
+                                style={{
+                                  border: '1px solid rgba(180, 135, 60, 0.28)',
+                                  borderRadius: 7,
+                                  padding: '8px 10px',
+                                  background: 'rgba(110, 83, 42, 0.07)',
+                                }}
+                              >
+                                <span className="muted">Aktywna broń</span>
+                                <strong style={{ display: 'block', marginTop: 3 }}>
+                                  {equippedWeaponForCharacter(character.id)?.name ?? '—'}
+                                </strong>
+                              </div>
+                            </div>
+
                             <div className="slot-line" style={{ marginTop: 12 }}>
                               <span>Sloty ekwipunku</span>
                               <b>
@@ -5318,6 +5480,13 @@ function App() {
                                           isMagicalInventoryItem(item.catalogItemId),
                                           isQuestInventoryItem(item.catalogItemId)
                                         ),
+                                        ...(item.isEquipped
+                                          ? {
+                                              borderColor: 'rgba(132, 153, 118, 0.72)',
+                                              boxShadow:
+                                                'inset 0 0 0 1px rgba(169, 190, 145, 0.08)',
+                                            }
+                                          : {}),
                                         ...(item.isQuickpull
                                           ? {
                                               outline: '2px solid rgba(218, 183, 103, 0.95)',
@@ -5373,6 +5542,7 @@ function App() {
                                           ` • ${item.armorProperties}`}
                                         {item.isActiveLight && ' • AKTYWNE ŚWIATŁO'}
                                         {item.isQuickpull && ' • QUICKPULL'}
+                                        {item.isEquipped && ' • WYPOSAŻONE'}
                                         {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
                                         {isQuestInventoryItem(item.catalogItemId) && ' • PRZEDMIOT ZADANIA'}
                                         {isMagicalInventoryItem(item.catalogItemId) &&
@@ -5389,6 +5559,26 @@ function App() {
                                           >
                                             <Utensils size={14} />
                                             Zużyj 1
+                                          </button>
+                                        )}
+
+                                        {(item.category === 'weapon' ||
+                                          item.category === 'armor') && (
+                                          <button
+                                            className="secondary"
+                                            onClick={() =>
+                                              toggleEquippedItem(character, item)
+                                            }
+                                            title={
+                                              item.isEquipped
+                                                ? 'Zdejmij / odłóż'
+                                                : item.category === 'weapon'
+                                                  ? 'Ustaw jako aktywną broń'
+                                                  : 'Załóż pancerz / tarczę'
+                                            }
+                                          >
+                                            <Shield size={14} />
+                                            {item.isEquipped ? 'Zdejmij' : 'Wyposaż'}
                                           </button>
                                         )}
 
@@ -7007,6 +7197,49 @@ function App() {
             Sloty ekwipunku: <strong>{Math.max(10, characterStrength)}</strong>
             {' • '}Quickpull: <strong>{Math.max(0, statModifier(characterDexterity))}</strong>
           </p>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 10,
+            }}
+          >
+            <label>
+              Aktualne HP
+              <input
+                type="number"
+                min="0"
+                max={characterMaxHp}
+                value={characterCurrentHp}
+                onChange={e =>
+                  setCharacterCurrentHp(
+                    Math.min(
+                      characterMaxHp,
+                      Math.max(0, Math.floor(Number(e.target.value) || 0))
+                    )
+                  )
+                }
+              />
+            </label>
+
+            <label>
+              Maksymalne HP
+              <input
+                type="number"
+                min="1"
+                value={characterMaxHp}
+                onChange={e => {
+                  const next = Math.max(
+                    1,
+                    Math.floor(Number(e.target.value) || 1)
+                  )
+                  setCharacterMaxHp(next)
+                  setCharacterCurrentHp(current => Math.min(current, next))
+                }}
+              />
+            </label>
+          </div>
 
           <label>
             Złoto (gp)
