@@ -183,6 +183,7 @@ function App() {
 
   const [characters, setCharacters] = useState<Character[]>([])
   const [charactersLoading, setCharactersLoading] = useState(false)
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
   const [showCharacter, setShowCharacter] = useState(false)
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
   const [characterName, setCharacterName] = useState('')
@@ -709,6 +710,19 @@ function App() {
   useEffect(() => {
     refreshCharacters()
   }, [refreshCharacters])
+
+  useEffect(() => {
+    if (
+      selectedCharacterId &&
+      !characters.some(character => character.id === selectedCharacterId)
+    ) {
+      setSelectedCharacterId(null)
+    }
+  }, [characters, selectedCharacterId])
+
+  useEffect(() => {
+    setSelectedCharacterId(null)
+  }, [activeId])
 
   useEffect(() => {
     refreshNpcs()
@@ -2478,6 +2492,42 @@ function App() {
     }
   }
 
+  const sortedCharacters = useMemo(
+    () =>
+      [...characters].sort((a, b) =>
+        a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' })
+      ),
+    [characters]
+  )
+
+  const visibleCharacters = useMemo(
+    () =>
+      selectedCharacterId
+        ? characters.filter(character => character.id === selectedCharacterId)
+        : characters,
+    [characters, selectedCharacterId]
+  )
+
+  const selectedCharacter = useMemo(
+    () =>
+      selectedCharacterId
+        ? characters.find(character => character.id === selectedCharacterId) ?? null
+        : null,
+    [characters, selectedCharacterId]
+  )
+
+  function openCharacterCard(characterId: string) {
+    setSelectedCharacterId(characterId)
+    setActiveView('Postacie')
+    setMobileNav(false)
+  }
+
+  function openAllCharacters() {
+    setSelectedCharacterId(null)
+    setActiveView('Postacie')
+    setMobileNav(false)
+  }
+
   function quickpullLimit(character: Character) {
     return Math.max(0, statModifier(character.dexterity))
   }
@@ -3686,17 +3736,86 @@ function App() {
 
           <nav>
             {nav.map(([label, Icon]) => (
-              <button
-                key={label}
-                className={activeView === label ? 'nav-active' : ''}
-                onClick={() => {
-                  setActiveView(label)
-                  setMobileNav(false)
-                }}
-              >
-                <Icon size={17} />
-                {label}
-              </button>
+              <div key={label}>
+                <button
+                  className={activeView === label ? 'nav-active' : ''}
+                  onClick={() => {
+                    if (label === 'Postacie') {
+                      setActiveView('Postacie')
+                      setMobileNav(false)
+                    } else {
+                      setActiveView(label)
+                      setMobileNav(false)
+                    }
+                  }}
+                >
+                  <Icon size={17} />
+                  {label}
+                </button>
+
+                {label === 'Postacie' && activeView === 'Postacie' && (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gap: 3,
+                      margin: '4px 0 8px 22px',
+                      paddingLeft: 9,
+                      borderLeft: '1px solid rgba(180, 135, 60, 0.35)',
+                    }}
+                  >
+                    {sortedCharacters.map(character => (
+                      <button
+                        key={character.id}
+                        onClick={() => openCharacterCard(character.id)}
+                        style={{
+                          minHeight: 30,
+                          padding: '5px 9px',
+                          justifyContent: 'flex-start',
+                          fontSize: 13,
+                          color:
+                            selectedCharacterId === character.id
+                              ? '#f0cf83'
+                              : '#bda77b',
+                          background:
+                            selectedCharacterId === character.id
+                              ? 'rgba(143, 101, 36, 0.18)'
+                              : 'transparent',
+                          border:
+                            selectedCharacterId === character.id
+                              ? '1px solid rgba(174, 126, 49, 0.42)'
+                              : '1px solid transparent',
+                          borderRadius: 5,
+                        }}
+                      >
+                        {character.name}
+                      </button>
+                    ))}
+
+                    <button
+                      onClick={openAllCharacters}
+                      style={{
+                        minHeight: 30,
+                        padding: '5px 9px',
+                        justifyContent: 'flex-start',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: selectedCharacterId === null ? '#f0cf83' : '#bda77b',
+                        background:
+                          selectedCharacterId === null
+                            ? 'rgba(143, 101, 36, 0.18)'
+                            : 'transparent',
+                        border:
+                          selectedCharacterId === null
+                            ? '1px solid rgba(174, 126, 49, 0.42)'
+                            : '1px solid transparent',
+                        borderRadius: 5,
+                      }}
+                    >
+                      Wszystkie
+                    </button>
+                  </div>
+                )}
+              </div>
             ))}
           </nav>
 
@@ -3704,7 +3823,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3I.3 • sloty, majątek i UI ekwipunku</span>
+              Etap 3K • szybkie karty postaci</span>
           </div>
 
         </aside>
@@ -4333,7 +4452,26 @@ function App() {
                     return (
                       <article className="entity-card" key={character.id}>
                         <div className="entity-head">
-                          <strong>{character.name}</strong>
+                          <button
+                            type="button"
+                            onClick={() => openCharacterCard(character.id)}
+                            title={`Otwórz kartę: ${character.name}`}
+                            style={{
+                              padding: 0,
+                              border: 0,
+                              background: 'transparent',
+                              color: '#ead09a',
+                              font: 'inherit',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              textDecoration: 'underline',
+                              textDecorationColor: 'rgba(207, 162, 77, 0.42)',
+                              textUnderlineOffset: 3,
+                            }}
+                          >
+                            {character.name}
+                          </button>
                           <span>Postać</span>
                         </div>
 
@@ -4441,19 +4579,33 @@ function App() {
                   <p className="eyebrow">POSTACIE</p>
                   <h1>{active?.name ?? 'Brak kampanii'}</h1>
                   <p>
-                    Postacie, złoto i ekwipunek aktywnej kampanii.
-                    Zmiany synchronizują się między użytkownikami.
+                    {selectedCharacter
+                      ? `Wyodrębniona karta: ${selectedCharacter.name}.`
+                      : 'Postacie, złoto i ekwipunek aktywnej kampanii.'}
+                    {' '}Zmiany synchronizują się między użytkownikami.
                   </p>
                 </div>
 
-                <button
-                  className="primary"
-                  onClick={openNewCharacter}
-                  disabled={!activeId}
-                >
-                  <Plus size={16} />
-                  Nowa postać
-                </button>
+                <div className="button-row">
+                  {selectedCharacterId && (
+                    <button
+                      className="secondary"
+                      onClick={openAllCharacters}
+                    >
+                      <Users size={16} />
+                      Wszystkie
+                    </button>
+                  )}
+
+                  <button
+                    className="primary"
+                    onClick={openNewCharacter}
+                    disabled={!activeId}
+                  >
+                    <Plus size={16} />
+                    Nowa postać
+                  </button>
+                </div>
               </section>
 
               <section className="dashboard-grid">
@@ -4475,7 +4627,7 @@ function App() {
                     </div>
                   ) : (
                     <div style={{ display: 'grid', gap: 16 }}>
-                      {characters.map(character => {
+                      {visibleCharacters.map(character => {
                         const maxSlots = Math.max(10, character.strength)
                         const usedSlots = usedSlotsForCharacter(character.id)
                         const characterItems = itemsForCharacter(character.id)
@@ -4484,7 +4636,26 @@ function App() {
                           <article className="entity-card" key={character.id}>
                             <div className="entity-head">
                               <div>
-                                <strong>{character.name}</strong>
+                                <button
+                                  type="button"
+                                  onClick={() => openCharacterCard(character.id)}
+                                  title={`Wyodrębnij kartę: ${character.name}`}
+                                  style={{
+                                    padding: 0,
+                                    border: 0,
+                                    background: 'transparent',
+                                    color: '#ead09a',
+                                    font: 'inherit',
+                                    fontWeight: 800,
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                    textDecoration: 'underline',
+                                    textDecorationColor: 'rgba(207, 162, 77, 0.42)',
+                                    textUnderlineOffset: 3,
+                                  }}
+                                >
+                                  {character.name}
+                                </button>
                                 <span style={{ display: 'block', marginTop: 4 }}>
                                   {character.gold} gp • Quickpull {quickpullCount(character.id)}/{quickpullLimit(character)}
                                 </span>
