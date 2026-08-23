@@ -97,6 +97,8 @@ import { loadBastionItems } from './lib/bastionItems'
 import type { BastionItem } from './lib/bastionItems'
 import { buyInventoryItem, sellInventoryItem } from './lib/trade'
 import type { InventoryOwnerType } from './lib/trade'
+import { addCampaignHistory, loadCampaignHistory } from './lib/history'
+import type { HistoryEntry, HistoryEventType } from './lib/history'
 import { setInventoryItemQuantity, transferInventoryItem } from './lib/inventoryOps'
 
 const initialCampaigns: Campaign[] = [
@@ -125,6 +127,7 @@ const nav = [
   ['Zwierzęta', Beef],
   ['Bastiony', Castle],
   ['Biblioteka', Package],
+  ['Historia', ArrowRightLeft],
   ['Podsumowanie', Coins],
 ] as const
 
@@ -179,6 +182,9 @@ function App() {
   const [activeView, setActiveView] = useState<(typeof nav)[number][0]>('Dashboard')
 
   const [message, setMessage] = useState<string | null>(null)
+  const [history, setHistory] = useState<HistoryEntry[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyFilter, setHistoryFilter] = useState<'all' | HistoryEventType>('all')
   const [error, setError] = useState<string | null>(null)
 
   const [characters, setCharacters] = useState<Character[]>([])
@@ -508,6 +514,22 @@ function App() {
     }
   }, [activeId, isCloudMode])
 
+  const refreshHistory = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setHistory([])
+      return
+    }
+
+    setHistoryLoading(true)
+    try {
+      setHistory(await loadCampaignHistory(activeId))
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się pobrać historii operacji.')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
   const refreshItems = useCallback(async () => {
     if (!activeId || !isCloudMode) {
       setItems([])
@@ -747,6 +769,10 @@ function App() {
   useEffect(() => {
     refreshBastionItems()
   }, [refreshBastionItems])
+
+  useEffect(() => {
+    refreshHistory()
+  }, [refreshHistory])
 
   useEffect(() => {
     refreshItems()
@@ -2128,6 +2154,7 @@ function App() {
       if (lightState?.status === 'paused') {
         setLightState(await resumeCampaignLight(activeId))
         setLightNow(Date.now())
+        flash('Wznowiono licznik światła.', 'light')
         return
       }
 
@@ -2165,6 +2192,7 @@ function App() {
       setLightLoading(true)
       setLightState(await pauseCampaignLight(activeId))
       setLightNow(Date.now())
+      flash('Wstrzymano licznik światła.', 'light')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zatrzymać licznika.')
     } finally {
@@ -2376,6 +2404,30 @@ function App() {
     characterLightSeconds + npcLightSeconds + animalLightSeconds
 
 
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+
+    const channel = sb
+      .channel(`history-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'campaign_history',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        refreshHistory
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshHistory])
+
+
   async function createCampaign() {
     const name = newCampaign.trim()
 
@@ -2476,8 +2528,80 @@ function App() {
     )
   }
 
-  function flash(text: string) {
+  function historyTypeForMessage(text: string): HistoryEventType {
+    const value = text.toLowerCase()
+
+    if (
+      value.includes('zakup') ||
+      value.includes('sprzedaż') ||
+      value.includes('zapłacono') ||
+      value.includes('otrzymano')
+    ) return 'trade'
+
+    if (
+      value.includes('światł') ||
+      value.includes('latarn') ||
+      value.includes('pochodn')
+    ) return 'light'
+
+    if (
+      value.includes('racj') ||
+      value.includes('nakarm') ||
+      value.includes('pastwisk')
+    ) return 'food'
+
+    if (
+      value.includes('bastion') ||
+      value.includes('vault') ||
+      value.includes('ulepszenie') ||
+      value.includes('naprawiono')
+    ) return 'bastion'
+
+    if (value.includes('zwierzę')) return 'animal'
+    if (value.includes('npc')) return 'npc'
+    if (value.includes('postać')) return 'character'
+    if (value.includes('katalog') || value.includes('bibliotek')) return 'library'
+
+    if (
+      value.includes('przedmiot') ||
+      value.includes('quickpull') ||
+      value.includes('przeniesiono') ||
+      value.includes('zużyto')
+    ) return 'inventory'
+
+    return 'other'
+  }
+
+  function shouldStoreHistory(text: string) {
+    const value = text.toLowerCase()
+    return !(
+      value.includes('kod kampanii skopiowany') ||
+      value.includes('dołączono do kampanii') ||
+      value.includes('kampania została utworzona')
+    )
+  }
+
+  async function recordOperation(
+    text: string,
+    type?: HistoryEventType
+  ) {
+    if (!activeId || !isCloudMode || !shouldStoreHistory(text)) return
+
+    try {
+      await addCampaignHistory(
+        activeId,
+        type ?? historyTypeForMessage(text),
+        text
+      )
+    } catch (e) {
+      console.warn('HISTORY WRITE ERROR:', e)
+    }
+  }
+
+  function flash(text: string, historyType?: HistoryEventType) {
     setMessage(text)
+
+    void recordOperation(text, historyType)
 
     window.setTimeout(
       () => setMessage(null),
@@ -2951,6 +3075,10 @@ function App() {
       })
 
       await refreshAllInventoriesAfterTrade()
+      flash(
+        `${character.name}: ustawiono Coins na ${normalized.toLocaleString('pl-PL')} GP.`,
+        'inventory'
+      )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić stanu Coins.')
       await refreshAllInventoriesAfterTrade()
@@ -2972,6 +3100,7 @@ function App() {
         quantity,
       })
       await refreshAllInventoriesAfterTrade()
+      flash(`Zmieniono ilość przedmiotu na ${quantity}.`, 'inventory')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić ilości.')
       await refreshAllInventoriesAfterTrade()
@@ -3801,6 +3930,41 @@ function App() {
     link.click()
     URL.revokeObjectURL(url)
   }
+  const filteredHistory = useMemo(
+    () =>
+      historyFilter === 'all'
+        ? history
+        : history.filter(entry => entry.eventType === historyFilter),
+    [history, historyFilter]
+  )
+
+  function historyTypeLabel(type: HistoryEventType) {
+    switch (type) {
+      case 'inventory': return 'Ekwipunek'
+      case 'trade': return 'Handel'
+      case 'light': return 'Światło'
+      case 'food': return 'Prowiant'
+      case 'character': return 'Postać'
+      case 'npc': return 'NPC'
+      case 'animal': return 'Zwierzę'
+      case 'bastion': return 'Bastion'
+      case 'library': return 'Biblioteka'
+      default: return 'Inne'
+    }
+  }
+
+  function formatHistoryTime(value: string) {
+    const date = new Date(value)
+    return date.toLocaleString('pl-PL', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+  }
+
 
   return (
     <div className="app-shell">
@@ -4002,7 +4166,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3M • przedmioty zadania i ostrzeżenia</span>
+              Etap 3N • historia operacji</span>
           </div>
 
         </aside>
@@ -5747,6 +5911,127 @@ function App() {
                     </article>
                   ))}
                 </div>
+              </section>
+            </>
+          )}
+
+          {activeView === 'Historia' && (
+            <>
+              <section className="hero parchment-panel">
+                <div>
+                  <p className="eyebrow">HISTORIA OPERACJI</p>
+                  <h1>{active?.name ?? 'Brak aktywnej kampanii'}</h1>
+                  <p>
+                    Wspólny, synchronizowany zapis najważniejszych operacji
+                    wykonywanych przez użytkowników kampanii.
+                  </p>
+                </div>
+
+                <button
+                  className="secondary"
+                  onClick={refreshHistory}
+                  disabled={historyLoading || !activeId}
+                >
+                  <ArrowRightLeft size={16} />
+                  Odśwież
+                </button>
+              </section>
+
+              <section className="panel">
+                <div className="panel-title">
+                  <ArrowRightLeft size={18} />
+                  Historia
+                  <span style={{ marginLeft: 'auto' }}>
+                    {filteredHistory.length} wpisów
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 10,
+                    alignItems: 'end',
+                    marginBottom: 16,
+                  }}
+                >
+                  <label style={{ minWidth: 230 }}>
+                    Filtr
+                    <select
+                      value={historyFilter}
+                      onChange={e =>
+                        setHistoryFilter(
+                          e.target.value as 'all' | HistoryEventType
+                        )
+                      }
+                      style={themedSelectStyle}
+                    >
+                      <option value="all">Wszystkie operacje</option>
+                      <option value="inventory">Ekwipunek</option>
+                      <option value="trade">Handel</option>
+                      <option value="light">Światło</option>
+                      <option value="food">Prowiant</option>
+                      <option value="character">Postacie</option>
+                      <option value="npc">NPC</option>
+                      <option value="animal">Zwierzęta</option>
+                      <option value="bastion">Bastiony</option>
+                      <option value="library">Biblioteka</option>
+                      <option value="other">Inne</option>
+                    </select>
+                  </label>
+                </div>
+
+                {historyLoading ? (
+                  <p className="muted">Ładowanie historii…</p>
+                ) : filteredHistory.length === 0 ? (
+                  <div className="empty-state">
+                    <p>Brak zapisanych operacji dla tego filtra.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {filteredHistory.map(entry => (
+                      <article
+                        key={entry.id}
+                        className="entity-card"
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '165px 110px 1fr',
+                          gap: 14,
+                          alignItems: 'center',
+                        }}
+                      >
+                        <span className="muted">
+                          {formatHistoryTime(entry.createdAt)}
+                        </span>
+
+                        <span
+                          style={{
+                            justifySelf: 'start',
+                            padding: '4px 7px',
+                            borderRadius: 5,
+                            border: '1px solid rgba(180, 135, 60, 0.32)',
+                            background: 'rgba(110, 83, 42, 0.08)',
+                            fontSize: 12,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {historyTypeLabel(entry.eventType)}
+                        </span>
+
+                        <div>
+                          <strong>{entry.message}</strong>
+                          <span
+                            className="muted"
+                            style={{ display: 'block', marginTop: 3 }}
+                          >
+                            Użytkownik: {entry.createdBy
+                              ? entry.createdBy.slice(0, 8)
+                              : '—'}
+                          </span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </section>
             </>
           )}
