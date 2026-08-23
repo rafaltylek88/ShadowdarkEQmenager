@@ -1757,7 +1757,7 @@ function App() {
         refreshNpcItems(),
         refreshNpcs(),
       ])
-      flash(`Przekazano 1 rację: ${from.name} → ${to.name}.`)
+      flash(`${from.name} → ${to.name}: przekazano 1 × Rations.`, 'food')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się przekazać racji.')
     } finally {
@@ -1799,8 +1799,9 @@ function App() {
 
       flash(
         result.method === 'pasture'
-          ? `Nakarmiono ${result.animalsFed} zwierząt na pastwisku. Racje nie zostały zużyte.`
-          : `Nakarmiono ${result.animalsFed} zwierząt racjami. Każde zużyło 1 własną rację.`
+          ? `Nakarmiono ${result.animalsFed} zwierząt na pastwisku — nie zużyto Rations.`
+          : `Nakarmiono ${result.animalsFed} zwierząt — zużyto ${result.animalsFed} × Rations.`,
+        'food'
       )
     } catch (e: any) {
       setError(
@@ -1835,9 +1836,10 @@ function App() {
         refreshNpcs(),
       ])
       flash(
-        `Nakarmiono ekspedycję: ${result.membersFed} ${
+        `Nakarmiono ekspedycję — ${result.membersFed} ${
           result.membersFed === 1 ? 'członek' : 'członków'
-        }.`
+        }, zużyto ${result.membersFed} × Rations.`,
+        'food'
       )
     } catch (e: any) {
       console.error('FEED EXPEDITION ERROR:', e)
@@ -2177,7 +2179,7 @@ function App() {
         refreshNpcItems(),
         refreshNpcs(),
       ])
-      flash('Źródło światła zostało zapalone.')
+      flash(`${selectedLightChoice?.memberName ?? 'Ekspedycja'} zapalił(a): ${selectedLightChoice?.itemName ?? 'źródło światła'}.`, 'light')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się uruchomić światła.')
     } finally {
@@ -2213,7 +2215,7 @@ function App() {
         refreshNpcItems(),
         refreshNpcs(),
       ])
-      flash('Światło zgaszone.')
+      flash(`Zgaszono: ${lightSourceName} • niosący: ${lightCarrierName}.`, 'light')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zgasić światła.')
     } finally {
@@ -2247,7 +2249,7 @@ function App() {
         refreshNpcItems(),
         refreshNpcs(),
       ])
-      flash(`Przekazano światło i przedmiot: ${target.name}.`)
+      flash(`${lightCarrierName} → ${target.name}: przekazano ${lightSourceName} bez zatrzymywania licznika.`, 'light')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się przekazać światła.')
     } finally {
@@ -2659,7 +2661,7 @@ function App() {
           gold: characterGold,
           usedSlots: usedSlotsForCharacter(editingCharacter.id),
         })
-        flash('Postać została zaktualizowana.')
+        flash(`Zaktualizowano Postać: ${characterName}.`, 'character')
       } else {
         await createCharacter(activeId, characterName, characterStrength, characterGold, {
           dexterity: characterDexterity,
@@ -2668,7 +2670,7 @@ function App() {
           wisdom: characterWisdom,
           charisma: characterCharisma,
         })
-        flash('Postać została dodana.')
+        flash(`Dodano Postać: ${characterName}.`, 'character')
       }
 
       setShowCharacter(false)
@@ -2743,7 +2745,7 @@ function App() {
 
     try {
       await deleteCharacter(character.id)
-      flash('Postać została usunięta.')
+      flash(`Usunięto Postać: ${character.name}.`, 'character')
       await refreshCharacters()
     } catch (e: any) {
       console.error('DELETE CHARACTER ERROR:', e)
@@ -2850,7 +2852,7 @@ function App() {
       setCatalog(prev => [...prev.filter(i => i.id !== created.id), created].sort((a, b) => a.name.localeCompare(b.name, 'pl')))
       applyCatalogItem(created)
       setShowCatalogItem(false)
-      flash(`Dodano "${created.name}" do katalogu kampanii.`)
+      flash(`Biblioteka — dodano: ${created.name}.`, 'library')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się dodać przedmiotu do katalogu.')
     }
@@ -2885,14 +2887,20 @@ function App() {
     try {
       if (editingItem) {
         await updateItem(editingItem.id, itemCharacterId, details)
-        flash('Przedmiot został zaktualizowany.')
+        flash(
+          `${characters.find(character => character.id === itemCharacterId)?.name ?? 'Postać'} — zaktualizowano ${itemName}.`,
+          'inventory'
+        )
       } else {
         await createItem({
           campaignId: activeId,
           characterId: itemCharacterId,
           ...details,
         })
-        flash('Przedmiot został dodany.')
+        flash(
+          `${characters.find(character => character.id === itemCharacterId)?.name ?? 'Postać'} — dodano ${itemQuantity} × ${itemName}.`,
+          'inventory'
+        )
       }
       setShowItem(false)
       setEditingItem(null)
@@ -2906,7 +2914,10 @@ function App() {
     if (!window.confirm(`Czy na pewno usunąć "${item.name}" z ekwipunku?`)) return
     try {
       await deleteItem(item.id, item.characterId)
-      flash('Przedmiot został usunięty.')
+      flash(
+        `${characters.find(character => character.id === item.characterId)?.name ?? 'Postać'} — usunięto ${item.quantity} × ${item.name}.`,
+        'inventory'
+      )
       await Promise.all([refreshItems(), refreshCharacters()])
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się usunąć przedmiotu.')
@@ -2934,7 +2945,11 @@ function App() {
           armorProperties: item.armorProperties,
         })
       }
-      flash(`Zużyto 1 × ${item.name}.`)
+      const owner = characters.find(character => character.id === item.characterId)
+      flash(
+        `${owner?.name ?? 'Postać'} — zużyto 1 × ${item.name}.`,
+        item.category === 'food' ? 'food' : 'inventory'
+      )
       await Promise.all([refreshItems(), refreshCharacters()])
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zużyć przedmiotu.')
@@ -3043,9 +3058,21 @@ function App() {
         ),
       })
 
+      const movedQuantity = Math.min(
+        transferMaxQuantity,
+        Math.max(1, transferQuantity)
+      )
+      const sourceLabel = inventoryOwnerLabel(
+        transferFromType,
+        transferFromOwnerId
+      )
+
       setShowTransferItem(false)
       await refreshAllInventoriesAfterTrade()
-      flash(`Przeniesiono "${transferItemName}" → ${target.label}.`)
+      flash(
+        `${sourceLabel} → ${target.label}: przeniesiono ${movedQuantity} × ${transferItemName}.`,
+        'inventory'
+      )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się przenieść przedmiotu.')
     } finally {
@@ -3092,6 +3119,8 @@ function App() {
   ) {
     if (!activeId) return
 
+    const context = inventoryItemContext(ownerType, itemId)
+
     try {
       await setInventoryItemQuantity({
         campaignId: activeId,
@@ -3100,11 +3129,93 @@ function App() {
         quantity,
       })
       await refreshAllInventoriesAfterTrade()
-      flash(`Zmieniono ilość przedmiotu na ${quantity}.`, 'inventory')
+
+      if (context) {
+        flash(
+          `${context.owner} — ${context.name}: ilość ${context.oldQuantity} → ${quantity}.`,
+          'inventory'
+        )
+      } else {
+        flash(`Zmieniono ilość przedmiotu na ${quantity}.`, 'inventory')
+      }
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić ilości.')
       await refreshAllInventoriesAfterTrade()
     }
+  }
+
+  function inventoryOwnerLabel(
+    ownerType: InventoryOwnerType,
+    ownerId: string
+  ) {
+    if (ownerType === 'character') {
+      const owner = characters.find(character => character.id === ownerId)
+      return owner ? `${owner.name} (Postać)` : 'Nieznana Postać'
+    }
+
+    if (ownerType === 'npc') {
+      const owner = npcs.find(npc => npc.id === ownerId)
+      return owner ? `${owner.name} (NPC)` : 'Nieznany NPC'
+    }
+
+    if (ownerType === 'animal') {
+      const owner = animals.find(animal => animal.id === ownerId)
+      return owner ? `${owner.name} (Zwierzę)` : 'Nieznane Zwierzę'
+    }
+
+    const owner = bastions.find(bastion => bastion.id === ownerId)
+    return owner ? `${owner.name} (Vault)` : 'Nieznany Vault'
+  }
+
+  function inventoryItemContext(
+    ownerType: InventoryOwnerType,
+    itemId: string
+  ) {
+    if (ownerType === 'character') {
+      const item = items.find(entry => entry.id === itemId)
+      return item
+        ? {
+            name: item.name,
+            ownerId: item.characterId,
+            owner: inventoryOwnerLabel('character', item.characterId),
+            oldQuantity: item.quantity,
+          }
+        : null
+    }
+
+    if (ownerType === 'npc') {
+      const item = npcItems.find(entry => entry.id === itemId)
+      return item
+        ? {
+            name: item.name,
+            ownerId: item.npcId,
+            owner: inventoryOwnerLabel('npc', item.npcId),
+            oldQuantity: item.quantity,
+          }
+        : null
+    }
+
+    if (ownerType === 'animal') {
+      const item = animalItems.find(entry => entry.id === itemId)
+      return item
+        ? {
+            name: item.name,
+            ownerId: item.animalId,
+            owner: inventoryOwnerLabel('animal', item.animalId),
+            oldQuantity: item.quantity,
+          }
+        : null
+    }
+
+    const item = bastionItems.find(entry => entry.id === itemId)
+    return item
+      ? {
+          name: item.name,
+          ownerId: item.bastionId,
+          owner: inventoryOwnerLabel('bastion', item.bastionId),
+          oldQuantity: item.quantity,
+        }
+      : null
   }
 
   function hasVault(bastionId: string) {
@@ -3271,9 +3382,17 @@ function App() {
         quantity: Math.max(1, buyQuantity),
         priceCp,
       })
+      const boughtItem = catalog.find(entry => entry.id === buyCatalogItemId)
+      const buyer = characters.find(character => character.id === buyCharacterId)
+      const targetLabel = inventoryOwnerLabel(buyOwnerType, buyOwnerId)
+      const boughtQuantity = Math.max(1, buyQuantity)
+
       setShowBuyItem(false)
       await refreshAllInventoriesAfterTrade()
-      flash(`Zakup zakończony. Zapłacono ${formatMoneyCp(priceCp)}.`)
+      flash(
+        `${buyer?.name ?? 'Postać'} kupił(a) ${boughtQuantity} × ${boughtItem?.name ?? 'przedmiot'} za ${formatMoneyCp(priceCp)} → ${targetLabel}.`,
+        'trade'
+      )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się kupić przedmiotu.')
     } finally {
@@ -3298,9 +3417,19 @@ function App() {
         quantity: Math.min(sellMaxQuantity, Math.max(1, sellQuantity)),
         priceCp,
       })
+      const source = inventoryItemContext(sellOwnerType, sellItemId)
+      const receiver = characters.find(character => character.id === sellCharacterId)
+      const soldQuantity = Math.min(
+        sellMaxQuantity,
+        Math.max(1, sellQuantity)
+      )
+
       setShowSellItem(false)
       await refreshAllInventoriesAfterTrade()
-      flash(`Sprzedaż zakończona. Otrzymano ${formatMoneyCp(priceCp)}.`)
+      flash(
+        `${source?.owner ?? 'Ekwipunek'} — sprzedano ${soldQuantity} × ${sellItemName} za ${formatMoneyCp(priceCp)}. Pieniądze otrzymał(a): ${receiver?.name ?? 'Postać'}.`,
+        'trade'
+      )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się sprzedać przedmiotu.')
     } finally {
@@ -3332,7 +3461,7 @@ function App() {
     try {
       await createBastion(activeId, bastionOwnerId, bastionName, bastionTypeId)
       setShowBastion(false)
-      flash('Bastion został dodany.')
+      flash(`Dodano Bastion: ${bastionName}.`, 'bastion')
       await Promise.all([refreshBastions(), refreshCharacters()])
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się utworzyć bastionu.')
@@ -3343,7 +3472,7 @@ function App() {
     if (!window.confirm(`Usunąć bastion "${bastion.name}" wraz z ulepszeniami?`)) return
     try {
       await deleteBastion(bastion.id)
-      flash('Bastion został usunięty.')
+      flash(`Usunięto Bastion: ${bastion.name}.`, 'bastion')
       await refreshBastions()
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się usunąć bastionu.')
@@ -3362,7 +3491,7 @@ function App() {
       await setBastionHp(editingBastionHp.id, bastionHpValue)
       setShowBastionHp(false)
       setEditingBastionHp(null)
-      flash('HP bastionu zaktualizowane.')
+      flash(`${editingBastionHp.name}: ustawiono HP na ${bastionHpValue}/${editingBastionHp.maxHp}.`, 'bastion')
       await refreshBastions()
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić HP bastionu.')
@@ -3381,7 +3510,7 @@ function App() {
       const result = await repairBastion(repairingBastion.id, bastionRepairHp)
       setShowBastionRepair(false)
       setRepairingBastion(null)
-      flash(`Naprawiono ${result.repaired} HP. Koszt: ${result.costGp} gp. Czas: 1 tydzień.`)
+      flash(`${repairingBastion.name}: naprawiono ${result.repaired} HP za ${result.costGp} GP. Czas: 1 tydzień.`, 'bastion')
       await Promise.all([refreshBastions(), refreshCharacters()])
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się naprawić bastionu.')
@@ -3402,7 +3531,7 @@ function App() {
       await addBastionUpgrade(upgradingBastion.id, bastionUpgradeId)
       setShowBastionUpgrade(false)
       setUpgradingBastion(null)
-      flash('Ulepszenie zostało dodane. Budowa trwa 1 tydzień.')
+      flash(`${upgradingBastion.name}: dodano ulepszenie ${bastionUpgradeId}. Budowa trwa 1 tydzień.`, 'bastion')
       await Promise.all([refreshBastions(), refreshCharacters()])
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się dodać ulepszenia.')
@@ -3461,10 +3590,10 @@ function App() {
           baseSlots: animalBaseSlots,
           personality: animalPersonality,
         })
-        flash('Zwierzę zostało zaktualizowane.')
+        flash(`Zaktualizowano Zwierzę: ${animalName}.`, 'animal')
       } else {
         await createAnimal(activeId, animalName, animalType, animalBaseSlots, animalPersonality)
-        flash('Zwierzę zostało dodane.')
+        flash(`Dodano Zwierzę: ${animalName}.`, 'animal')
       }
 
       setShowAnimal(false)
@@ -3480,7 +3609,7 @@ function App() {
 
     try {
       await deleteAnimal(animal.id)
-      flash('Zwierzę zostało usunięte.')
+      flash(`Usunięto Zwierzę: ${animal.name}.`, 'animal')
       await Promise.all([refreshAnimals(), refreshAnimalItems()])
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się usunąć zwierzęcia.')
@@ -3562,7 +3691,10 @@ function App() {
           name: animalItemName,
           quantity: isWagonName(animalItemName) ? 1 : animalItemQuantity,
         })
-        flash('Ekwipunek zwierzęcia został zaktualizowany.')
+        flash(
+          `${animals.find(animal => animal.id === animalItemAnimalId)?.name ?? 'Zwierzę'} (Zwierzę) — zaktualizowano ${animalItemName}.`,
+          'inventory'
+        )
       } else {
         await createAnimalItem({
           campaignId: activeId,
@@ -3602,7 +3734,12 @@ function App() {
 
     try {
       await deleteAnimalItem(item.id)
-      flash(isWagonName(item.name) ? 'Wóz został odpięty od zwierzęcia.' : 'Przedmiot został usunięty.')
+      flash(
+        isWagonName(item.name)
+          ? `${animals.find(animal => animal.id === item.animalId)?.name ?? 'Zwierzę'} (Zwierzę) — odpięto Wóz.`
+          : `${animals.find(animal => animal.id === item.animalId)?.name ?? 'Zwierzę'} (Zwierzę) — usunięto ${item.quantity} × ${item.name}.`,
+        'inventory'
+      )
       await Promise.all([refreshAnimalItems(), refreshAnimals()])
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się usunąć przedmiotu.')
@@ -3638,10 +3775,10 @@ function App() {
           role: npcRole,
           maxSlots: npcMaxSlots,
         })
-        flash('NPC został zaktualizowany.')
+        flash(`Zaktualizowano NPC: ${npcName}.`, 'npc')
       } else {
         await createNpc(activeId, npcName, npcRole, npcMaxSlots)
-        flash('NPC został dodany.')
+        flash(`Dodano NPC: ${npcName}.`, 'npc')
       }
 
       setShowNpc(false)
@@ -3657,7 +3794,7 @@ function App() {
 
     try {
       await deleteNpc(npc.id)
-      flash('NPC został usunięty.')
+      flash(`Usunięto NPC: ${npc.name}.`, 'npc')
       await Promise.all([refreshNpcs(), refreshNpcItems()])
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się usunąć NPC.')
@@ -3746,14 +3883,20 @@ function App() {
     try {
       if (editingNpcItem) {
         await updateNpcItem(editingNpcItem.id, npcItemNpcId, details)
-        flash('Przedmiot NPC został zaktualizowany.')
+        flash(
+          `${npcs.find(npc => npc.id === npcItemNpcId)?.name ?? 'NPC'} (NPC) — zaktualizowano ${npcItemName}.`,
+          'inventory'
+        )
       } else {
         await createNpcItem({
           campaignId: activeId,
           npcId: npcItemNpcId,
           ...details,
         })
-        flash('Przedmiot został dodany NPC.')
+        flash(
+          `${npcs.find(npc => npc.id === npcItemNpcId)?.name ?? 'NPC'} (NPC) — dodano ${npcItemQuantity} × ${npcItemName}.`,
+          'inventory'
+        )
       }
 
       setShowNpcItem(false)
@@ -3769,7 +3912,10 @@ function App() {
 
     try {
       await deleteNpcItem(item.id, item.npcId)
-      flash('Przedmiot NPC został usunięty.')
+      flash(
+        `${npcs.find(npc => npc.id === item.npcId)?.name ?? 'NPC'} (NPC) — usunięto ${item.quantity} × ${item.name}.`,
+        'inventory'
+      )
       await Promise.all([refreshNpcItems(), refreshNpcs()])
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się usunąć przedmiotu NPC.')
@@ -3835,7 +3981,7 @@ function App() {
     try {
       await deleteCatalogItem(entry.id)
       await refreshCatalog()
-      flash('Usunięto pozycję z biblioteki.')
+      flash(`Biblioteka — usunięto: ${entry.name}.`, 'library')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się usunąć pozycji.')
     }
@@ -4166,7 +4312,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3N • historia operacji</span>
+              Etap 3N.1 • czytelna historia operacji</span>
           </div>
 
         </aside>
@@ -6019,14 +6165,6 @@ function App() {
 
                         <div>
                           <strong>{entry.message}</strong>
-                          <span
-                            className="muted"
-                            style={{ display: 'block', marginTop: 3 }}
-                          >
-                            Użytkownik: {entry.createdBy
-                              ? entry.createdBy.slice(0, 8)
-                              : '—'}
-                          </span>
                         </div>
                       </article>
                     ))}
