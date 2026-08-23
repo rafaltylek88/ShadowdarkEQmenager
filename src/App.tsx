@@ -204,6 +204,18 @@ function App() {
   const [characterGold, setCharacterGold] = useState(0)
   const [characterCurrentHp, setCharacterCurrentHp] = useState(1)
   const [characterMaxHp, setCharacterMaxHp] = useState(1)
+  const [characterAncestry, setCharacterAncestry] = useState('')
+  const [characterClassName, setCharacterClassName] = useState('')
+  const [characterLevel, setCharacterLevel] = useState(1)
+  const [characterXp, setCharacterXp] = useState(0)
+  const [characterXpNext, setCharacterXpNext] = useState(10)
+  const [characterTitle, setCharacterTitle] = useState('')
+  const [characterAlignment, setCharacterAlignment] = useState('')
+  const [characterBackground, setCharacterBackground] = useState('')
+  const [characterDeity, setCharacterDeity] = useState('')
+  const [characterTalentsSpells, setCharacterTalentsSpells] = useState('')
+  const [characterBackstory, setCharacterBackstory] = useState('')
+  const [characterPortraitUrl, setCharacterPortraitUrl] = useState('')
 
   const [npcs, setNpcs] = useState<Npc[]>([])
   const [npcsLoading, setNpcsLoading] = useState(false)
@@ -2646,6 +2658,18 @@ function App() {
     setCharacterGold(0)
     setCharacterMaxHp(1)
     setCharacterCurrentHp(1)
+    setCharacterAncestry('')
+    setCharacterClassName('')
+    setCharacterLevel(1)
+    setCharacterXp(0)
+    setCharacterXpNext(10)
+    setCharacterTitle('')
+    setCharacterAlignment('')
+    setCharacterBackground('')
+    setCharacterDeity('')
+    setCharacterTalentsSpells('')
+    setCharacterBackstory('')
+    setCharacterPortraitUrl('')
     setShowCharacter(true)
   }
 
@@ -2661,6 +2685,18 @@ function App() {
     setCharacterGold(character.gold)
     setCharacterMaxHp(character.maxHp)
     setCharacterCurrentHp(character.currentHp)
+    setCharacterAncestry(character.ancestry)
+    setCharacterClassName(character.className)
+    setCharacterLevel(character.level)
+    setCharacterXp(character.xp)
+    setCharacterXpNext(character.xpNext)
+    setCharacterTitle(character.title)
+    setCharacterAlignment(character.alignment)
+    setCharacterBackground(character.background)
+    setCharacterDeity(character.deity)
+    setCharacterTalentsSpells(character.talentsSpells)
+    setCharacterBackstory(character.backstory)
+    setCharacterPortraitUrl(character.portraitUrl)
     setShowCharacter(true)
   }
 
@@ -2688,6 +2724,18 @@ function App() {
           gold: characterGold,
           currentHp: Math.min(characterCurrentHp, characterMaxHp),
           maxHp: characterMaxHp,
+          ancestry: characterAncestry,
+          className: characterClassName,
+          level: characterLevel,
+          xp: characterXp,
+          xpNext: characterXpNext,
+          title: characterTitle,
+          alignment: characterAlignment,
+          background: characterBackground,
+          deity: characterDeity,
+          talentsSpells: characterTalentsSpells,
+          backstory: characterBackstory,
+          portraitUrl: characterPortraitUrl,
           usedSlots: usedSlotsForCharacter(editingCharacter.id),
         })
         flash(`Zaktualizowano Postać: ${characterName}.`, 'character')
@@ -2700,6 +2748,18 @@ function App() {
           charisma: characterCharisma,
           currentHp: Math.min(characterCurrentHp, characterMaxHp),
           maxHp: characterMaxHp,
+          ancestry: characterAncestry,
+          className: characterClassName,
+          level: characterLevel,
+          xp: characterXp,
+          xpNext: characterXpNext,
+          title: characterTitle,
+          alignment: characterAlignment,
+          background: characterBackground,
+          deity: characterDeity,
+          talentsSpells: characterTalentsSpells,
+          backstory: characterBackstory,
+          portraitUrl: characterPortraitUrl,
         })
         flash(`Dodano Postać: ${characterName}.`, 'character')
       }
@@ -3294,6 +3354,18 @@ function App() {
         gold: normalized,
         currentHp: character.currentHp,
         maxHp: character.maxHp,
+        ancestry: character.ancestry,
+        className: character.className,
+        level: character.level,
+        xp: character.xp,
+        xpNext: character.xpNext,
+        title: character.title,
+        alignment: character.alignment,
+        background: character.background,
+        deity: character.deity,
+        talentsSpells: character.talentsSpells,
+        backstory: character.backstory,
+        portraitUrl: character.portraitUrl,
         usedSlots: character.usedSlots,
       })
 
@@ -4511,7 +4583,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3O.2 • jawne wymagania rąk</span>
+              Etap 3P • szczegółowa karta postaci</span>
           </div>
 
         </aside>
@@ -5469,6 +5541,142 @@ function App() {
                                 </button>
                               </div>
                             </div>
+
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: '150px minmax(0, 1fr)',
+                                gap: 14,
+                                marginTop: 14,
+                                alignItems: 'stretch',
+                              }}
+                            >
+                              <div
+                                style={{
+                                  minHeight: 180,
+                                  border: '1px solid rgba(180, 135, 60, 0.38)',
+                                  borderRadius: 8,
+                                  overflow: 'hidden',
+                                  background: 'rgba(110, 83, 42, 0.08)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                {character.portraitUrl ? (
+                                  <img
+                                    src={character.portraitUrl}
+                                    alt={`Portret ${character.name}`}
+                                    style={{
+                                      width: '100%',
+                                      height: '100%',
+                                      minHeight: 180,
+                                      objectFit: 'cover',
+                                      display: 'block',
+                                    }}
+                                  />
+                                ) : (
+                                  <div
+                                    className="muted"
+                                    style={{
+                                      textAlign: 'center',
+                                      padding: 16,
+                                      lineHeight: 1.5,
+                                    }}
+                                  >
+                                    <Users size={32} style={{ marginBottom: 8 }} />
+                                    <div>PORTRET</div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                                  gap: 8,
+                                }}
+                              >
+                                {[
+                                  ['Ancestry', character.ancestry || '—'],
+                                  ['Class', character.className || '—'],
+                                  ['Level', character.level],
+                                  ['XP', `${character.xp} / ${character.xpNext}`],
+                                  ['Title', character.title || '—'],
+                                  ['Alignment', character.alignment || '—'],
+                                  ['Background', character.background || '—'],
+                                  ['Deity', character.deity || '—'],
+                                ].map(([label, value]) => (
+                                  <div
+                                    key={String(label)}
+                                    style={{
+                                      border: '1px solid rgba(180, 135, 60, 0.28)',
+                                      borderRadius: 7,
+                                      padding: '8px 10px',
+                                      background: 'rgba(110, 83, 42, 0.07)',
+                                    }}
+                                  >
+                                    <span className="muted">{label}</span>
+                                    <strong style={{ display: 'block', marginTop: 3 }}>
+                                      {value}
+                                    </strong>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {(character.talentsSpells || character.backstory) && (
+                              <div
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                                  gap: 10,
+                                  marginTop: 12,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    border: '1px solid rgba(180, 135, 60, 0.28)',
+                                    borderRadius: 7,
+                                    padding: '10px 12px',
+                                    background: 'rgba(110, 83, 42, 0.07)',
+                                    minHeight: 120,
+                                  }}
+                                >
+                                  <strong>TALENTY / ZAKLĘCIA</strong>
+                                  <div
+                                    style={{
+                                      whiteSpace: 'pre-wrap',
+                                      marginTop: 8,
+                                      lineHeight: 1.45,
+                                    }}
+                                  >
+                                    {character.talentsSpells || '—'}
+                                  </div>
+                                </div>
+
+                                <div
+                                  style={{
+                                    border: '1px solid rgba(180, 135, 60, 0.28)',
+                                    borderRadius: 7,
+                                    padding: '10px 12px',
+                                    background: 'rgba(110, 83, 42, 0.07)',
+                                    minHeight: 120,
+                                  }}
+                                >
+                                  <strong>HISTORIA POSTACI</strong>
+                                  <div
+                                    style={{
+                                      whiteSpace: 'pre-wrap',
+                                      marginTop: 8,
+                                      lineHeight: 1.45,
+                                    }}
+                                  >
+                                    {character.backstory || '—'}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
 
                             <div
                               style={{
@@ -7325,6 +7533,135 @@ function App() {
               value={characterName}
               onChange={e => setCharacterName(e.target.value)}
               placeholder="np. Aric"
+            />
+          </label>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 10,
+            }}
+          >
+            <label>
+              Ancestry / Pochodzenie
+              <input
+                value={characterAncestry}
+                onChange={e => setCharacterAncestry(e.target.value)}
+                placeholder="np. Wood Elf"
+              />
+            </label>
+
+            <label>
+              Class / Klasa
+              <input
+                value={characterClassName}
+                onChange={e => setCharacterClassName(e.target.value)}
+                placeholder="np. Ranger"
+              />
+            </label>
+
+            <label>
+              Level / Poziom
+              <input
+                type="number"
+                min="1"
+                value={characterLevel}
+                onChange={e => setCharacterLevel(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+              />
+            </label>
+
+            <label>
+              Title / Tytuł
+              <input
+                value={characterTitle}
+                onChange={e => setCharacterTitle(e.target.value)}
+                placeholder="np. Stranger"
+              />
+            </label>
+
+            <label>
+              Alignment / Charakter
+              <input
+                value={characterAlignment}
+                onChange={e => setCharacterAlignment(e.target.value)}
+                placeholder="np. Neutral"
+              />
+            </label>
+
+            <label>
+              Background / Pochodzenie społeczne
+              <input
+                value={characterBackground}
+                onChange={e => setCharacterBackground(e.target.value)}
+                placeholder="np. Mercenary"
+              />
+            </label>
+
+            <label>
+              Deity / Bóstwo
+              <input
+                value={characterDeity}
+                onChange={e => setCharacterDeity(e.target.value)}
+                placeholder="np. Gede"
+              />
+            </label>
+
+            <label>
+              URL portretu
+              <input
+                value={characterPortraitUrl}
+                onChange={e => setCharacterPortraitUrl(e.target.value)}
+                placeholder="https://..."
+              />
+            </label>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 10,
+            }}
+          >
+            <label>
+              XP
+              <input
+                type="number"
+                min="0"
+                value={characterXp}
+                onChange={e => setCharacterXp(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+              />
+            </label>
+
+            <label>
+              XP do następnego poziomu
+              <input
+                type="number"
+                min="1"
+                value={characterXpNext}
+                onChange={e => setCharacterXpNext(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+              />
+            </label>
+          </div>
+
+          <label>
+            Talenty / Zaklęcia / Języki / Biegłości
+            <textarea
+              value={characterTalentsSpells}
+              onChange={e => setCharacterTalentsSpells(e.target.value)}
+              placeholder="Np. WEAPONS: Dagger, Longbow...&#10;LANGUAGES: Common, Elvish...&#10;Ranger: HERBALISM..."
+              rows={7}
+            />
+          </label>
+
+          <label>
+            Historia postaci
+            <textarea
+              value={characterBackstory}
+              onChange={e => setCharacterBackstory(e.target.value)}
+              placeholder="Historia, ważne wydarzenia, cele, relacje, notatki..."
+              rows={7}
             />
           </label>
 
