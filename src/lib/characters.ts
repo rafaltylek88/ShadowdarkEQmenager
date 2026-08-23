@@ -12,6 +12,8 @@ export type Character = {
   charisma: number
   usedSlots: number
   gold: number
+  currentHp: number
+  maxHp: number
   lastFedAt: string | null
   createdBy?: string
   createdAt?: string
@@ -31,6 +33,8 @@ function mapCharacter(row: any): Character {
     charisma: Number(row.charisma ?? 10),
     usedSlots: Number(row.used_slots ?? 0),
     gold: Number(row.gold ?? 0),
+    currentHp: Math.max(0, Number(row.current_hp ?? 1)),
+    maxHp: Math.max(1, Number(row.max_hp ?? 1)),
     lastFedAt: row.last_fed_at ?? null,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -58,6 +62,8 @@ export async function createCharacter(
     intelligence: number
     wisdom: number
     charisma: number
+    currentHp?: number
+    maxHp?: number
   }
 ): Promise<Character> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
@@ -74,6 +80,11 @@ export async function createCharacter(
     wisdom: stats?.wisdom ?? 10,
     charisma: stats?.charisma ?? 10,
     gold,
+    max_hp: Math.max(1, Math.floor(stats?.maxHp ?? 1)),
+    current_hp: Math.min(
+      Math.max(0, Math.floor(stats?.currentHp ?? stats?.maxHp ?? 1)),
+      Math.max(1, Math.floor(stats?.maxHp ?? 1))
+    ),
     used_slots: 0,
     created_by: userData.user.id,
   }).select('*').single()
@@ -93,6 +104,8 @@ export async function updateCharacter(
     wisdom: number
     charisma: number
     gold: number
+    currentHp: number
+    maxHp: number
     usedSlots: number
   }
 ): Promise<Character> {
@@ -106,6 +119,11 @@ export async function updateCharacter(
     wisdom: changes.wisdom,
     charisma: changes.charisma,
     gold: changes.gold,
+    max_hp: Math.max(1, Math.floor(changes.maxHp)),
+    current_hp: Math.min(
+      Math.max(0, Math.floor(changes.currentHp)),
+      Math.max(1, Math.floor(changes.maxHp))
+    ),
     used_slots: changes.usedSlots,
   }).eq('id', id).select('*').single()
   if (error) throw error
