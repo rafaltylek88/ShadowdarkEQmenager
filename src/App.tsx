@@ -2920,6 +2920,34 @@ function App() {
     }
   }
 
+  async function changeCharacterCoins(
+    character: Character,
+    valueGp: number
+  ) {
+    if (!activeId) return
+
+    const normalized = Math.max(0, Math.round(valueGp * 100) / 100)
+
+    try {
+      await updateCharacter(character.id, {
+        name: character.name,
+        strength: character.strength,
+        dexterity: character.dexterity,
+        constitution: character.constitution,
+        intelligence: character.intelligence,
+        wisdom: character.wisdom,
+        charisma: character.charisma,
+        gold: normalized,
+        usedSlots: character.usedSlots,
+      })
+
+      await refreshAllInventoriesAfterTrade()
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zmienić stanu Coins.')
+      await refreshAllInventoriesAfterTrade()
+    }
+  }
+
   async function changeInventoryQuantity(
     ownerType: InventoryOwnerType,
     itemId: string,
@@ -3878,7 +3906,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3L • znaczniki ekwipunku</span>
+              Etap 3L.1 • Coins z dokładnością do CP</span>
           </div>
 
         </aside>
@@ -4835,18 +4863,29 @@ function App() {
                                         {inventoryCategoryMarker(item)}
                                         <strong>{item.name}</strong>
                                         {' • ilość: '}
-                                        <InventoryQuantityInput
-                                          value={item.quantity}
-                                          disabled={item.isActiveLight}
-                                          onCommit={value =>
-                                            changeInventoryQuantity(
-                                              'character',
-                                              item.id,
-                                              value
-                                            )
-                                          }
-                                        />
+                                        {isCoinInventoryItem(item) ? (
+                                          <InventoryQuantityInput
+                                            value={character.gold}
+                                            decimals
+                                            onCommit={value =>
+                                              changeCharacterCoins(character, value)
+                                            }
+                                          />
+                                        ) : (
+                                          <InventoryQuantityInput
+                                            value={item.quantity}
+                                            disabled={item.isActiveLight}
+                                            onCommit={value =>
+                                              changeInventoryQuantity(
+                                                'character',
+                                                item.id,
+                                                value
+                                              )
+                                            }
+                                          />
+                                        )}
                                         {' • '}
+                                        {isCoinInventoryItem(item) ? 'GP • ' : ''}
                                         {formatSlotRule(item)}
                                         
                                         {item.category === 'light' && ` • ${item.lightMinutes ?? 60} min`}
@@ -6829,28 +6868,39 @@ function StatInput({
 function InventoryQuantityInput({
   value,
   disabled = false,
+  decimals = false,
   onCommit,
 }: {
   value: number
   disabled?: boolean
+  decimals?: boolean
   onCommit: (value: number) => void | Promise<void>
 }) {
-  const [draft, setDraft] = useState(String(value))
+  const formatValue = (input: number) =>
+    decimals ? String(Math.round(input * 100) / 100) : String(Math.floor(input))
+
+  const [draft, setDraft] = useState(formatValue(value))
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    setDraft(String(value))
-  }, [value])
+    setDraft(formatValue(value))
+  }, [value, decimals])
 
-  const parsed = Math.max(0, Math.floor(Number(draft) || 0))
-  const changed = parsed !== value
+  const normalizedDraft = draft.replace(',', '.')
+  const parsedRaw = Number(normalizedDraft)
+  const parsed = decimals
+    ? Math.max(0, Math.round((Number.isFinite(parsedRaw) ? parsedRaw : 0) * 100) / 100)
+    : Math.max(0, Math.floor(Number.isFinite(parsedRaw) ? parsedRaw : 0))
+
+  const changed = Math.abs(parsed - value) > 0.0001
 
   async function commit() {
     if (disabled || !changed || saving) return
+
     setSaving(true)
     try {
       await onCommit(parsed)
-      setDraft(String(parsed))
+      setDraft(formatValue(parsed))
     } finally {
       setSaving(false)
     }
@@ -6867,19 +6917,26 @@ function InventoryQuantityInput({
     >
       <input
         type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
+        inputMode={decimals ? 'decimal' : 'numeric'}
         value={draft}
         disabled={disabled || saving}
-        onChange={e => setDraft(e.target.value.replace(/[^0-9]/g, ''))}
+        onChange={e => {
+          const raw = e.target.value.replace(',', '.')
+          const next = decimals
+            ? raw.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')
+            : raw.replace(/[^0-9]/g, '')
+          setDraft(next)
+        }}
         title={
           disabled
             ? 'Nie można zmieniać ilości aktywnego źródła światła.'
-            : 'Wpisz nową ilość i zatwierdź zielonym ptaszkiem.'
+            : decimals
+              ? 'Wpisz wartość w GP z dokładnością do 0,01 GP i zatwierdź zielonym ptaszkiem.'
+              : 'Wpisz nową ilość i zatwierdź zielonym ptaszkiem.'
         }
         style={{
-          width: 58,
-          minWidth: 58,
+          width: decimals ? 72 : 58,
+          minWidth: decimals ? 72 : 58,
           padding: '5px 7px',
           borderRadius: 6,
           border: '1px solid rgba(138, 101, 48, 0.72)',
