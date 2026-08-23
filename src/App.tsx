@@ -292,6 +292,7 @@ function App() {
   const [catalogWeaponDamage, setCatalogWeaponDamage] = useState('')
   const [catalogWeaponRange, setCatalogWeaponRange] = useState('')
   const [catalogWeaponProperties, setCatalogWeaponProperties] = useState('')
+  const [catalogHandsRequired, setCatalogHandsRequired] = useState<1 | 2>(1)
   const [catalogArmorClass, setCatalogArmorClass] = useState('')
   const [catalogArmorProperties, setCatalogArmorProperties] = useState('')
   const [catalogIsMagical, setCatalogIsMagical] = useState(false)
@@ -2753,99 +2754,86 @@ function App() {
   }
 
   function equippedWeaponForCharacter(characterId: string) {
-    return equippedItemsForCharacter(characterId).find(
-      item => item.category === 'weapon'
-    ) ?? null
+    return equippedItemsForCharacter(characterId).find(item => item.category === 'weapon') ?? null
   }
 
   function equippedShieldForCharacter(characterId: string) {
     return equippedItemsForCharacter(characterId).find(
-      item =>
-        item.category === 'armor' &&
-        /^\s*\+/.test(item.armorClass ?? '')
+      item => item.category === 'armor' && /^\s*\+/.test(item.armorClass ?? '')
     ) ?? null
   }
 
   function activeLightForCharacter(characterId: string) {
-    return itemsForCharacter(characterId).find(
-      item => item.isActiveLight
-    ) ?? null
+    return itemsForCharacter(characterId).find(item => item.isActiveLight) ?? null
   }
 
-  function weaponIsTwoHanded(item: CharacterItem | null) {
-    if (!item || item.category !== 'weapon') return false
+  function weaponHandsRequired(item: CharacterItem | null): 1 | 2 {
+    if (!item || item.category !== 'weapon') return 1
 
-    const properties = (item.weaponProperties ?? '')
+    const catalogItem = catalogEntryForItem(item.catalogItemId)
+    if (catalogItem?.handsRequired === 2) return 2
+    if (catalogItem?.handsRequired === 1) return 1
+
+    const fallback = (item.weaponProperties ?? '')
       .toLowerCase()
       .replace(/[()]/g, ' ')
       .replace(/two[\s-]?handed/g, '2h')
 
-    return /(^|[\s,;])2h($|[\s,;])/.test(properties)
+    return /(^|[\s,;])2h($|[\s,;])/.test(fallback) ? 2 : 1
   }
 
-  function handsConflictForCharacter(
-    characterId: string,
-    nextItem?: CharacterItem
-  ): string | null {
-    const currentWeapon = equippedWeaponForCharacter(characterId)
-    const currentShield = equippedShieldForCharacter(characterId)
-    const currentLight = activeLightForCharacter(characterId)
+  function weaponIsTwoHanded(item: CharacterItem | null) {
+    return weaponHandsRequired(item) === 2
+  }
 
-    let weapon = currentWeapon
-    let shield = currentShield
+  function handConflictForLoadout(characterId: string, nextItem?: CharacterItem) {
+    let weapon = equippedWeaponForCharacter(characterId)
+    let shield = equippedShieldForCharacter(characterId)
+    const light = activeLightForCharacter(characterId)
 
-    if (nextItem?.category === 'weapon') {
-      weapon = nextItem
-    } else if (
-      nextItem?.category === 'armor' &&
-      /^\s*\+/.test(nextItem.armorClass ?? '')
-    ) {
+    if (nextItem?.category === 'weapon') weapon = nextItem
+    if (nextItem?.category === 'armor' && /^\s*\+/.test(nextItem.armorClass ?? '')) {
       shield = nextItem
     }
 
-    if (weaponIsTwoHanded(weapon) && shield) {
-      return 'Broń dwuręczna wymaga obu rąk i nie może być używana z tarczą.'
-    }
+    const used =
+      (weapon ? weaponHandsRequired(weapon) : 0) +
+      (shield ? 1 : 0) +
+      (light ? 1 : 0)
 
-    if (weaponIsTwoHanded(weapon) && currentLight) {
-      return 'Broń dwuręczna wymaga obu rąk i nie może być używana razem ze źródłem światła.'
+    if (used <= 2) return null
+    if (weapon && weaponHandsRequired(weapon) === 2 && shield) {
+      return 'Broń dwuręczna zajmuje obie ręce i nie może być używana z tarczą.'
     }
-
-    if (weapon && shield && currentLight) {
-      return 'Broń jednoręczna + tarcza zajmują obie ręce. Brakuje wolnej ręki na źródło światła.'
+    if (weapon && weaponHandsRequired(weapon) === 2 && light) {
+      return 'Broń dwuręczna zajmuje obie ręce i nie może być używana razem ze źródłem światła.'
     }
-
-    return null
+    return 'Broń, tarcza i źródło światła wymagają łącznie 3 rąk.'
   }
 
   function canCharacterCarryActiveLight(characterId: string) {
     const weapon = equippedWeaponForCharacter(characterId)
     const shield = equippedShieldForCharacter(characterId)
+    const used = (weapon ? weaponHandsRequired(weapon) : 0) + (shield ? 1 : 0)
 
-    if (weaponIsTwoHanded(weapon)) {
+    if (used < 2) return null
+    if (weapon && weaponHandsRequired(weapon) === 2) {
       return 'Ta Postać używa broni dwuręcznej i nie ma wolnej ręki na źródło światła.'
     }
-
-    if (weapon && shield) {
-      return 'Ta Postać używa broni i tarczy, więc nie ma wolnej ręki na źródło światła.'
-    }
-
-    return null
+    return 'Ta Postać używa broni i tarczy, więc nie ma wolnej ręki na źródło światła.'
   }
 
-  function dashboardWeaponText(characterId: string) {
+  function handsDisplayForCharacter(characterId: string) {
     const weapon = equippedWeaponForCharacter(characterId)
     const shield = equippedShieldForCharacter(characterId)
+    const light = activeLightForCharacter(characterId)
+    const parts: string[] = []
 
-    if (!weapon && !shield) return '—'
+    if (weapon) parts.push(`${weapon.name}${weapon.weaponDamage ? ` (${weapon.weaponDamage})` : ''}`)
+    if (shield) parts.push(shield.name)
+    if (light) parts.push(light.name)
 
-    const weaponText = weapon
-      ? `${weapon.name}${weapon.weaponDamage ? ` (${weapon.weaponDamage})` : ''}`
-      : ''
-
-    if (weapon && shield) return `${weaponText} + ${shield.name}`
-    if (weapon) return weaponText
-    return shield?.name ?? '—'
+    return parts.length ? parts.join(' + ') : '—'
   }
 
   function parseArmorBase(
@@ -2896,7 +2884,7 @@ function App() {
     item: CharacterItem
   ) {
     if (!item.isEquipped) {
-      const conflict = handsConflictForCharacter(character.id, item)
+      const conflict = handConflictForLoadout(character.id, item)
       if (conflict) {
         setError(conflict)
         return
@@ -3024,6 +3012,7 @@ function App() {
     setCatalogWeaponDamage('')
     setCatalogWeaponRange('')
     setCatalogWeaponProperties('')
+    setCatalogHandsRequired(1)
     setCatalogArmorClass('')
     setCatalogArmorProperties('')
     setCatalogIsMagical(false)
@@ -3047,6 +3036,7 @@ function App() {
         weaponDamage: catalogCategory === 'weapon' ? catalogWeaponDamage : null,
         weaponRange: catalogCategory === 'weapon' ? catalogWeaponRange : null,
         weaponProperties: catalogCategory === 'weapon' ? catalogWeaponProperties : null,
+        handsRequired: catalogCategory === 'weapon' ? catalogHandsRequired : 1,
         armorClass: catalogCategory === 'armor' ? catalogArmorClass : null,
         armorProperties: catalogCategory === 'armor' ? catalogArmorProperties : null,
         isMagical: catalogIsMagical,
@@ -4146,6 +4136,7 @@ function App() {
       if (entry.weaponDamage) parts.push(`obrażenia ${entry.weaponDamage}`)
       if (entry.weaponRange) parts.push(`zasięg ${entry.weaponRange}`)
       if (entry.weaponProperties) parts.push(entry.weaponProperties)
+      parts.push(entry.handsRequired === 2 ? '2 ręce' : '1 ręka')
     }
     if (entry.category === 'armor') {
       if (entry.armorClass) parts.push(`KP/AC ${entry.armorClass}`)
@@ -4203,7 +4194,7 @@ function App() {
       const [name, categoryRaw = 'normal', slotsRaw = '1', lightRaw = '',
         weaponDamage = '', weaponRange = '', weaponProperties = '',
         armorClass = '', armorProperties = '', slotGroupRaw = '1',
-        freeQuantityRaw = '0', magicalRaw = 'false', magicDescription = '', questRaw = 'false'] = cols
+        freeQuantityRaw = '0', magicalRaw = 'false', magicDescription = '', questRaw = 'false', handsRaw = '1'] = cols
 
       if (!name) throw new Error(`Brak nazwy przedmiotu w wierszu ${index + 1 + start}.`)
 
@@ -4222,9 +4213,11 @@ function App() {
       const lightParsed = lightRaw === '' ? null : Number(lightRaw.replace(',', '.'))
       const isMagical = ['1', 'true', 'tak', 'yes'].includes(magicalRaw.toLowerCase())
       const isQuestItem = ['1', 'true', 'tak', 'yes'].includes(questRaw.toLowerCase())
+      const handsRequired: 1 | 2 =
+        category === 'weapon' && Number(handsRaw) === 2 ? 2 : 1
 
       return {
-        name, category, slotsPerUnit, slotGroupSize, freeQuantity, isMagical, isQuestItem,
+        name, category, slotsPerUnit, slotGroupSize, freeQuantity, isMagical, isQuestItem, handsRequired,
         magicDescription: isMagical ? magicDescription || null : null,
         lightMinutes: category === 'light' && lightParsed != null && Number.isFinite(lightParsed) ? lightParsed : null,
         weaponDamage: category === 'weapon' ? weaponDamage || null : null,
@@ -4270,7 +4263,7 @@ function App() {
        entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '',
        entry.armorClass ?? '', entry.armorProperties ?? '', entry.slotGroupSize, entry.freeQuantity,
        entry.isMagical ? 'true' : 'false', entry.magicDescription ?? '',
-       entry.isQuestItem ? 'true' : 'false']
+       entry.isQuestItem ? 'true' : 'false', entry.handsRequired]
         .map(value => String(value).split(';').join(',')).join(';')
     )
 
@@ -4518,7 +4511,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3O.1 • ręce i aktywne wyposażenie</span>
+              Etap 3O.2 • jawne wymagania rąk</span>
           </div>
 
         </aside>
@@ -5244,8 +5237,8 @@ function App() {
                         </div>
 
                         <div className="slot-line" style={{ marginTop: 8 }}>
-                          <span>Broń / tarcza</span>
-                          <b>{dashboardWeaponText(character.id)}</b>
+                          <span>W rękach</span>
+                          <b>{handsDisplayForCharacter(character.id)}</b>
                         </div>
 
                         <div className="slot-line" style={{ marginTop: 8 }}>
@@ -5435,7 +5428,7 @@ function App() {
                                 <span style={{ display: 'block', marginTop: 4 }}>
                                   HP <strong>{character.currentHp}/{character.maxHp}</strong>
                                   {' • '}AC <strong>{armorClassForCharacter(character)}</strong>
-                                  {' • '}Broń / tarcza: <strong>{dashboardWeaponText(character.id)}</strong>
+                                  {' • '}W rękach: <strong>{handsDisplayForCharacter(character.id)}</strong>
                                 </span>
                                 <span style={{ display: 'block', marginTop: 4 }}>
                                   Ostatnio nakarmiona: {formatLastFed(character.lastFedAt)}
@@ -5553,9 +5546,9 @@ function App() {
                                   background: 'rgba(110, 83, 42, 0.07)',
                                 }}
                               >
-                                <span className="muted">Broń / tarcza</span>
+                                <span className="muted">W rękach</span>
                                 <strong style={{ display: 'block', marginTop: 3 }}>
-                                  {dashboardWeaponText(character.id)}
+                                  {handsDisplayForCharacter(character.id)}
                                 </strong>
                               </div>
                             </div>
@@ -5563,13 +5556,16 @@ function App() {
                             <div className="slot-line" style={{ marginTop: 12 }}>
                               <span>Ręce</span>
                               <b>
-                                {weaponIsTwoHanded(equippedWeaponForCharacter(character.id))
-                                  ? '2/2 • broń dwuręczna'
-                                  : [
-                                      equippedWeaponForCharacter(character.id) ? 'broń' : null,
-                                      equippedShieldForCharacter(character.id) ? 'tarcza' : null,
-                                      activeLightForCharacter(character.id) ? 'światło' : null,
-                                    ].filter(Boolean).join(' + ') || 'wolne'}
+                                {(() => {
+                                  const weapon = equippedWeaponForCharacter(character.id)
+                                  const shield = equippedShieldForCharacter(character.id)
+                                  const light = activeLightForCharacter(character.id)
+                                  const used =
+                                    (weapon ? weaponHandsRequired(weapon) : 0) +
+                                    (shield ? 1 : 0) +
+                                    (light ? 1 : 0)
+                                  return `${used}/2 • ${handsDisplayForCharacter(character.id)}`
+                                })()}
                               </b>
                             </div>
 
@@ -7543,6 +7539,17 @@ function App() {
               <label>Obrażenia<input value={catalogWeaponDamage} onChange={e => setCatalogWeaponDamage(e.target.value)} placeholder="np. 1d6" /></label>
               <label>Zasięg<input value={catalogWeaponRange} onChange={e => setCatalogWeaponRange(e.target.value)} placeholder="np. bliski" /></label>
               <label>Właściwości broni<input value={catalogWeaponProperties} onChange={e => setCatalogWeaponProperties(e.target.value)} placeholder="np. dwuręczna" /></label>
+              <label>
+                Wymagane ręce
+                <select
+                  value={catalogHandsRequired}
+                  onChange={e => setCatalogHandsRequired(Number(e.target.value) === 2 ? 2 : 1)}
+                  style={themedSelectStyle}
+                >
+                  <option value={1}>1 ręka</option>
+                  <option value={2}>2 ręce</option>
+                </select>
+              </label>
             </>
           )}
 
@@ -7628,7 +7635,7 @@ function App() {
           <p className="eyebrow">IMPORT BIBLIOTEKI</p>
           <h2>Importuj przedmioty z CSV</h2>
           <p className="muted">
-            Każdy wiersz: nazwa;typ;sloty;czas światła;obrażenia;zasięg;właściwości broni;KP/AC;właściwości pancerza;wielkość grupy slotu;darmowa ilość;magiczny;opis magii;przedmiot zadania.
+            Każdy wiersz: nazwa;typ;sloty;czas światła;obrażenia;zasięg;właściwości broni;KP/AC;właściwości pancerza;wielkość grupy slotu;darmowa ilość;magiczny;opis magii;przedmiot zadania;wymagane ręce.
           </p>
           <textarea
             rows={12}
