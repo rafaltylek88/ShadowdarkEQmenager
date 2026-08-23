@@ -1242,32 +1242,6 @@ function App() {
         }
       }
 
-      if (category === 'light') {
-        return {
-          border: '1px solid rgba(196, 154, 48, 0.72)',
-          borderRadius: 8,
-          padding: '10px 12px',
-          alignItems: 'center',
-          background:
-            'linear-gradient(135deg, rgba(173, 132, 32, 0.20), rgba(92, 76, 35, 0.16))',
-          boxShadow:
-            'inset 0 0 0 1px rgba(242, 208, 102, 0.08)',
-        }
-      }
-
-      if (category === 'food') {
-        return {
-          border: '1px solid rgba(78, 122, 65, 0.75)',
-          borderRadius: 8,
-          padding: '10px 12px',
-          alignItems: 'center',
-          background:
-            'linear-gradient(135deg, rgba(64, 104, 56, 0.22), rgba(50, 78, 47, 0.16))',
-          boxShadow:
-            'inset 0 0 0 1px rgba(142, 181, 110, 0.08)',
-        }
-      }
-
       return {
         borderTop: '1px solid rgba(180, 135, 60, 0.25)',
         paddingTop: 8,
@@ -1314,6 +1288,87 @@ function App() {
       ['coin', 'coins'].includes(itemKey) ||
       ['coin', 'coins'].includes(catalogKey)
     )
+  }
+
+  function sortInventoryForDisplay<
+    T extends { name: string; catalogItemId: string | null }
+  >(inventory: T[]): T[] {
+    return [...inventory].sort((a, b) => {
+      const aCoin = isCoinInventoryItem(a) ? 1 : 0
+      const bCoin = isCoinInventoryItem(b) ? 1 : 0
+      return aCoin - bCoin
+    })
+  }
+
+  function inventoryCategoryMarker(item: {
+    name: string
+    catalogItemId: string | null
+    category: ItemCategory
+  }) {
+    const commonStyle = {
+      width: 21,
+      height: 21,
+      minWidth: 21,
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 5,
+      marginRight: 7,
+      verticalAlign: 'middle',
+    } as const
+
+    if (isCoinInventoryItem(item)) {
+      return (
+        <span
+          title="Coins"
+          aria-label="Coins"
+          style={{
+            ...commonStyle,
+            color: '#d8b35f',
+            border: '1px solid rgba(188, 143, 55, 0.58)',
+            background: 'rgba(117, 82, 27, 0.18)',
+          }}
+        >
+          <Coins size={13} />
+        </span>
+      )
+    }
+
+    if (item.category === 'food') {
+      return (
+        <span
+          title="Rations / żywność"
+          aria-label="Rations / żywność"
+          style={{
+            ...commonStyle,
+            color: '#87aa68',
+            border: '1px solid rgba(105, 139, 78, 0.55)',
+            background: 'rgba(65, 91, 49, 0.17)',
+          }}
+        >
+          <Utensils size={13} />
+        </span>
+      )
+    }
+
+    if (item.category === 'light') {
+      return (
+        <span
+          title="Źródło światła"
+          aria-label="Źródło światła"
+          style={{
+            ...commonStyle,
+            color: '#d6a846',
+            border: '1px solid rgba(189, 137, 42, 0.58)',
+            background: 'rgba(112, 76, 25, 0.17)',
+          }}
+        >
+          <Flame size={13} />
+        </span>
+      )
+    }
+
+    return null
   }
 
   const charactersWealth = useMemo(
@@ -3823,7 +3878,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3K • szybkie karty postaci</span>
+              Etap 3L • znaczniki ekwipunku</span>
           </div>
 
         </aside>
@@ -4756,7 +4811,7 @@ function App() {
                                 </p>
                               ) : (
                                 <div style={{ display: 'grid', gap: 8 }}>
-                                  {characterItems.map(item => (
+                                  {sortInventoryForDisplay(characterItems).map(item => (
                                     <div
                                       key={item.id}
                                       className="slot-line"
@@ -4777,6 +4832,7 @@ function App() {
                                       }}
                                     >
                                       <span>
+                                        {inventoryCategoryMarker(item)}
                                         <strong>{item.name}</strong>
                                         {' • ilość: '}
                                         <InventoryQuantityInput
@@ -4792,9 +4848,8 @@ function App() {
                                         />
                                         {' • '}
                                         {formatSlotRule(item)}
-                                        {item.category === 'food' && ' • ŻYWNOŚĆ'}
-                                        {item.category === 'light' &&
-                                          ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
+                                        
+                                        {item.category === 'light' && ` • ${item.lightMinutes ?? 60} min`}
                                         {item.category === 'weapon' &&
                                           ` • broń${item.weaponDamage ? ` • obrażenia ${item.weaponDamage}` : ''}${item.weaponRange ? ` • zasięg ${item.weaponRange}` : ''}`}
                                         {item.category === 'armor' &&
@@ -5014,7 +5069,7 @@ function App() {
                                 <p className="muted">Brak wyposażenia.</p>
                               ) : (
                                 <div style={{ display: 'grid', gap: 8 }}>
-                                  {currentItems.map(item => {
+                                  {sortInventoryForDisplay(currentItems).map(item => {
                                     const wagon = isWagonName(item.name)
 
                                     return (
@@ -5037,7 +5092,8 @@ function App() {
                                         }
                                       >
                                         <span>
-                                          <strong>{item.name}</strong>
+                                          {inventoryCategoryMarker(item)}
+                                              <strong>{item.name}</strong>
                                           {wagon ? (
                                             <>
                                               {' • '}
@@ -5055,8 +5111,8 @@ function App() {
                                                 }
                                               />
                                               {' • '}{formatSlotRule(item)}
-                                              {item.category === 'food' && ' • ŻYWNOŚĆ'}
-                                              {item.category === 'light' && ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
+                                              
+                                              {item.category === 'light' && ` • ${item.lightMinutes ?? 60} min`}
                                               {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
                                         {isQuestInventoryItem(item.catalogItemId) && ' • PRZEDMIOT ZADANIA'}
                                               {isMagicalInventoryItem(item.catalogItemId) &&
@@ -5196,13 +5252,14 @@ function App() {
                                 <p className="muted">Brak przedmiotów.</p>
                               ) : (
                                 <div style={{ display: 'grid', gap: 8 }}>
-                                  {currentItems.map(item => (
+                                  {sortInventoryForDisplay(currentItems).map(item => (
                                     <div
                                       key={item.id}
                                       className="slot-line"
                                       style={inventoryHighlightStyle(item.category, isMagicalInventoryItem(item.catalogItemId), isQuestInventoryItem(item.catalogItemId))}
                                     >
                                       <span>
+                                        {inventoryCategoryMarker(item)}
                                         <strong>{item.name}</strong>
                                         {' • ilość: '}
                                         <InventoryQuantityInput
@@ -5213,9 +5270,8 @@ function App() {
                                           }
                                         />
                                         {' • '}{formatSlotRule(item)}
-                                        {item.category === 'food' && ' • ŻYWNOŚĆ'}
-                                        {item.category === 'light' &&
-                                          ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
+                                        
+                                        {item.category === 'light' && ` • ${item.lightMinutes ?? 60} min`}
                                         {item.category === 'weapon' &&
                                           ` • broń${item.weaponDamage ? ` • obrażenia ${item.weaponDamage}` : ''}`}
                                         {item.category === 'armor' &&
@@ -5408,7 +5464,7 @@ function App() {
                                   <p className="muted">Vault jest pusty.</p>
                                 ) : (
                                   <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
-                                    {itemsForBastion(bastion.id).map(item => (
+                                    {sortInventoryForDisplay(itemsForBastion(bastion.id)).map(item => (
                                       <div
                                         key={item.id}
                                         className="slot-line"
@@ -5419,6 +5475,7 @@ function App() {
                                         )}
                                       >
                                         <span>
+                                          {inventoryCategoryMarker(item)}
                                           <strong>{item.name}</strong>
                                           {' • ilość: '}
                                           <InventoryQuantityInput
@@ -5428,8 +5485,8 @@ function App() {
                                             }
                                           />
                                           {' • '}{formatSlotRule(item)}
-                                          {item.category === 'food' && ' • ŻYWNOŚĆ'}
-                                          {item.category === 'light' && ` • ŚWIATŁO ${item.lightMinutes ?? 60} min`}
+                                          
+                                          {item.category === 'light' && ` • ${item.lightMinutes ?? 60} min`}
                                           {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
                                         {isQuestInventoryItem(item.catalogItemId) && ' • PRZEDMIOT ZADANIA'}
                                         </span>
@@ -5534,6 +5591,7 @@ function App() {
                       >
                         <div className="entity-head">
                           <strong>
+                            {inventoryCategoryMarker({ name: group.name, catalogItemId: group.catalogItemId, category: group.category })}
                             {group.name}
                             {isMagicalInventoryItem(group.catalogItemId) ? ' • MAGICZNY' : ''}
                             {isQuestInventoryItem(group.catalogItemId) ? ' • PRZEDMIOT ZADANIA' : ''}
@@ -5616,6 +5674,7 @@ function App() {
                           style={inventoryHighlightStyle(entry.category, entry.isMagical, entry.isQuestItem)}
                         >
                           <div className="entity-head">
+                            {inventoryCategoryMarker({ name: entry.name, catalogItemId: entry.id, category: entry.category })}
                             <strong>{entry.name}</strong>
                             <span>
                               {catalogCategoryLabel(entry.category)}
