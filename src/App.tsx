@@ -4312,7 +4312,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3N.1 • czytelna historia operacji</span>
+              Etap 3N.2 • porządek widoków</span>
           </div>
 
         </aside>
@@ -6371,12 +6371,12 @@ function App() {
             </>
           )}
 
-          {activeView !== 'Dashboard' && activeView !== 'Postacie' && activeView !== 'NPC' && activeView !== 'Zwierzęta' && activeView !== 'Bastiony' && activeView !== 'Biblioteka' && (
+          {activeView === 'Wózy' && (
             <section className="hero parchment-panel">
               <div>
-                <p className="eyebrow">{activeView.toUpperCase()}</p>
-                <h1>{activeView}</h1>
-                <p>Ta sekcja zostanie podłączona do Supabase w kolejnym etapie.</p>
+                <p className="eyebrow">WÓZY</p>
+                <h1>Wózy</h1>
+                <p>Ta sekcja zostanie rozwinięta w osobnym etapie.</p>
               </div>
             </section>
           )}
