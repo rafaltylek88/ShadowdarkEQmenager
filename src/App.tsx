@@ -2773,6 +2773,113 @@ function App() {
     }
   }
 
+  function fullCharacterChanges(
+    character: Character,
+    overrides: Partial<{
+      gold: number
+      currentHp: number
+      maxHp: number
+      xp: number
+      xpNext: number
+      portraitUrl: string
+      usedSlots: number
+    }> = {}
+  ) {
+    return {
+      name: character.name,
+      strength: character.strength,
+      dexterity: character.dexterity,
+      constitution: character.constitution,
+      intelligence: character.intelligence,
+      wisdom: character.wisdom,
+      charisma: character.charisma,
+      gold: overrides.gold ?? character.gold,
+      currentHp: overrides.currentHp ?? character.currentHp,
+      maxHp: overrides.maxHp ?? character.maxHp,
+      ancestry: character.ancestry,
+      className: character.className,
+      level: character.level,
+      xp: overrides.xp ?? character.xp,
+      xpNext: overrides.xpNext ?? character.xpNext,
+      title: character.title,
+      alignment: character.alignment,
+      background: character.background,
+      deity: character.deity,
+      talentsSpells: character.talentsSpells,
+      backstory: character.backstory,
+      portraitUrl: overrides.portraitUrl ?? character.portraitUrl,
+      usedSlots: overrides.usedSlots ?? usedSlotsForCharacter(character.id),
+    }
+  }
+
+  async function adjustCharacterXp(character: Character, delta: number) {
+    const nextXp = Math.max(0, character.xp + delta)
+
+    try {
+      await updateCharacter(
+        character.id,
+        fullCharacterChanges(character, { xp: nextXp })
+      )
+      await refreshCharacters()
+      flash(
+        `${character.name}: XP ${character.xp} → ${nextXp}.`,
+        'character'
+      )
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zmienić XP.')
+    }
+  }
+
+  async function uploadCharacterPortrait(
+    character: Character,
+    file: File
+  ) {
+    if (!supabase || !activeId) return
+
+    if (!file.type.startsWith('image/')) {
+      setError('Portret musi być plikiem graficznym.')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Portret może mieć maksymalnie 5 MB.')
+      return
+    }
+
+    const extension =
+      file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') ||
+      'jpg'
+    const objectPath = `${activeId}/${character.id}/${Date.now()}.${extension}`
+
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from('character-portraits')
+        .upload(objectPath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type,
+        })
+
+      if (uploadError) throw uploadError
+
+      const { data } = supabase.storage
+        .from('character-portraits')
+        .getPublicUrl(objectPath)
+
+      const portraitUrl = data.publicUrl
+
+      await updateCharacter(
+        character.id,
+        fullCharacterChanges(character, { portraitUrl })
+      )
+
+      await refreshCharacters()
+      flash(`${character.name}: zmieniono portret.`, 'character')
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się przesłać portretu.')
+    }
+  }
+
   const sortedCharacters = useMemo(
     () =>
       [...characters].sort((a, b) =>
@@ -4583,7 +4690,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3P • szczegółowa karta postaci</span>
+              Etap 3P.1 • pełna karta sesyjna</span>
           </div>
 
         </aside>
@@ -5465,7 +5572,661 @@ function App() {
                     </div>
                   ) : (
                     <div style={{ display: 'grid', gap: 16 }}>
-                      {visibleCharacters.map(character => {
+                      {selectedCharacter && (() => {
+                      const character = selectedCharacter
+                      const maxSlots = Math.max(10, character.strength)
+                      const usedSlots = usedSlotsForCharacter(character.id)
+                      const characterItems = itemsForCharacter(character.id)
+                      const weapon = equippedWeaponForCharacter(character.id)
+                      const shield = equippedShieldForCharacter(character.id)
+                      const light = activeLightForCharacter(character.id)
+                      const handsUsed =
+                        (weapon ? weaponHandsRequired(weapon) : 0) +
+                        (shield ? 1 : 0) +
+                        (light ? 1 : 0)
+
+                      const sheetPanel = {
+                        border: '1px solid rgba(180, 135, 60, 0.34)',
+                        borderRadius: 8,
+                        background:
+                          'linear-gradient(180deg, rgba(45, 35, 22, 0.50), rgba(18, 16, 13, 0.88))',
+                      } as const
+
+                      const fieldBox = {
+                        border: '1px solid rgba(180, 135, 60, 0.30)',
+                        borderRadius: 6,
+                        padding: '7px 10px',
+                        background: 'rgba(12, 11, 9, 0.68)',
+                      } as const
+
+                      return (
+                        <article
+                          key={`sheet-${character.id}`}
+                          style={{
+                            ...sheetPanel,
+                            padding: 14,
+                            marginBottom: 16,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 12,
+                              alignItems: 'center',
+                              marginBottom: 12,
+                            }}
+                          >
+                            <button
+                              className="secondary"
+                              onClick={openAllCharacters}
+                            >
+                              ← Wszystkie postacie
+                            </button>
+
+                            <div className="button-row">
+                              <button
+                                className="secondary"
+                                onClick={() => openEditCharacter(character)}
+                              >
+                                <Pencil size={15} />
+                                Edytuj kartę
+                              </button>
+
+                              <button
+                                className="danger"
+                                onClick={() => removeCharacter(character)}
+                              >
+                                <Trash2 size={15} />
+                                Usuń postać
+                              </button>
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns:
+                                '220px minmax(360px, 1.45fr) minmax(240px, 0.9fr)',
+                              gap: 12,
+                              alignItems: 'stretch',
+                            }}
+                          >
+                            <div style={{ ...sheetPanel, padding: 8 }}>
+                              <div
+                                style={{
+                                  aspectRatio: '4 / 5',
+                                  border: '1px solid rgba(197, 148, 58, 0.58)',
+                                  borderRadius: 7,
+                                  overflow: 'hidden',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: 'rgba(9, 9, 8, 0.85)',
+                                }}
+                              >
+                                {character.portraitUrl ? (
+                                  <img
+                                    src={character.portraitUrl}
+                                    alt={`Portret ${character.name}`}
+                                    style={{
+                                      width: '100%',
+                                      height: '100%',
+                                      objectFit: 'cover',
+                                      display: 'block',
+                                    }}
+                                  />
+                                ) : (
+                                  <div
+                                    className="muted"
+                                    style={{ textAlign: 'center', padding: 16 }}
+                                  >
+                                    <Users size={38} />
+                                    <div style={{ marginTop: 8 }}>PORTRET</div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <label
+                                className="secondary"
+                                style={{
+                                  display: 'flex',
+                                  marginTop: 8,
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <Users size={15} />
+                                Zmień portret
+                                <input
+                                  type="file"
+                                  accept="image/png,image/jpeg,image/webp"
+                                  style={{ display: 'none' }}
+                                  onChange={e => {
+                                    const file = e.target.files?.[0]
+                                    if (file) {
+                                      void uploadCharacterPortrait(character, file)
+                                    }
+                                    e.currentTarget.value = ''
+                                  }}
+                                />
+                              </label>
+                              <div
+                                className="muted"
+                                style={{
+                                  textAlign: 'center',
+                                  fontSize: 11,
+                                  marginTop: 5,
+                                }}
+                              >
+                                PNG / JPG / WEBP • maks. 5 MB
+                              </div>
+                            </div>
+
+                            <div style={{ ...sheetPanel, padding: 12 }}>
+                              <div
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                                  gap: 8,
+                                }}
+                              >
+                                {[
+                                  ['IMIĘ', character.name || '—'],
+                                  ['TYTUŁ', character.title || '—'],
+                                  ['ANCESTRY', character.ancestry || '—'],
+                                  ['ALIGNMENT', character.alignment || '—'],
+                                  ['KLASA', character.className || '—'],
+                                  ['BACKGROUND', character.background || '—'],
+                                ].map(([label, value]) => (
+                                  <div key={String(label)} style={fieldBox}>
+                                    <span
+                                      className="muted"
+                                      style={{ fontSize: 10, letterSpacing: 1 }}
+                                    >
+                                      {label}
+                                    </span>
+                                    <strong
+                                      style={{
+                                        display: 'block',
+                                        marginTop: 4,
+                                        fontSize: 16,
+                                      }}
+                                    >
+                                      {value}
+                                    </strong>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: '105px minmax(0, 1fr)',
+                                  gap: 8,
+                                  marginTop: 8,
+                                }}
+                              >
+                                <div style={fieldBox}>
+                                  <span className="muted">POZIOM</span>
+                                  <strong
+                                    style={{
+                                      display: 'block',
+                                      fontSize: 20,
+                                      marginTop: 4,
+                                    }}
+                                  >
+                                    {character.level}
+                                  </strong>
+                                </div>
+
+                                <div style={fieldBox}>
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                    }}
+                                  >
+                                    <span className="muted">XP</span>
+                                    <strong>
+                                      {character.xp} / {character.xpNext}
+                                    </strong>
+                                  </div>
+
+                                  <div
+                                    className="button-row"
+                                    style={{ marginTop: 7, flexWrap: 'wrap' }}
+                                  >
+                                    {[-1, 1, -10, 10].map(delta => (
+                                      <button
+                                        key={delta}
+                                        className="secondary"
+                                        onClick={() =>
+                                          void adjustCharacterXp(character, delta)
+                                        }
+                                        disabled={delta < 0 && character.xp === 0}
+                                        style={{ minWidth: 42 }}
+                                      >
+                                        {delta > 0 ? `+${delta}` : delta}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ ...fieldBox, marginTop: 8 }}>
+                                <span className="muted">BÓSTWO / DEITY</span>
+                                <strong
+                                  style={{
+                                    display: 'block',
+                                    marginTop: 4,
+                                    fontSize: 16,
+                                  }}
+                                >
+                                  {character.deity || '—'}
+                                </strong>
+                              </div>
+                            </div>
+
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateRows: 'repeat(4, minmax(0, 1fr))',
+                                gap: 8,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  ...sheetPanel,
+                                  padding: '10px 12px',
+                                  borderColor: 'rgba(164, 69, 54, 0.55)',
+                                }}
+                              >
+                                <span className="muted">HP</span>
+                                <strong
+                                  style={{
+                                    display: 'block',
+                                    marginTop: 4,
+                                    fontSize: 24,
+                                  }}
+                                >
+                                  {character.currentHp}/{character.maxHp}
+                                </strong>
+                              </div>
+
+                              <div
+                                style={{
+                                  ...sheetPanel,
+                                  padding: '10px 12px',
+                                  borderColor: 'rgba(75, 118, 153, 0.55)',
+                                }}
+                              >
+                                <span className="muted">AC</span>
+                                <strong
+                                  style={{
+                                    display: 'block',
+                                    marginTop: 4,
+                                    fontSize: 24,
+                                  }}
+                                >
+                                  {armorClassForCharacter(character)}
+                                </strong>
+                              </div>
+
+                              <div
+                                style={{
+                                  ...sheetPanel,
+                                  padding: '10px 12px',
+                                  borderColor: 'rgba(83, 133, 68, 0.55)',
+                                }}
+                              >
+                                <span className="muted">W RĘKACH</span>
+                                <strong
+                                  style={{
+                                    display: 'block',
+                                    marginTop: 4,
+                                    lineHeight: 1.35,
+                                  }}
+                                >
+                                  {handsDisplayForCharacter(character.id)}
+                                </strong>
+                                <span
+                                  className="muted"
+                                  style={{ display: 'block', marginTop: 4 }}
+                                >
+                                  {handsUsed}/2 ręce
+                                </span>
+                              </div>
+
+                              <div style={{ ...sheetPanel, padding: '10px 12px' }}>
+                                <div className="slot-line">
+                                  <span>SLOTY</span>
+                                  <b>
+                                    {Number(usedSlots.toFixed(2))}/{maxSlots}
+                                  </b>
+                                </div>
+                                <div className="progress small">
+                                  <i
+                                    style={{
+                                      width: `${Math.min(
+                                        100,
+                                        maxSlots > 0
+                                          ? (usedSlots / maxSlots) * 100
+                                          : 0
+                                      )}%`,
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns:
+                                'minmax(310px, 0.85fr) minmax(390px, 1.1fr) minmax(390px, 1.1fr)',
+                              gap: 12,
+                              marginTop: 12,
+                            }}
+                          >
+                            <section style={{ ...sheetPanel, padding: 12 }}>
+                              <div className="panel-title">STATYSTYKI</div>
+
+                              <div style={{ display: 'grid', gap: 0 }}>
+                                {[
+                                  ['STR', character.strength],
+                                  ['DEX', character.dexterity],
+                                  ['CON', character.constitution],
+                                  ['INT', character.intelligence],
+                                  ['WIS', character.wisdom],
+                                  ['CHA', character.charisma],
+                                ].map(([label, value]) => (
+                                  <div
+                                    key={String(label)}
+                                    style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '1fr 70px 90px',
+                                      gap: 8,
+                                      padding: '8px 4px',
+                                      borderBottom:
+                                        '1px solid rgba(180, 135, 60, 0.20)',
+                                    }}
+                                  >
+                                    <strong>{label}</strong>
+                                    <span style={{ textAlign: 'right' }}>
+                                      {value}
+                                    </span>
+                                    <strong style={{ textAlign: 'right' }}>
+                                      {formatModifier(
+                                        statModifier(Number(value))
+                                      )}
+                                    </strong>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div style={{ ...fieldBox, marginTop: 10 }}>
+                                <span className="muted">
+                                  QUICKPULL (DEX)
+                                </span>
+                                <strong style={{ float: 'right' }}>
+                                  {quickpullCount(character.id)}/
+                                  {quickpullLimit(character)}
+                                </strong>
+                              </div>
+                            </section>
+
+                            <section style={{ ...sheetPanel, padding: 12 }}>
+                              <div className="panel-title">
+                                TALENTY / ZAKLĘCIA / JĘZYKI / BIEGŁOŚCI
+                              </div>
+                              <div
+                                style={{
+                                  ...fieldBox,
+                                  minHeight: 270,
+                                  whiteSpace: 'pre-wrap',
+                                  lineHeight: 1.45,
+                                }}
+                              >
+                                {character.talentsSpells || '—'}
+                              </div>
+                            </section>
+
+                            <section style={{ ...sheetPanel, padding: 12 }}>
+                              <div className="panel-title">
+                                HISTORIA POSTACI
+                              </div>
+                              <div
+                                style={{
+                                  ...fieldBox,
+                                  minHeight: 270,
+                                  whiteSpace: 'pre-wrap',
+                                  lineHeight: 1.5,
+                                }}
+                              >
+                                {character.backstory || '—'}
+                              </div>
+                            </section>
+                          </div>
+
+                          <section
+                            style={{
+                              ...sheetPanel,
+                              padding: 12,
+                              marginTop: 12,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 10,
+                                marginBottom: 10,
+                              }}
+                            >
+                              <div className="panel-title" style={{ margin: 0 }}>
+                                EKWIPUNEK
+                              </div>
+
+                              <div className="button-row">
+                                <button
+                                  className="secondary"
+                                  onClick={() => openNewItem(character.id)}
+                                >
+                                  <Package size={15} />
+                                  Dodaj przedmiot
+                                </button>
+                                <button
+                                  className="secondary"
+                                  onClick={() =>
+                                    openBuyItem('character', character.id)
+                                  }
+                                >
+                                  <Coins size={15} />
+                                  Kup
+                                </button>
+                              </div>
+                            </div>
+
+                            {characterItems.length === 0 ? (
+                              <p className="muted">Brak przedmiotów.</p>
+                            ) : (
+                              <div style={{ display: 'grid', gap: 7 }}>
+                                {sortInventoryForDisplay(characterItems).map(
+                                  item => (
+                                    <div
+                                      key={`sheet-item-${item.id}`}
+                                      className="slot-line"
+                                      style={{
+                                        ...inventoryHighlightStyle(
+                                          item.category,
+                                          isMagicalInventoryItem(
+                                            item.catalogItemId
+                                          ),
+                                          isQuestInventoryItem(
+                                            item.catalogItemId
+                                          )
+                                        ),
+                                        ...(item.isEquipped
+                                          ? {
+                                              border:
+                                                '1px solid rgba(80, 146, 76, 0.95)',
+                                              boxShadow:
+                                                'inset 0 0 0 1px rgba(127, 187, 108, 0.12)',
+                                            }
+                                          : {}),
+                                        ...(item.isQuickpull
+                                          ? {
+                                              outline:
+                                                '2px solid rgba(218, 183, 103, 0.95)',
+                                              outlineOffset: '2px',
+                                            }
+                                          : {}),
+                                      }}
+                                    >
+                                      <span>
+                                        {inventoryCategoryMarker(item)}
+                                        {(item.isEquipped ||
+                                          item.isActiveLight) && (
+                                          <span
+                                            title="Wyposażone / trzymane"
+                                            style={{
+                                              width: 21,
+                                              height: 21,
+                                              minWidth: 21,
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              borderRadius: 5,
+                                              marginRight: 7,
+                                              color: '#8fbe7d',
+                                              border:
+                                                '1px solid rgba(83, 145, 76, 0.62)',
+                                              background:
+                                                'rgba(55, 100, 49, 0.17)',
+                                            }}
+                                          >
+                                            <Hand size={13} />
+                                          </span>
+                                        )}
+                                        <strong>{item.name}</strong>
+                                        {' • ilość: '}
+                                        <InventoryQuantityInput
+                                          value={
+                                            isCoinInventoryItem(item)
+                                              ? character.gold
+                                              : item.quantity
+                                          }
+                                          decimals={isCoinInventoryItem(item)}
+                                          disabled={item.isActiveLight}
+                                          onCommit={value =>
+                                            isCoinInventoryItem(item)
+                                              ? changeCharacterCoins(
+                                                  character,
+                                                  value
+                                                )
+                                              : changeInventoryQuantity(
+                                                  'character',
+                                                  item.id,
+                                                  value
+                                                )
+                                          }
+                                        />
+                                        {' • '}
+                                        {formatSlotRule(item)}
+                                        {item.category === 'weapon' &&
+                                          item.weaponDamage &&
+                                          ` • ${item.weaponDamage}`}
+                                        {item.category === 'weapon' &&
+                                          ` • ${
+                                            weaponHandsRequired(item) === 2
+                                              ? '2 ręce'
+                                              : '1 ręka'
+                                          }`}
+                                        {item.isQuickpull && ' • QUICKPULL'}
+                                        {item.isEquipped && ' • WYPOSAŻONE'}
+                                      </span>
+
+                                      <div className="button-row">
+                                        {(item.category === 'weapon' ||
+                                          item.category === 'armor') && (
+                                          <button
+                                            className="secondary"
+                                            onClick={() =>
+                                              toggleEquippedItem(
+                                                character,
+                                                item
+                                              )
+                                            }
+                                          >
+                                            <Hand size={14} />
+                                            {item.isEquipped
+                                              ? 'Zdejmij'
+                                              : 'Wyposaż'}
+                                          </button>
+                                        )}
+
+                                        <button
+                                          className="secondary"
+                                          onClick={() =>
+                                            toggleQuickpull(character, item)
+                                          }
+                                        >
+                                          Quickpull
+                                        </button>
+
+                                        <button
+                                          className="secondary"
+                                          onClick={() =>
+                                            openTransferItem(
+                                              'character',
+                                              character.id,
+                                              item
+                                            )
+                                          }
+                                        >
+                                          <ArrowRightLeft size={14} />
+                                          Przenieś
+                                        </button>
+
+                                        <button
+                                          className="secondary"
+                                          onClick={() =>
+                                            openSellItem(
+                                              'character',
+                                              item
+                                            )
+                                          }
+                                        >
+                                          <Coins size={14} />
+                                          Sprzedaj
+                                        </button>
+
+                                        <button
+                                          className="danger"
+                                          onClick={() =>
+                                            removeItem(item)
+                                          }
+                                        >
+                                          <Trash2 size={14} />
+                                          Usuń
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            )}
+                          </section>
+                        </article>
+                      )
+                    })()}
+
+                    {(selectedCharacterId ? [] : visibleCharacters).map(character => {
                         const maxSlots = Math.max(10, character.strength)
                         const usedSlots = usedSlotsForCharacter(character.id)
                         const characterItems = itemsForCharacter(character.id)
