@@ -12,6 +12,7 @@ import {
   Flame,
   Gauge,
   Home,
+  Hand,
   KeyRound,
   Menu,
   Package,
@@ -2168,6 +2169,16 @@ function App() {
         return
       }
 
+      if (selectedLightChoice.memberType === 'character') {
+        const handConflict = canCharacterCarryActiveLight(
+          selectedLightChoice.memberId
+        )
+        if (handConflict) {
+          setError(handConflict)
+          return
+        }
+      }
+
       setLightState(
         await startCampaignLight(
           activeId,
@@ -2240,6 +2251,14 @@ function App() {
       member => member.key === lightTransferCharacterId
     )
     if (!target) return
+
+    if (target.type === 'character') {
+      const handConflict = canCharacterCarryActiveLight(target.id)
+      if (handConflict) {
+        setError(handConflict)
+        return
+      }
+    }
 
     try {
       setLightLoading(true)
@@ -2739,6 +2758,96 @@ function App() {
     ) ?? null
   }
 
+  function equippedShieldForCharacter(characterId: string) {
+    return equippedItemsForCharacter(characterId).find(
+      item =>
+        item.category === 'armor' &&
+        /^\s*\+/.test(item.armorClass ?? '')
+    ) ?? null
+  }
+
+  function activeLightForCharacter(characterId: string) {
+    return itemsForCharacter(characterId).find(
+      item => item.isActiveLight
+    ) ?? null
+  }
+
+  function weaponIsTwoHanded(item: CharacterItem | null) {
+    if (!item || item.category !== 'weapon') return false
+
+    const properties = (item.weaponProperties ?? '')
+      .toLowerCase()
+      .replace(/[()]/g, ' ')
+      .replace(/two[\s-]?handed/g, '2h')
+
+    return /(^|[\s,;])2h($|[\s,;])/.test(properties)
+  }
+
+  function handsConflictForCharacter(
+    characterId: string,
+    nextItem?: CharacterItem
+  ): string | null {
+    const currentWeapon = equippedWeaponForCharacter(characterId)
+    const currentShield = equippedShieldForCharacter(characterId)
+    const currentLight = activeLightForCharacter(characterId)
+
+    let weapon = currentWeapon
+    let shield = currentShield
+
+    if (nextItem?.category === 'weapon') {
+      weapon = nextItem
+    } else if (
+      nextItem?.category === 'armor' &&
+      /^\s*\+/.test(nextItem.armorClass ?? '')
+    ) {
+      shield = nextItem
+    }
+
+    if (weaponIsTwoHanded(weapon) && shield) {
+      return 'Broń dwuręczna wymaga obu rąk i nie może być używana z tarczą.'
+    }
+
+    if (weaponIsTwoHanded(weapon) && currentLight) {
+      return 'Broń dwuręczna wymaga obu rąk i nie może być używana razem ze źródłem światła.'
+    }
+
+    if (weapon && shield && currentLight) {
+      return 'Broń jednoręczna + tarcza zajmują obie ręce. Brakuje wolnej ręki na źródło światła.'
+    }
+
+    return null
+  }
+
+  function canCharacterCarryActiveLight(characterId: string) {
+    const weapon = equippedWeaponForCharacter(characterId)
+    const shield = equippedShieldForCharacter(characterId)
+
+    if (weaponIsTwoHanded(weapon)) {
+      return 'Ta Postać używa broni dwuręcznej i nie ma wolnej ręki na źródło światła.'
+    }
+
+    if (weapon && shield) {
+      return 'Ta Postać używa broni i tarczy, więc nie ma wolnej ręki na źródło światła.'
+    }
+
+    return null
+  }
+
+  function dashboardWeaponText(characterId: string) {
+    const weapon = equippedWeaponForCharacter(characterId)
+    const shield = equippedShieldForCharacter(characterId)
+
+    if (!weapon && !shield) return '—'
+
+    const weaponText = weapon
+      ? `${weapon.name}${weapon.weaponDamage ? ` (${weapon.weaponDamage})` : ''}`
+      : ''
+
+    if (weapon && shield) return `${weaponText} + ${shield.name}`
+    if (weapon) return weaponText
+    return shield?.name ?? '—'
+  }
+
   function parseArmorBase(
     armorClass: string | null,
     dexModifier: number
@@ -2786,6 +2895,14 @@ function App() {
     character: Character,
     item: CharacterItem
   ) {
+    if (!item.isEquipped) {
+      const conflict = handsConflictForCharacter(character.id, item)
+      if (conflict) {
+        setError(conflict)
+        return
+      }
+    }
+
     try {
       await setCharacterItemEquipped(item.id, !item.isEquipped)
       await refreshItems()
@@ -4401,7 +4518,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3O • HP, AC i aktywne wyposażenie</span>
+              Etap 3O.1 • ręce i aktywne wyposażenie</span>
           </div>
 
         </aside>
@@ -5127,14 +5244,12 @@ function App() {
                         </div>
 
                         <div className="slot-line" style={{ marginTop: 8 }}>
-                          <span>Broń</span>
-                          <b>
-                            {equippedWeaponForCharacter(character.id)?.name ?? '—'}
-                          </b>
+                          <span>Broń / tarcza</span>
+                          <b>{dashboardWeaponText(character.id)}</b>
                         </div>
 
                         <div className="slot-line" style={{ marginTop: 8 }}>
-                          <span>SIŁA {character.strength}</span>
+                          <span>Sloty</span>
                           <b>{displayedUsedSlots}/{maxSlots}</b>
                         </div>
 
@@ -5320,7 +5435,7 @@ function App() {
                                 <span style={{ display: 'block', marginTop: 4 }}>
                                   HP <strong>{character.currentHp}/{character.maxHp}</strong>
                                   {' • '}AC <strong>{armorClassForCharacter(character)}</strong>
-                                  {' • '}Broń: <strong>{equippedWeaponForCharacter(character.id)?.name ?? '—'}</strong>
+                                  {' • '}Broń / tarcza: <strong>{dashboardWeaponText(character.id)}</strong>
                                 </span>
                                 <span style={{ display: 'block', marginTop: 4 }}>
                                   Ostatnio nakarmiona: {formatLastFed(character.lastFedAt)}
@@ -5438,11 +5553,24 @@ function App() {
                                   background: 'rgba(110, 83, 42, 0.07)',
                                 }}
                               >
-                                <span className="muted">Aktywna broń</span>
+                                <span className="muted">Broń / tarcza</span>
                                 <strong style={{ display: 'block', marginTop: 3 }}>
-                                  {equippedWeaponForCharacter(character.id)?.name ?? '—'}
+                                  {dashboardWeaponText(character.id)}
                                 </strong>
                               </div>
+                            </div>
+
+                            <div className="slot-line" style={{ marginTop: 12 }}>
+                              <span>Ręce</span>
+                              <b>
+                                {weaponIsTwoHanded(equippedWeaponForCharacter(character.id))
+                                  ? '2/2 • broń dwuręczna'
+                                  : [
+                                      equippedWeaponForCharacter(character.id) ? 'broń' : null,
+                                      equippedShieldForCharacter(character.id) ? 'tarcza' : null,
+                                      activeLightForCharacter(character.id) ? 'światło' : null,
+                                    ].filter(Boolean).join(' + ') || 'wolne'}
+                              </b>
                             </div>
 
                             <div className="slot-line" style={{ marginTop: 12 }}>
@@ -5482,9 +5610,9 @@ function App() {
                                         ),
                                         ...(item.isEquipped
                                           ? {
-                                              borderColor: 'rgba(132, 153, 118, 0.72)',
+                                              border: '1px solid rgba(80, 146, 76, 0.95)',
                                               boxShadow:
-                                                'inset 0 0 0 1px rgba(169, 190, 145, 0.08)',
+                                                'inset 0 0 0 1px rgba(127, 187, 108, 0.12), 0 0 8px rgba(70, 126, 63, 0.10)',
                                             }
                                           : {}),
                                         ...(item.isQuickpull
@@ -5499,6 +5627,32 @@ function App() {
                                     >
                                       <span>
                                         {inventoryCategoryMarker(item)}
+                                        {(item.isEquipped || item.isActiveLight) && (
+                                          <span
+                                            title={
+                                              item.isActiveLight
+                                                ? 'Trzymane źródło światła — zajmuje 1 rękę'
+                                                : 'Założone / trzymane wyposażenie'
+                                            }
+                                            aria-label="Zajmuje rękę / wyposażone"
+                                            style={{
+                                              width: 21,
+                                              height: 21,
+                                              minWidth: 21,
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              borderRadius: 5,
+                                              marginRight: 7,
+                                              verticalAlign: 'middle',
+                                              color: '#8fbe7d',
+                                              border: '1px solid rgba(83, 145, 76, 0.62)',
+                                              background: 'rgba(55, 100, 49, 0.17)',
+                                            }}
+                                          >
+                                            <Hand size={13} />
+                                          </span>
+                                        )}
                                         <strong>{item.name}</strong>
                                         {' • ilość: '}
                                         {isCoinInventoryItem(item) ? (
