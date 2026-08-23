@@ -4312,7 +4312,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3N.2 • porządek widoków</span>
+              Etap 3N.2 • uporządkowane widoki</span>
           </div>
 
         </aside>
@@ -6371,15 +6371,6 @@ function App() {
             </>
           )}
 
-          {activeView === 'Wózy' && (
-            <section className="hero parchment-panel">
-              <div>
-                <p className="eyebrow">WÓZY</p>
-                <h1>Wózy</h1>
-                <p>Ta sekcja zostanie rozwinięta w osobnym etapie.</p>
-              </div>
-            </section>
-          )}
 
         </main>
 
