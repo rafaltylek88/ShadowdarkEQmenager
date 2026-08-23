@@ -1489,6 +1489,15 @@ function App() {
       )
   }, [items, characters, npcItems, npcs, animalItems, animals, bastionItems, bastions])
 
+  const questItemSummary = useMemo(
+    () =>
+      inventorySummary.filter(group =>
+        isQuestInventoryItem(group.catalogItemId)
+      ),
+    [inventorySummary, isQuestInventoryItem]
+  )
+
+
   function normalizeInventoryName(value: string) {
     return value
       .trim()
@@ -2987,6 +2996,93 @@ function App() {
     return itemsForBastion(bastionId).reduce((sum, item) => sum + bastionItemSlots(item), 0)
   }
 
+  const dashboardWarnings = useMemo(() => {
+    const result = [...expeditionWarnings]
+
+    if (expeditionMembers.length > 0 && expeditionFeedsAvailable < 1) {
+      result.push({
+        key: 'expedition-food-total',
+        severity: 'danger' as const,
+        text: `Za mało racji na jedno pełne karmienie ekspedycji: ${totalRations}/${expeditionMembers.length}.`,
+      })
+    }
+
+    for (const animal of animals) {
+      const rations = animalRationCounts.get(animal.id) ?? 0
+      if (rations < 1) {
+        result.push({
+          key: `animal-food-${animal.id}`,
+          severity: 'warning' as const,
+          text: `${animal.name} (Zwierzę): brak racji — można użyć pastwiska.`,
+        })
+      }
+    }
+
+    if (expeditionLightSeconds <= 0) {
+      result.push({
+        key: 'light-none',
+        severity: 'danger' as const,
+        text: 'Brak zapasu światła w całej ekspedycji.',
+      })
+    } else if (expeditionLightSeconds < 60 * 60) {
+      result.push({
+        key: 'light-low',
+        severity: 'warning' as const,
+        text: `Zapas światła ekspedycji spadł poniżej 60 minut: ${formatTimer(expeditionLightSeconds)}.`,
+      })
+    }
+
+    const fuelKeys = new Set<string>()
+    for (const choice of availableLightChoices) {
+      const fuel = lightFuelStatusForChoice(choice)
+      if (!fuel || fuel.available >= fuel.required) continue
+
+      const key = `${choice.memberType}:${choice.memberId}:${fuel.name}`
+      if (fuelKeys.has(key)) continue
+      fuelKeys.add(key)
+
+      result.push({
+        key: `fuel-${key}`,
+        severity: 'warning' as const,
+        text: `${choice.memberName}: ${choice.itemName} nie ma wymaganego paliwa (${fuel.name} ${fuel.available}/${fuel.required}).`,
+      })
+    }
+
+    for (const bastion of bastions) {
+      if (!hasVault(bastion.id)) continue
+      const used = usedBastionSlots(bastion.id)
+
+      if (used >= 100) {
+        result.push({
+          key: `vault-full-${bastion.id}`,
+          severity: 'danger' as const,
+          text: `${bastion.name}: Vault jest pełny (${Number(used.toFixed(2))}/100 slotów).`,
+        })
+      } else if (used >= 90) {
+        result.push({
+          key: `vault-near-${bastion.id}`,
+          severity: 'warning' as const,
+          text: `${bastion.name}: Vault jest prawie pełny (${Number(used.toFixed(2))}/100 slotów).`,
+        })
+      }
+    }
+
+    return result
+  }, [
+    expeditionWarnings,
+    expeditionMembers.length,
+    expeditionFeedsAvailable,
+    totalRations,
+    animals,
+    animalRationCounts,
+    expeditionLightSeconds,
+    availableLightChoices,
+    lightFuelStatusForChoice,
+    bastions,
+    bastionUpgrades,
+    bastionItems,
+  ])
+
   function openBuyItem(ownerType: InventoryOwnerType, ownerId: string) {
     setBuyOwnerType(ownerType)
     setBuyOwnerId(ownerId)
@@ -3906,7 +4002,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3L.1 • Coins z dokładnością do CP</span>
+              Etap 3M • przedmioty zadania i ostrzeżenia</span>
           </div>
 
         </aside>
@@ -4102,19 +4198,82 @@ function App() {
               <div className="panel-title">
                 <Shield size={18} />
                 Ostrzeżenia ekspedycji
-                <span style={{ marginLeft: 'auto' }}>{expeditionWarnings.length}</span>
+                <span style={{ marginLeft: 'auto' }}>{dashboardWarnings.length}</span>
               </div>
 
-              {expeditionWarnings.length === 0 ? (
-                <p className="muted">Brak ostrzeżeń dla Postaci i NPC.</p>
+              {dashboardWarnings.length === 0 ? (
+                <p className="muted">Brak ostrzeżeń dla ekspedycji.</p>
               ) : (
                 <div style={{ display: 'grid', gap: 8 }}>
-                  {expeditionWarnings.map(warning => (
+                  {dashboardWarnings.map(warning => (
                     <div key={warning.key} className="setup-banner">
                       <Shield size={16} />
                       <div>
                         <strong>{warning.severity === 'danger' ? 'UWAGA' : 'OSTRZEŻENIE'}</strong>
                         <span>{warning.text}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div
+              className="panel wide"
+              style={{
+                borderColor: 'rgba(210, 122, 39, 0.58)',
+                background:
+                  'linear-gradient(135deg, rgba(117, 62, 22, 0.13), rgba(39, 28, 19, 0.08))',
+              }}
+            >
+              <div className="panel-title">
+                <Package size={18} />
+                Przedmioty zadania
+                <span style={{ marginLeft: 'auto' }}>{questItemSummary.length}</span>
+              </div>
+
+              {questItemSummary.length === 0 ? (
+                <p className="muted">Brak oznaczonych przedmiotów zadania.</p>
+              ) : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {questItemSummary.map(group => (
+                    <div
+                      key={group.key}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 8,
+                        border: '1px solid rgba(210, 122, 39, 0.52)',
+                        background: 'rgba(151, 76, 22, 0.12)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 16,
+                          alignItems: 'center',
+                        }}
+                      >
+                        <strong style={{ color: '#e4a059' }}>
+                          {group.name}
+                        </strong>
+                        <span className="muted">Łącznie: {group.total}</span>
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '5px 14px',
+                          marginTop: 6,
+                        }}
+                      >
+                        {group.owners.map(owner => (
+                          <span key={owner.key} className="muted">
+                            <b style={{ color: '#d8bd8c' }}>{owner.owner}</b>
+                            {' • '}{owner.ownerType} × {owner.quantity}
+                          </span>
+                        ))}
                       </div>
                     </div>
                   ))}
