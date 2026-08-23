@@ -1057,6 +1057,26 @@ function App() {
     campaigns.find(c => c.id === activeId) ??
     campaigns[0]
 
+  const characterById = useMemo(
+    () => new Map(characters.map(character => [character.id, character])),
+    [characters]
+  )
+
+  const npcById = useMemo(
+    () => new Map(npcs.map(npc => [npc.id, npc])),
+    [npcs]
+  )
+
+  const animalById = useMemo(
+    () => new Map(animals.map(animal => [animal.id, animal])),
+    [animals]
+  )
+
+  const bastionById = useMemo(
+    () => new Map(bastions.map(bastion => [bastion.id, bastion])),
+    [bastions]
+  )
+
   const slotUsageForItem = useCallback(
     (item: CharacterItem) => {
       const quantity = Math.max(0, item.quantity - (item.freeQuantity ?? 0))
@@ -1079,18 +1099,35 @@ function App() {
     return { used, max }
   }, [characters, items, slotUsageForItem])
 
+  const characterItemsByOwner = useMemo(() => {
+    const grouped = new Map<string, CharacterItem[]>()
+    for (const item of items) {
+      const list = grouped.get(item.characterId)
+      if (list) list.push(item)
+      else grouped.set(item.characterId, [item])
+    }
+    return grouped
+  }, [items])
+
+  const characterSlotsByOwner = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const [characterId, ownerItems] of characterItemsByOwner) {
+      totals.set(
+        characterId,
+        ownerItems.reduce((sum, item) => sum + slotUsageForItem(item), 0)
+      )
+    }
+    return totals
+  }, [characterItemsByOwner, slotUsageForItem])
+
   const usedSlotsForCharacter = useCallback(
-    (characterId: string) =>
-      items
-        .filter(item => item.characterId === characterId)
-        .reduce((sum, item) => sum + slotUsageForItem(item), 0),
-    [items, slotUsageForItem]
+    (characterId: string) => characterSlotsByOwner.get(characterId) ?? 0,
+    [characterSlotsByOwner]
   )
 
   const itemsForCharacter = useCallback(
-    (characterId: string) =>
-      items.filter(item => item.characterId === characterId),
-    [items]
+    (characterId: string) => characterItemsByOwner.get(characterId) ?? [],
+    [characterItemsByOwner]
   )
 
 
@@ -1125,17 +1162,35 @@ function App() {
     return Math.ceil(quantity / groupSize) * item.slotsPerUnit
   }, [])
 
+  const npcItemsByOwner = useMemo(() => {
+    const grouped = new Map<string, NpcItem[]>()
+    for (const item of npcItems) {
+      const list = grouped.get(item.npcId)
+      if (list) list.push(item)
+      else grouped.set(item.npcId, [item])
+    }
+    return grouped
+  }, [npcItems])
+
+  const npcSlotsByOwner = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const [npcId, ownerItems] of npcItemsByOwner) {
+      totals.set(
+        npcId,
+        ownerItems.reduce((sum, item) => sum + slotUsageForNpcItem(item), 0)
+      )
+    }
+    return totals
+  }, [npcItemsByOwner, slotUsageForNpcItem])
+
   const usedSlotsForNpc = useCallback(
-    (npcId: string) =>
-      npcItems
-        .filter(item => item.npcId === npcId)
-        .reduce((sum, item) => sum + slotUsageForNpcItem(item), 0),
-    [npcItems, slotUsageForNpcItem]
+    (npcId: string) => npcSlotsByOwner.get(npcId) ?? 0,
+    [npcSlotsByOwner]
   )
 
   const itemsForNpc = useCallback(
-    (npcId: string) => npcItems.filter(item => item.npcId === npcId),
-    [npcItems]
+    (npcId: string) => npcItemsByOwner.get(npcId) ?? [],
+    [npcItemsByOwner]
   )
 
 
@@ -1162,12 +1217,22 @@ function App() {
     [normalizeSpecialItemName]
   )
 
+  const animalItemsByOwner = useMemo(() => {
+    const grouped = new Map<string, AnimalItem[]>()
+    for (const item of animalItems) {
+      const list = grouped.get(item.animalId)
+      if (list) list.push(item)
+      else grouped.set(item.animalId, [item])
+    }
+    return grouped
+  }, [animalItems])
+
   const animalHasWagon = useCallback(
     (animalId: string) =>
-      animalItems.some(
-        item => item.animalId === animalId && isWagonName(item.name)
+      (animalItemsByOwner.get(animalId) ?? []).some(item =>
+        isWagonName(item.name)
       ),
-    [animalItems, isWagonName]
+    [animalItemsByOwner, isWagonName]
   )
 
   const wagonBonusForAnimal = useCallback(
@@ -1197,18 +1262,25 @@ function App() {
     [isSaddleName, isWagonName]
   )
 
+  const animalSlotsByOwner = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const [animalId, ownerItems] of animalItemsByOwner) {
+      totals.set(
+        animalId,
+        ownerItems.reduce((sum, item) => sum + slotUsageForAnimalItem(item), 0)
+      )
+    }
+    return totals
+  }, [animalItemsByOwner, slotUsageForAnimalItem])
+
   const usedSlotsForAnimal = useCallback(
-    (animalId: string) =>
-      animalItems
-        .filter(item => item.animalId === animalId)
-        .reduce((sum, item) => sum + slotUsageForAnimalItem(item), 0),
-    [animalItems, slotUsageForAnimalItem]
+    (animalId: string) => animalSlotsByOwner.get(animalId) ?? 0,
+    [animalSlotsByOwner]
   )
 
   const itemsForAnimal = useCallback(
-    (animalId: string) =>
-      animalItems.filter(item => item.animalId === animalId),
-    [animalItems]
+    (animalId: string) => animalItemsByOwner.get(animalId) ?? [],
+    [animalItemsByOwner]
   )
 
 
@@ -1294,12 +1366,15 @@ function App() {
     []
   )
 
+  const catalogById = useMemo(
+    () => new Map(catalog.map(entry => [entry.id, entry])),
+    [catalog]
+  )
+
   const catalogEntryForItem = useCallback(
     (catalogItemId: string | null) =>
-      catalogItemId
-        ? catalog.find(entry => entry.id === catalogItemId) ?? null
-        : null,
-    [catalog]
+      catalogItemId ? catalogById.get(catalogItemId) ?? null : null,
+    [catalogById]
   )
 
   const isMagicalInventoryItem = useCallback(
@@ -2084,9 +2159,40 @@ function App() {
   }
 
   useEffect(() => {
-    if (lightState?.status === 'running') {
-      const id = window.setInterval(() => setLightNow(Date.now()), 1000)
-      return () => window.clearInterval(id)
+    if (lightState?.status !== 'running') return
+
+    let intervalId: number | null = null
+
+    const stop = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId)
+        intervalId = null
+      }
+    }
+
+    const start = () => {
+      stop()
+      setLightNow(Date.now())
+
+      if (document.visibilityState === 'visible') {
+        intervalId = window.setInterval(
+          () => setLightNow(Date.now()),
+          1000
+        )
+      }
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') start()
+      else stop()
+    }
+
+    start()
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [lightState?.status, lightState?.startedAt])
 
@@ -2455,14 +2561,29 @@ function App() {
           table: 'campaign_history',
           filter: `campaign_id=eq.${activeId}`,
         },
-        refreshHistory
+        payload => {
+          const row = payload.new as any
+          const incoming: HistoryEntry = {
+            id: row.id,
+            campaignId: row.campaign_id,
+            eventType: row.event_type as HistoryEventType,
+            message: row.message,
+            createdBy: row.created_by ?? null,
+            createdAt: row.created_at,
+          }
+
+          setHistory(current => {
+            if (current.some(entry => entry.id === incoming.id)) return current
+            return [incoming, ...current].slice(0, 300)
+          })
+        }
       )
       .subscribe()
 
     return () => {
       sb.removeChannel(channel)
     }
-  }, [session, activeId, refreshHistory])
+  }, [session, activeId])
 
 
   async function createCampaign() {
@@ -3480,7 +3601,7 @@ function App() {
       )
 
       setShowTransferItem(false)
-      await refreshAllInventoriesAfterTrade()
+      await refreshInventoryOwners([transferFromType, target.type])
       flash(
         `${sourceLabel} → ${target.label}: przeniesiono ${movedQuantity} × ${transferItemName}.`,
         'inventory'
@@ -3527,14 +3648,14 @@ function App() {
         usedSlots: character.usedSlots,
       })
 
-      await refreshAllInventoriesAfterTrade()
+      await refreshInventoryOwners(['character'], true)
       flash(
         `${character.name}: ustawiono Coins na ${normalized.toLocaleString('pl-PL')} GP.`,
         'inventory'
       )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić stanu Coins.')
-      await refreshAllInventoriesAfterTrade()
+      await refreshInventoryOwners(['character'], true)
     }
   }
 
@@ -3554,7 +3675,7 @@ function App() {
         itemId,
         quantity,
       })
-      await refreshAllInventoriesAfterTrade()
+      await refreshInventoryOwners([ownerType], ownerType === 'character')
 
       if (context) {
         flash(
@@ -3566,7 +3687,7 @@ function App() {
       }
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić ilości.')
-      await refreshAllInventoriesAfterTrade()
+      await refreshInventoryOwners([ownerType], ownerType === 'character')
     }
   }
 
@@ -3575,21 +3696,21 @@ function App() {
     ownerId: string
   ) {
     if (ownerType === 'character') {
-      const owner = characters.find(character => character.id === ownerId)
+      const owner = characterById.get(ownerId)
       return owner ? `${owner.name} (Postać)` : 'Nieznana Postać'
     }
 
     if (ownerType === 'npc') {
-      const owner = npcs.find(npc => npc.id === ownerId)
+      const owner = npcById.get(ownerId)
       return owner ? `${owner.name} (NPC)` : 'Nieznany NPC'
     }
 
     if (ownerType === 'animal') {
-      const owner = animals.find(animal => animal.id === ownerId)
+      const owner = animalById.get(ownerId)
       return owner ? `${owner.name} (Zwierzę)` : 'Nieznane Zwierzę'
     }
 
-    const owner = bastions.find(bastion => bastion.id === ownerId)
+    const owner = bastionById.get(ownerId)
     return owner ? `${owner.name} (Vault)` : 'Nieznany Vault'
   }
 
@@ -3648,19 +3769,42 @@ function App() {
     return upgradesForBastion(bastionId).some(upgrade => upgrade.upgradeId === 'vault')
   }
 
-  function itemsForBastion(bastionId: string) {
-    return bastionItems.filter(item => item.bastionId === bastionId)
-  }
+  const bastionItemsByOwner = useMemo(() => {
+    const grouped = new Map<string, BastionItem[]>()
+    for (const item of bastionItems) {
+      const list = grouped.get(item.bastionId)
+      if (list) list.push(item)
+      else grouped.set(item.bastionId, [item])
+    }
+    return grouped
+  }, [bastionItems])
 
-  function bastionItemSlots(item: BastionItem) {
+  const itemsForBastion = useCallback(
+    (bastionId: string) => bastionItemsByOwner.get(bastionId) ?? [],
+    [bastionItemsByOwner]
+  )
+
+  const bastionItemSlots = useCallback((item: BastionItem) => {
     const quantity = Math.max(0, item.quantity - item.freeQuantity)
     if (quantity <= 0) return 0
     return Math.ceil(quantity / Math.max(1, item.slotGroupSize)) * item.slotsPerUnit
-  }
+  }, [])
 
-  function usedBastionSlots(bastionId: string) {
-    return itemsForBastion(bastionId).reduce((sum, item) => sum + bastionItemSlots(item), 0)
-  }
+  const bastionSlotsByOwner = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const [bastionId, ownerItems] of bastionItemsByOwner) {
+      totals.set(
+        bastionId,
+        ownerItems.reduce((sum, item) => sum + bastionItemSlots(item), 0)
+      )
+    }
+    return totals
+  }, [bastionItemsByOwner, bastionItemSlots])
+
+  const usedBastionSlots = useCallback(
+    (bastionId: string) => bastionSlotsByOwner.get(bastionId) ?? 0,
+    [bastionSlotsByOwner]
+  )
 
   const dashboardWarnings = useMemo(() => {
     const result = [...expeditionWarnings]
@@ -3777,17 +3921,21 @@ function App() {
     setShowSellItem(true)
   }
 
-  async function refreshAllInventoriesAfterTrade() {
-    await Promise.all([
-      refreshCharacters(),
-      refreshItems(),
-      refreshNpcs(),
-      refreshNpcItems(),
-      refreshAnimals(),
-      refreshAnimalItems(),
-      refreshBastions(),
-      refreshBastionItems(),
-    ])
+  async function refreshInventoryOwners(
+    ownerTypes: InventoryOwnerType[],
+    refreshCharacterCoins = false
+  ) {
+    const types = new Set(ownerTypes)
+    const jobs: Promise<unknown>[] = []
+
+    if (types.has('character') || refreshCharacterCoins) {
+      jobs.push(refreshItems(), refreshCharacters())
+    }
+    if (types.has('npc')) jobs.push(refreshNpcItems())
+    if (types.has('animal')) jobs.push(refreshAnimalItems())
+    if (types.has('bastion')) jobs.push(refreshBastionItems())
+
+    await Promise.all(jobs)
   }
 
   async function executeBuyItem() {
@@ -3814,7 +3962,7 @@ function App() {
       const boughtQuantity = Math.max(1, buyQuantity)
 
       setShowBuyItem(false)
-      await refreshAllInventoriesAfterTrade()
+      await refreshInventoryOwners([buyOwnerType], true)
       flash(
         `${buyer?.name ?? 'Postać'} kupił(a) ${boughtQuantity} × ${boughtItem?.name ?? 'przedmiot'} za ${formatMoneyCp(priceCp)} → ${targetLabel}.`,
         'trade'
@@ -3851,7 +3999,7 @@ function App() {
       )
 
       setShowSellItem(false)
-      await refreshAllInventoriesAfterTrade()
+      await refreshInventoryOwners([sellOwnerType], true)
       flash(
         `${source?.owner ?? 'Ekwipunek'} — sprzedano ${soldQuantity} × ${sellItemName} za ${formatMoneyCp(priceCp)}. Pieniądze otrzymał(a): ${receiver?.name ?? 'Postać'}.`,
         'trade'
@@ -4741,7 +4889,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3P.2 • pełnoekranowa edycja postaci</span>
+              Etap 3R • optymalizacja zasobów</span>
           </div>
 
         </aside>
