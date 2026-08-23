@@ -22,6 +22,7 @@ export type CatalogItem = {
   weaponDamage: string | null
   weaponRange: string | null
   weaponProperties: string | null
+  handsRequired: 1 | 2
   armorClass: string | null
   armorProperties: string | null
   isMagical: boolean
@@ -48,6 +49,7 @@ function mapCatalogItem(row: any): CatalogItem {
     weaponDamage: row.weapon_damage ?? null,
     weaponRange: row.weapon_range ?? null,
     weaponProperties: row.weapon_properties ?? null,
+    handsRequired: Number(row.hands_required) === 2 ? 2 : 1,
     armorClass: row.armor_class ?? null,
     armorProperties: row.armor_properties ?? null,
     isMagical: Boolean(row.is_magical),
@@ -86,6 +88,7 @@ export async function createCatalogItem(input: {
   weaponDamage?: string | null
   weaponRange?: string | null
   weaponProperties?: string | null
+  handsRequired?: 1 | 2
   armorClass?: string | null
   armorProperties?: string | null
   isMagical?: boolean
@@ -121,6 +124,8 @@ export async function createCatalogItem(input: {
         input.category === 'weapon' ? input.weaponRange?.trim() || null : null,
       weapon_properties:
         input.category === 'weapon' ? input.weaponProperties?.trim() || null : null,
+      hands_required:
+        input.category === 'weapon' ? (input.handsRequired === 2 ? 2 : 1) : 1,
       armor_class:
         input.category === 'armor' ? input.armorClass?.trim() || null : null,
       armor_properties:
