@@ -9,6 +9,7 @@ import {
   Castle,
   Coins,
   Copy,
+  Download,
   Flame,
   Gauge,
   Home,
@@ -4492,6 +4493,85 @@ function App() {
     }
   }
 
+  function exportStoryCharactersCsv() {
+    if (storyCharacters.length === 0) {
+      setError('Brak Postaci Fabularnych do wyeksportowania.')
+      return
+    }
+
+    const csvEscape = (value: unknown) => {
+      const text = String(value ?? '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+      return `"${text.replace(/"/g, '""')}"`
+    }
+
+    const rows = [...storyCharacters]
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, 'pl', {
+          sensitivity: 'base',
+          numeric: true,
+        })
+      )
+      .map(character => [
+        character.name,
+        character.location,
+        character.meetingTime,
+        character.meetingCircumstances,
+        character.quest,
+        character.faction,
+        character.createdAt ?? '',
+        character.updatedAt ?? '',
+      ])
+
+    const header = [
+      'Imię',
+      'Lokalizacja',
+      'Czas spotkania',
+      'Okoliczności spotkania',
+      'Zadanie',
+      'Frakcja',
+      'Utworzono',
+      'Ostatnia aktualizacja',
+    ]
+
+    const csv =
+      '\uFEFF' +
+      [header, ...rows]
+        .map(row => row.map(csvEscape).join(';'))
+        .join('\r\n')
+
+    const campaignName = (active?.name || 'kampania')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase() || 'kampania'
+
+    const date = new Date().toISOString().slice(0, 10)
+    const filename = `postacie-fabularne-${campaignName}-${date}.csv`
+
+    const blob = new Blob([csv], {
+      type: 'text/csv;charset=utf-8;',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+
+    flash(
+      `Wyeksportowano ${storyCharacters.length} ${
+        storyCharacters.length === 1 ? 'Postać Fabularną' : 'Postaci Fabularnych'
+      } do CSV.`,
+      'other'
+    )
+  }
+
   function openNewNpc() {
     setEditingNpc(null)
     setNpcName('')
@@ -5061,7 +5141,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3S • Postacie Fabularne</span>
+              Etap 3S.1 • eksport Postaci Fabularnych</span>
           </div>
 
         </aside>
@@ -7356,14 +7436,26 @@ function App() {
                   </p>
                 </div>
 
-                <button
-                  className="primary"
-                  onClick={openNewStoryCharacter}
-                  disabled={!activeId}
-                >
-                  <Plus size={16} />
-                  Nowa Postać Fabularna
-                </button>
+                <div className="button-row">
+                  <button
+                    className="secondary"
+                    onClick={exportStoryCharactersCsv}
+                    disabled={!activeId || storyCharacters.length === 0}
+                    title="Eksportuj wszystkie Postacie Fabularne do pliku CSV"
+                  >
+                    <Download size={16} />
+                    Eksport CSV
+                  </button>
+
+                  <button
+                    className="primary"
+                    onClick={openNewStoryCharacter}
+                    disabled={!activeId}
+                  >
+                    <Plus size={16} />
+                    Nowa Postać Fabularna
+                  </button>
+                </div>
               </section>
 
               <section className="panel">
@@ -7384,6 +7476,9 @@ function App() {
                     </div>
                     <span className="muted">
                       {storyCharacters.length} {storyCharacters.length === 1 ? 'postać' : 'postaci'}
+                    </span>
+                    <span className="muted" style={{ display: 'block', marginTop: 3 }}>
+                      Eksport CSV zapisuje pełną bibliotekę niezależnie od aktualnego grupowania.
                     </span>
                   </div>
 
