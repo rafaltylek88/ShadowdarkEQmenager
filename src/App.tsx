@@ -44,6 +44,8 @@ import {
 import type { Character } from './lib/characters'
 import { createNpc, deleteNpc, loadNpcs, updateNpc } from './lib/npcs'
 import type { Npc } from './lib/npcs'
+import { createStoryCharacter, deleteStoryCharacter, loadStoryCharacters, updateStoryCharacter } from './lib/storyCharacters'
+import type { StoryCharacter } from './lib/storyCharacters'
 import { createNpcItem, deleteNpcItem, loadNpcItems, updateNpcItem } from './lib/npcItems'
 import type { NpcItem } from './lib/npcItems'
 import { createAnimal, deleteAnimal, loadAnimals, updateAnimal } from './lib/animals'
@@ -126,6 +128,7 @@ const nav = [
   ['Dashboard', Gauge],
   ['Postacie', Users],
   ['NPC', Shield],
+  ['Postacie Fabularne', UserPlus],
   ['Zwierzęta', Beef],
   ['Bastiony', Castle],
   ['Biblioteka', Package],
@@ -224,6 +227,18 @@ function App() {
   const [npcName, setNpcName] = useState('')
   const [npcRole, setNpcRole] = useState('')
   const [npcMaxSlots, setNpcMaxSlots] = useState(10)
+
+  const [storyCharacters, setStoryCharacters] = useState<StoryCharacter[]>([])
+  const [storyCharactersLoading, setStoryCharactersLoading] = useState(false)
+  const [showStoryCharacter, setShowStoryCharacter] = useState(false)
+  const [editingStoryCharacter, setEditingStoryCharacter] = useState<StoryCharacter | null>(null)
+  const [storyCharacterName, setStoryCharacterName] = useState('')
+  const [storyCharacterLocation, setStoryCharacterLocation] = useState('')
+  const [storyCharacterMeetingTime, setStoryCharacterMeetingTime] = useState('')
+  const [storyCharacterCircumstances, setStoryCharacterCircumstances] = useState('')
+  const [storyCharacterQuest, setStoryCharacterQuest] = useState('')
+  const [storyCharacterFaction, setStoryCharacterFaction] = useState('')
+  const [storyCharacterGroupMode, setStoryCharacterGroupMode] = useState<'alphabetical' | 'location' | 'quest' | 'time' | 'faction'>('alphabetical')
 
   const [npcItems, setNpcItems] = useState<NpcItem[]>([])
   const [npcItemsLoading, setNpcItemsLoading] = useState(false)
@@ -441,6 +456,22 @@ function App() {
       setError(e?.message || e?.details || 'Nie udało się pobrać NPC.')
     } finally {
       setNpcsLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
+  const refreshStoryCharacters = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setStoryCharacters([])
+      return
+    }
+
+    setStoryCharactersLoading(true)
+    try {
+      setStoryCharacters(await loadStoryCharacters(activeId))
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się pobrać Postaci Fabularnych.')
+    } finally {
+      setStoryCharactersLoading(false)
     }
   }, [activeId, isCloudMode])
 
@@ -768,6 +799,10 @@ function App() {
   }, [refreshNpcs])
 
   useEffect(() => {
+    refreshStoryCharacters()
+  }, [refreshStoryCharacters])
+
+  useEffect(() => {
     refreshNpcItems()
   }, [refreshNpcItems])
 
@@ -853,6 +888,29 @@ function App() {
       sb.removeChannel(channel)
     }
   }, [session, activeId, refreshNpcs])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+
+    const channel = sb
+      .channel(`story-characters-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'story_characters',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        refreshStoryCharacters
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshStoryCharacters])
 
   useEffect(() => {
     if (!supabase || !session || !activeId) return
@@ -4320,6 +4378,120 @@ function App() {
     }
   }
 
+  function resetStoryCharacterDraft() {
+    setStoryCharacterName('')
+    setStoryCharacterLocation('')
+    setStoryCharacterMeetingTime('')
+    setStoryCharacterCircumstances('')
+    setStoryCharacterQuest('')
+    setStoryCharacterFaction('')
+  }
+
+  function openNewStoryCharacter() {
+    setEditingStoryCharacter(null)
+    resetStoryCharacterDraft()
+    setShowStoryCharacter(true)
+  }
+
+  function openEditStoryCharacter(character: StoryCharacter) {
+    setEditingStoryCharacter(character)
+    setStoryCharacterName(character.name)
+    setStoryCharacterLocation(character.location)
+    setStoryCharacterMeetingTime(character.meetingTime)
+    setStoryCharacterCircumstances(character.meetingCircumstances)
+    setStoryCharacterQuest(character.quest)
+    setStoryCharacterFaction(character.faction)
+    setShowStoryCharacter(true)
+  }
+
+  async function saveStoryCharacter() {
+    if (!activeId || !storyCharacterName.trim()) return
+
+    try {
+      const changes = {
+        name: storyCharacterName,
+        location: storyCharacterLocation,
+        meetingTime: storyCharacterMeetingTime,
+        meetingCircumstances: storyCharacterCircumstances,
+        quest: storyCharacterQuest,
+        faction: storyCharacterFaction,
+      }
+
+      if (editingStoryCharacter) {
+        await updateStoryCharacter(editingStoryCharacter.id, changes)
+        flash(`Zaktualizowano Postać Fabularną: ${storyCharacterName}.`, 'other')
+      } else {
+        await createStoryCharacter(activeId, changes)
+        flash(`Dodano Postać Fabularną: ${storyCharacterName}.`, 'other')
+      }
+
+      setShowStoryCharacter(false)
+      setEditingStoryCharacter(null)
+      resetStoryCharacterDraft()
+      await refreshStoryCharacters()
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zapisać Postaci Fabularnej.')
+    }
+  }
+
+  async function removeStoryCharacter(character: StoryCharacter) {
+    const confirmed = window.confirm(
+      `Czy na pewno usunąć Postać Fabularną „${character.name}”?`
+    )
+    if (!confirmed) return
+
+    try {
+      await deleteStoryCharacter(character.id)
+      flash(`Usunięto Postać Fabularną: ${character.name}.`, 'other')
+      await refreshStoryCharacters()
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się usunąć Postaci Fabularnej.')
+    }
+  }
+
+  const storyCharacterGroups = useMemo(() => {
+    const alphabetical = [...storyCharacters].sort((a, b) =>
+      a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' })
+    )
+
+    const groupLabel = (character: StoryCharacter) => {
+      switch (storyCharacterGroupMode) {
+        case 'location':
+          return character.location.trim() || 'Brak lokalizacji'
+        case 'quest':
+          return character.quest.trim() || 'Brak zadania'
+        case 'time':
+          return character.meetingTime.trim() || 'Brak czasu spotkania'
+        case 'faction':
+          return character.faction.trim() || 'Brak frakcji'
+        default:
+          return (character.name.trim().charAt(0) || '#').toLocaleUpperCase('pl')
+      }
+    }
+
+    const grouped = new Map<string, StoryCharacter[]>()
+    for (const character of alphabetical) {
+      const key = groupLabel(character)
+      const list = grouped.get(key)
+      if (list) list.push(character)
+      else grouped.set(key, [character])
+    }
+
+    return [...grouped.entries()].sort(([a], [b]) =>
+      a.localeCompare(b, 'pl', { sensitivity: 'base', numeric: true })
+    )
+  }, [storyCharacters, storyCharacterGroupMode])
+
+  function storyCharacterGroupModeLabel() {
+    switch (storyCharacterGroupMode) {
+      case 'location': return 'Lokalizacja'
+      case 'quest': return 'Zadanie'
+      case 'time': return 'Czas spotkania'
+      case 'faction': return 'Frakcja'
+      default: return 'Alfabetycznie'
+    }
+  }
+
   function openNewNpc() {
     setEditingNpc(null)
     setNpcName('')
@@ -4889,7 +5061,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3R • optymalizacja zasobów</span>
+              Etap 3S • Postacie Fabularne</span>
           </div>
 
         </aside>
@@ -7172,6 +7344,199 @@ function App() {
             </>
           )}
 
+          {activeView === 'Postacie Fabularne' && (
+            <>
+              <section className="hero parchment-panel">
+                <div>
+                  <p className="eyebrow">POSTACIE FABULARNE</p>
+                  <h1>{active?.name ?? 'Brak kampanii'}</h1>
+                  <p>
+                    Biblioteka spotkanych postaci świata. Bez statystyk i ekwipunku —
+                    tylko informacje potrzebne do zapamiętania, kim są i gdzie pojawiły się w fabule.
+                  </p>
+                </div>
+
+                <button
+                  className="primary"
+                  onClick={openNewStoryCharacter}
+                  disabled={!activeId}
+                >
+                  <Plus size={16} />
+                  Nowa Postać Fabularna
+                </button>
+              </section>
+
+              <section className="panel">
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'end',
+                    gap: 14,
+                    flexWrap: 'wrap',
+                    marginBottom: 16,
+                  }}
+                >
+                  <div>
+                    <div className="panel-title" style={{ marginBottom: 4 }}>
+                      <UserPlus size={18} />
+                      Biblioteka Postaci Fabularnych
+                    </div>
+                    <span className="muted">
+                      {storyCharacters.length} {storyCharacters.length === 1 ? 'postać' : 'postaci'}
+                    </span>
+                  </div>
+
+                  <label style={{ minWidth: 240 }}>
+                    Grupuj według
+                    <select
+                      value={storyCharacterGroupMode}
+                      onChange={e =>
+                        setStoryCharacterGroupMode(
+                          e.target.value as typeof storyCharacterGroupMode
+                        )
+                      }
+                      style={themedSelectStyle}
+                    >
+                      <option value="alphabetical">Alfabetycznie</option>
+                      <option value="location">Lokalizacja</option>
+                      <option value="quest">Zadanie</option>
+                      <option value="time">Czas spotkania</option>
+                      <option value="faction">Frakcja</option>
+                    </select>
+                  </label>
+                </div>
+
+                {storyCharactersLoading ? (
+                  <p className="muted">Ładowanie Postaci Fabularnych…</p>
+                ) : storyCharacters.length === 0 ? (
+                  <div className="empty-state">
+                    <p>Nie zapisano jeszcze żadnej Postaci Fabularnej.</p>
+                    <button className="primary" onClick={openNewStoryCharacter}>
+                      <Plus size={16} />
+                      Dodaj pierwszą postać
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 18 }}>
+                    {storyCharacterGroups.map(([group, groupCharacters]) => (
+                      <div key={`${storyCharacterGroupMode}:${group}`}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            marginBottom: 9,
+                            paddingBottom: 6,
+                            borderBottom: '1px solid rgba(180, 135, 60, 0.30)',
+                          }}
+                        >
+                          <strong style={{ color: '#e0bd75', fontSize: 15 }}>
+                            {group}
+                          </strong>
+                          <span className="muted">• {storyCharacterGroupModeLabel()}</span>
+                          <span className="muted" style={{ marginLeft: 'auto' }}>
+                            {groupCharacters.length}
+                          </span>
+                        </div>
+
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+                            gap: 10,
+                          }}
+                        >
+                          {groupCharacters.map(character => (
+                            <article className="entity-card" key={character.id}>
+                              <div className="entity-head">
+                                <div>
+                                  <strong style={{ fontSize: 18 }}>{character.name}</strong>
+                                  <span className="muted" style={{ display: 'block', marginTop: 4 }}>
+                                    {character.faction || 'Bez frakcji'}
+                                  </span>
+                                </div>
+
+                                <div className="button-row">
+                                  <button
+                                    className="secondary"
+                                    onClick={() => openEditStoryCharacter(character)}
+                                  >
+                                    <Pencil size={14} />
+                                    Edytuj
+                                  </button>
+                                  <button
+                                    className="danger"
+                                    onClick={() => removeStoryCharacter(character)}
+                                  >
+                                    <Trash2 size={14} />
+                                    Usuń
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                                  gap: 8,
+                                  marginTop: 12,
+                                }}
+                              >
+                                <div style={{ border: '1px solid rgba(180,135,60,.24)', borderRadius: 7, padding: '8px 10px', background: 'rgba(110,83,42,.06)' }}>
+                                  <span className="muted">Lokalizacja</span>
+                                  <strong style={{ display: 'block', marginTop: 3 }}>
+                                    {character.location || '—'}
+                                  </strong>
+                                </div>
+
+                                <div style={{ border: '1px solid rgba(180,135,60,.24)', borderRadius: 7, padding: '8px 10px', background: 'rgba(110,83,42,.06)' }}>
+                                  <span className="muted">Czas spotkania</span>
+                                  <strong style={{ display: 'block', marginTop: 3 }}>
+                                    {character.meetingTime || '—'}
+                                  </strong>
+                                </div>
+
+                                <div style={{ border: '1px solid rgba(180,135,60,.24)', borderRadius: 7, padding: '8px 10px', background: 'rgba(110,83,42,.06)' }}>
+                                  <span className="muted">Frakcja</span>
+                                  <strong style={{ display: 'block', marginTop: 3 }}>
+                                    {character.faction || '—'}
+                                  </strong>
+                                </div>
+
+                                <div style={{ border: '1px solid rgba(180,135,60,.24)', borderRadius: 7, padding: '8px 10px', background: 'rgba(110,83,42,.06)' }}>
+                                  <span className="muted">Zadanie</span>
+                                  <strong style={{ display: 'block', marginTop: 3, whiteSpace: 'pre-wrap' }}>
+                                    {character.quest || '—'}
+                                  </strong>
+                                </div>
+                              </div>
+
+                              <div
+                                style={{
+                                  marginTop: 8,
+                                  border: '1px solid rgba(180,135,60,.24)',
+                                  borderRadius: 7,
+                                  padding: '9px 10px',
+                                  background: 'rgba(110,83,42,.06)',
+                                }}
+                              >
+                                <span className="muted">Okoliczności spotkania</span>
+                                <div style={{ marginTop: 4, whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>
+                                  {character.meetingCircumstances || '—'}
+                                </div>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
           {activeView === 'NPC' && (
             <>
               <section className="hero parchment-panel">
@@ -8368,6 +8733,94 @@ function App() {
             disabled={!animalItemName.trim()}
           >
             {editingAnimalItem ? 'Zapisz zmiany' : 'Dodaj wyposażenie'}
+          </button>
+        </Modal>
+      )}
+
+      {showStoryCharacter && (
+        <Modal
+          onClose={() => {
+            setShowStoryCharacter(false)
+            setEditingStoryCharacter(null)
+          }}
+        >
+          <p className="eyebrow">
+            {editingStoryCharacter ? 'EDYCJA POSTACI FABULARNEJ' : 'NOWA POSTAĆ FABULARNA'}
+          </p>
+          <h2>
+            {editingStoryCharacter ? 'Edytuj Postać Fabularną' : 'Dodaj Postać Fabularną'}
+          </h2>
+
+          <label>
+            Imię
+            <input
+              autoFocus
+              value={storyCharacterName}
+              onChange={e => setStoryCharacterName(e.target.value)}
+              placeholder="np. Matka Eris"
+            />
+          </label>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 10,
+            }}
+          >
+            <label>
+              Lokalizacja
+              <input
+                value={storyCharacterLocation}
+                onChange={e => setStoryCharacterLocation(e.target.value)}
+                placeholder="np. Brannoch, Stary Rynek"
+              />
+            </label>
+
+            <label>
+              Czas spotkania
+              <input
+                value={storyCharacterMeetingTime}
+                onChange={e => setStoryCharacterMeetingTime(e.target.value)}
+                placeholder="np. Sesja 3 / 12 dzień Jesieni"
+              />
+            </label>
+
+            <label>
+              Frakcja
+              <input
+                value={storyCharacterFaction}
+                onChange={e => setStoryCharacterFaction(e.target.value)}
+                placeholder="np. Gildia Kupców"
+              />
+            </label>
+
+            <label>
+              Zadanie
+              <input
+                value={storyCharacterQuest}
+                onChange={e => setStoryCharacterQuest(e.target.value)}
+                placeholder="np. Zaginiony konwój"
+              />
+            </label>
+          </div>
+
+          <label>
+            Okoliczności spotkania
+            <textarea
+              rows={6}
+              value={storyCharacterCircumstances}
+              onChange={e => setStoryCharacterCircumstances(e.target.value)}
+              placeholder="Gdzie i dlaczego bohaterowie ją poznali, co wtedy robiła, co się wydarzyło..."
+            />
+          </label>
+
+          <button
+            className="primary full"
+            onClick={saveStoryCharacter}
+            disabled={!storyCharacterName.trim()}
+          >
+            {editingStoryCharacter ? 'Zapisz zmiany' : 'Dodaj Postać Fabularną'}
           </button>
         </Modal>
       )}
