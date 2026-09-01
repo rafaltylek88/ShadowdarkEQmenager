@@ -40,3 +40,20 @@ export async function transferInventoryItem(input: {
 
   if (error) throw error
 }
+
+
+export async function consumeInventoryItemUse(input: {
+  campaignId: string
+  ownerType: InventoryOwnerType
+  itemId: string
+}): Promise<void> {
+  if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
+
+  const { error } = await supabase.rpc('consume_inventory_item_use', {
+    p_campaign_id: input.campaignId,
+    p_owner_type: input.ownerType,
+    p_item_id: input.itemId,
+  })
+
+  if (error) throw error
+}

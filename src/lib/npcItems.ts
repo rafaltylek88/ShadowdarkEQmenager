@@ -76,6 +76,7 @@ export async function createNpcItem(input: {
   weaponProperties?: string | null
   armorClass?: string | null
   armorProperties?: string | null
+  maxUses?: number
 }): Promise<NpcItem> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
 
@@ -132,6 +133,8 @@ export async function createNpcItem(input: {
       weapon_properties: input.category === 'weapon' ? input.weaponProperties?.trim() || null : null,
       armor_class: input.category === 'armor' ? input.armorClass?.trim() || null : null,
       armor_properties: input.category === 'armor' ? input.armorProperties?.trim() || null : null,
+      max_uses: Math.max(0, Math.floor(input.maxUses ?? 0)),
+      uses_remaining: Math.max(0, Math.floor(input.maxUses ?? 0)),
     })
     .select('*')
     .single()

@@ -27,6 +27,8 @@ export type CharacterItem = {
   weaponProperties: string | null
   armorClass: string | null
   armorProperties: string | null
+  maxUses: number
+  usesRemaining: number
   createdAt?: string
   updatedAt?: string
 }
@@ -52,6 +54,8 @@ function mapItem(row: any): CharacterItem {
     weaponProperties: row.weapon_properties ?? null,
     armorClass: row.armor_class ?? null,
     armorProperties: row.armor_properties ?? null,
+    maxUses: Math.max(0, Number(row.max_uses ?? 0)),
+    usesRemaining: Math.max(0, Number(row.uses_remaining ?? 0)),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -111,6 +115,7 @@ export async function createItem(input: {
   weaponProperties?: string | null
   armorClass?: string | null
   armorProperties?: string | null
+  maxUses?: number
 }): Promise<CharacterItem> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
 
@@ -172,6 +177,8 @@ export async function createItem(input: {
         input.category === 'armor' ? input.armorClass?.trim() || null : null,
       armor_properties:
         input.category === 'armor' ? input.armorProperties?.trim() || null : null,
+      max_uses: Math.max(0, Math.floor(input.maxUses ?? 0)),
+      uses_remaining: Math.max(0, Math.floor(input.maxUses ?? 0)),
     })
     .select('*')
     .single()
@@ -198,6 +205,8 @@ export async function updateItem(
     weaponProperties?: string | null
     armorClass?: string | null
     armorProperties?: string | null
+    maxUses?: number
+    usesRemaining?: number
   }
 ): Promise<CharacterItem> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
@@ -223,6 +232,14 @@ export async function updateItem(
         changes.category === 'armor' ? changes.armorClass?.trim() || null : null,
       armor_properties:
         changes.category === 'armor' ? changes.armorProperties?.trim() || null : null,
+      max_uses: Math.max(0, Math.floor(changes.maxUses ?? 0)),
+      uses_remaining: Math.max(
+        0,
+        Math.min(
+          Math.floor(changes.usesRemaining ?? changes.maxUses ?? 0),
+          Math.floor(changes.maxUses ?? 0)
+        )
+      ),
     })
     .eq('id', id)
     .select('*')

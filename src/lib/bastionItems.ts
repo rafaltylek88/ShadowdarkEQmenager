@@ -18,6 +18,8 @@ export type BastionItem = {
   weaponProperties: string | null
   armorClass: string | null
   armorProperties: string | null
+  maxUses: number
+  usesRemaining: number
   createdAt?: string
   updatedAt?: string
 }
@@ -40,6 +42,8 @@ function mapBastionItem(row: any): BastionItem {
     weaponProperties: row.weapon_properties ?? null,
     armorClass: row.armor_class ?? null,
     armorProperties: row.armor_properties ?? null,
+    maxUses: Math.max(0, Number(row.max_uses ?? 0)),
+    usesRemaining: Math.max(0, Number(row.uses_remaining ?? 0)),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

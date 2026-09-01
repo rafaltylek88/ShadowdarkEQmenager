@@ -28,6 +28,7 @@ export type CatalogItem = {
   isMagical: boolean
   isQuestItem: boolean
   magicDescription: string | null
+  maxUses: number
   createdBy?: string
   createdAt?: string
   updatedAt?: string
@@ -55,6 +56,7 @@ function mapCatalogItem(row: any): CatalogItem {
     isMagical: Boolean(row.is_magical),
     isQuestItem: Boolean(row.is_quest_item),
     magicDescription: row.magic_description ?? null,
+    maxUses: Math.max(0, Number(row.max_uses ?? 0)),
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -94,6 +96,7 @@ export async function createCatalogItem(input: {
   isMagical?: boolean
   isQuestItem?: boolean
   magicDescription?: string | null
+  maxUses?: number
 }): Promise<CatalogItem> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
 
@@ -134,6 +137,7 @@ export async function createCatalogItem(input: {
       is_quest_item: Boolean(input.isQuestItem),
       magic_description:
         input.isMagical ? input.magicDescription?.trim() || null : null,
+      max_uses: Math.max(0, Math.floor(input.maxUses ?? 0)),
       created_by: userData.user.id,
     })
     .select('*')
