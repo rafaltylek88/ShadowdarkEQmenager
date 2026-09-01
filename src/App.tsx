@@ -3634,7 +3634,12 @@ function App() {
 
   async function consumeItemUse(
     ownerType: InventoryOwnerType,
-    item: UsableInventoryItem
+    item: {
+      id: string
+      name: string
+      maxUses?: number
+      usesRemaining?: number
+    }
   ) {
     const maxUses = Math.max(0, Number(item.maxUses ?? 0))
     const usesRemaining = Math.max(0, Number(item.usesRemaining ?? 0))
@@ -3667,7 +3672,12 @@ function App() {
 
   function itemUsesControl(
     ownerType: InventoryOwnerType,
-    item: UsableInventoryItem
+    item: {
+      id: string
+      name: string
+      maxUses?: number
+      usesRemaining?: number
+    }
   ) {
     const maxUses = Math.max(0, Number(item.maxUses ?? 0))
     const usesRemaining = Math.max(0, Number(item.usesRemaining ?? 0))
@@ -5311,7 +5321,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3U.1 • poprawka build licznika użyć</span>
+              Etap 3U.2 • poprawka typu licznika użyć</span>
           </div>
 
         </aside>
