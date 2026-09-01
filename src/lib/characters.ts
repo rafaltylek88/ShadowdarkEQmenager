@@ -14,6 +14,7 @@ export type Character = {
   gold: number
   currentHp: number
   maxHp: number
+  temporaryHp: number
   ancestry: string
   className: string
   level: number
@@ -47,6 +48,7 @@ function mapCharacter(row: any): Character {
     gold: Number(row.gold ?? 0),
     currentHp: Math.max(0, Number(row.current_hp ?? 1)),
     maxHp: Math.max(1, Number(row.max_hp ?? 1)),
+    temporaryHp: Math.max(0, Number(row.temporary_hp ?? 0)),
     ancestry: row.ancestry ?? '',
     className: row.class_name ?? '',
     level: Math.max(1, Number(row.level ?? 1)),
@@ -88,6 +90,7 @@ export async function createCharacter(
     charisma: number
     currentHp?: number
     maxHp?: number
+    temporaryHp?: number
     ancestry?: string
     className?: string
     level?: number
@@ -117,9 +120,11 @@ export async function createCharacter(
     charisma: stats?.charisma ?? 10,
     gold,
     max_hp: Math.max(1, Math.floor(stats?.maxHp ?? 1)),
+    temporary_hp: Math.max(0, Math.floor(stats?.temporaryHp ?? 0)),
     current_hp: Math.min(
       Math.max(0, Math.floor(stats?.currentHp ?? stats?.maxHp ?? 1)),
-      Math.max(1, Math.floor(stats?.maxHp ?? 1))
+      Math.max(1, Math.floor(stats?.maxHp ?? 1)) +
+        Math.max(0, Math.floor(stats?.temporaryHp ?? 0))
     ),
     ancestry: stats?.ancestry?.trim() ?? '',
     class_name: stats?.className?.trim() ?? '',
@@ -154,6 +159,7 @@ export async function updateCharacter(
     gold: number
     currentHp: number
     maxHp: number
+    temporaryHp: number
     ancestry: string
     className: string
     level: number
@@ -180,9 +186,11 @@ export async function updateCharacter(
     charisma: changes.charisma,
     gold: changes.gold,
     max_hp: Math.max(1, Math.floor(changes.maxHp)),
+    temporary_hp: Math.max(0, Math.floor(changes.temporaryHp)),
     current_hp: Math.min(
       Math.max(0, Math.floor(changes.currentHp)),
-      Math.max(1, Math.floor(changes.maxHp))
+      Math.max(1, Math.floor(changes.maxHp)) +
+        Math.max(0, Math.floor(changes.temporaryHp))
     ),
     ancestry: changes.ancestry.trim(),
     class_name: changes.className.trim(),
