@@ -3634,14 +3634,11 @@ function App() {
 
   async function consumeItemUse(
     ownerType: InventoryOwnerType,
-    item: {
-      id: string
-      name: string
-      maxUses: number
-      usesRemaining: number
-    }
+    item: UsableInventoryItem
   ) {
-    if (!activeId || item.maxUses <= 0 || item.usesRemaining <= 0) return
+    const maxUses = Math.max(0, Number(item.maxUses ?? 0))
+    const usesRemaining = Math.max(0, Number(item.usesRemaining ?? 0))
+    if (!activeId || maxUses <= 0 || usesRemaining <= 0) return
 
     try {
       await consumeInventoryItemUse({
@@ -3656,7 +3653,7 @@ function App() {
       )
 
       flash(
-        `${item.name}: użycia ${item.usesRemaining} → ${item.usesRemaining - 1}.`,
+        `${item.name}: użycia ${usesRemaining} → ${usesRemaining - 1}.`,
         'inventory'
       )
     } catch (e: any) {
@@ -3670,14 +3667,11 @@ function App() {
 
   function itemUsesControl(
     ownerType: InventoryOwnerType,
-    item: {
-      id: string
-      name: string
-      maxUses: number
-      usesRemaining: number
-    }
+    item: UsableInventoryItem
   ) {
-    if (item.maxUses <= 0) return null
+    const maxUses = Math.max(0, Number(item.maxUses ?? 0))
+    const usesRemaining = Math.max(0, Number(item.usesRemaining ?? 0))
+    if (maxUses <= 0) return null
 
     return (
       <span
@@ -3695,15 +3689,15 @@ function App() {
       >
         <span className="muted">Użycia</span>
         <strong>
-          {item.usesRemaining}/{item.maxUses}
+          {usesRemaining}/{maxUses}
         </strong>
         <button
           type="button"
           className="secondary"
-          disabled={item.usesRemaining <= 0}
+          disabled={usesRemaining <= 0}
           onClick={() => void consumeItemUse(ownerType, item)}
           title={
-            item.usesRemaining > 0
+            usesRemaining > 0
               ? 'Zużyj 1 użycie'
               : 'Brak pozostałych użyć'
           }
@@ -5317,7 +5311,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3U • liczniki użyć przedmiotów</span>
+              Etap 3U.1 • poprawka build licznika użyć</span>
           </div>
 
         </aside>
