@@ -104,7 +104,11 @@ import { buyInventoryItem, sellInventoryItem } from './lib/trade'
 import type { InventoryOwnerType } from './lib/trade'
 import { addCampaignHistory, loadCampaignHistory } from './lib/history'
 import type { HistoryEntry, HistoryEventType } from './lib/history'
-import { setInventoryItemQuantity, transferInventoryItem } from './lib/inventoryOps'
+import {
+  consumeInventoryItemUse,
+  setInventoryItemQuantity,
+  transferInventoryItem,
+} from './lib/inventoryOps'
 
 const initialCampaigns: Campaign[] = [
   {
@@ -327,6 +331,7 @@ function App() {
   const [catalogIsMagical, setCatalogIsMagical] = useState(false)
   const [catalogIsQuestItem, setCatalogIsQuestItem] = useState(false)
   const [catalogMagicDescription, setCatalogMagicDescription] = useState('')
+  const [catalogMaxUses, setCatalogMaxUses] = useState(0)
   const [showCatalogImport, setShowCatalogImport] = useState(false)
   const [catalogImportText, setCatalogImportText] = useState('')
 
@@ -3489,6 +3494,7 @@ function App() {
     setCatalogIsMagical(false)
     setCatalogIsQuestItem(false)
     setCatalogMagicDescription('')
+    setCatalogMaxUses(0)
     setShowCatalogItem(true)
   }
 
@@ -3513,6 +3519,7 @@ function App() {
         isMagical: catalogIsMagical,
         isQuestItem: catalogIsQuestItem,
         magicDescription: catalogIsMagical ? catalogMagicDescription : null,
+        maxUses: catalogMaxUses,
       })
       setCatalog(prev => [...prev.filter(i => i.id !== created.id), created].sort((a, b) => a.name.localeCompare(b.name, 'pl')))
       applyCatalogItem(created)
@@ -3547,6 +3554,9 @@ function App() {
       weaponProperties: itemCategory === 'weapon' ? itemWeaponProperties : null,
       armorClass: itemCategory === 'armor' ? itemArmorClass : null,
       armorProperties: itemCategory === 'armor' ? itemArmorProperties : null,
+      maxUses: itemCatalogItemId
+        ? catalog.find(entry => entry.id === itemCatalogItemId)?.maxUses ?? 0
+        : 0,
     }
 
     try {
@@ -3621,6 +3631,93 @@ function App() {
     }
   }
 
+
+  async function consumeItemUse(
+    ownerType: InventoryOwnerType,
+    item: {
+      id: string
+      name: string
+      maxUses: number
+      usesRemaining: number
+    }
+  ) {
+    if (!activeId || item.maxUses <= 0 || item.usesRemaining <= 0) return
+
+    try {
+      await consumeInventoryItemUse({
+        campaignId: activeId,
+        ownerType,
+        itemId: item.id,
+      })
+
+      await refreshInventoryOwners(
+        [ownerType],
+        ownerType === 'character'
+      )
+
+      flash(
+        `${item.name}: użycia ${item.usesRemaining} → ${item.usesRemaining - 1}.`,
+        'inventory'
+      )
+    } catch (e: any) {
+      setError(
+        e?.message ||
+          e?.details ||
+          'Nie udało się zużyć użycia przedmiotu.'
+      )
+    }
+  }
+
+  function itemUsesControl(
+    ownerType: InventoryOwnerType,
+    item: {
+      id: string
+      name: string
+      maxUses: number
+      usesRemaining: number
+    }
+  ) {
+    if (item.maxUses <= 0) return null
+
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          marginLeft: 7,
+          padding: '3px 7px',
+          borderRadius: 6,
+          border: '1px solid rgba(166, 126, 58, 0.55)',
+          background: 'rgba(103, 75, 31, 0.13)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <span className="muted">Użycia</span>
+        <strong>
+          {item.usesRemaining}/{item.maxUses}
+        </strong>
+        <button
+          type="button"
+          className="secondary"
+          disabled={item.usesRemaining <= 0}
+          onClick={() => void consumeItemUse(ownerType, item)}
+          title={
+            item.usesRemaining > 0
+              ? 'Zużyj 1 użycie'
+              : 'Brak pozostałych użyć'
+          }
+          style={{
+            minWidth: 28,
+            minHeight: 24,
+            padding: '2px 6px',
+          }}
+        >
+          −1
+        </button>
+      </span>
+    )
+  }
 
   function moneyToCp(gp: number, sp: number, cp: number) {
     return Math.max(0, Math.round(gp) * 100 + Math.round(sp) * 10 + Math.round(cp))
@@ -4778,6 +4875,9 @@ function App() {
       weaponProperties: npcItemCategory === 'weapon' ? npcItemWeaponProperties : null,
       armorClass: npcItemCategory === 'armor' ? npcItemArmorClass : null,
       armorProperties: npcItemCategory === 'armor' ? npcItemArmorProperties : null,
+      maxUses: npcItemCatalogItemId
+        ? catalog.find(entry => entry.id === npcItemCatalogItemId)?.maxUses ?? 0
+        : 0,
     }
 
     try {
@@ -4842,6 +4942,7 @@ function App() {
       if (entry.weaponProperties) parts.push(entry.weaponProperties)
       parts.push(entry.handsRequired === 2 ? '2 ręce' : '1 ręka')
     }
+    if (entry.maxUses > 0) parts.push(`użycia ${entry.maxUses}`)
     if (entry.category === 'armor') {
       if (entry.armorClass) parts.push(`KP/AC ${entry.armorClass}`)
       if (entry.armorProperties) parts.push(entry.armorProperties)
@@ -4898,7 +4999,7 @@ function App() {
       const [name, categoryRaw = 'normal', slotsRaw = '1', lightRaw = '',
         weaponDamage = '', weaponRange = '', weaponProperties = '',
         armorClass = '', armorProperties = '', slotGroupRaw = '1',
-        freeQuantityRaw = '0', magicalRaw = 'false', magicDescription = '', questRaw = 'false', handsRaw = '1'] = cols
+        freeQuantityRaw = '0', magicalRaw = 'false', magicDescription = '', questRaw = 'false', handsRaw = '1', maxUsesRaw = '0'] = cols
 
       if (!name) throw new Error(`Brak nazwy przedmiotu w wierszu ${index + 1 + start}.`)
 
@@ -4919,9 +5020,10 @@ function App() {
       const isQuestItem = ['1', 'true', 'tak', 'yes'].includes(questRaw.toLowerCase())
       const handsRequired: 1 | 2 =
         category === 'weapon' && Number(handsRaw) === 2 ? 2 : 1
+      const maxUses = Math.max(0, Math.floor(Number(maxUsesRaw) || 0))
 
       return {
-        name, category, slotsPerUnit, slotGroupSize, freeQuantity, isMagical, isQuestItem, handsRequired,
+        name, category, slotsPerUnit, slotGroupSize, freeQuantity, isMagical, isQuestItem, handsRequired, maxUses,
         magicDescription: isMagical ? magicDescription || null : null,
         lightMinutes: category === 'light' && lightParsed != null && Number.isFinite(lightParsed) ? lightParsed : null,
         weaponDamage: category === 'weapon' ? weaponDamage || null : null,
@@ -4961,13 +5063,13 @@ function App() {
   }
 
   function exportCatalogCsv() {
-    const header = 'name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties;slot_group_size;free_quantity;magical;magic_description'
+    const header = 'name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties;slot_group_size;free_quantity;magical;magic_description;quest_item;hands_required;max_uses'
     const rows = catalog.map(entry =>
       [entry.name, entry.category, entry.slotsPerUnit, entry.lightMinutes ?? '',
        entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '',
        entry.armorClass ?? '', entry.armorProperties ?? '', entry.slotGroupSize, entry.freeQuantity,
        entry.isMagical ? 'true' : 'false', entry.magicDescription ?? '',
-       entry.isQuestItem ? 'true' : 'false', entry.handsRequired]
+       entry.isQuestItem ? 'true' : 'false', entry.handsRequired, entry.maxUses]
         .map(value => String(value).split(';').join(',')).join(';')
     )
 
@@ -5215,7 +5317,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3T • tymczasowe HP i szybka regulacja HP</span>
+              Etap 3U • liczniki użyć przedmiotów</span>
           </div>
 
         </aside>
@@ -6736,6 +6838,7 @@ function App() {
                                         />
                                         {' • '}
                                         {formatSlotRule(item)}
+                                        {itemUsesControl('character', item)}
                                         {item.category === 'weapon' &&
                                           item.weaponDamage &&
                                           ` • ${item.weaponDamage}`}
@@ -7247,6 +7350,7 @@ function App() {
                                         {' • '}
                                         {isCoinInventoryItem(item) ? 'GP • ' : ''}
                                         {formatSlotRule(item)}
+                                        {itemUsesControl('character', item)}
                                         
                                         {item.category === 'light' && ` • ${item.lightMinutes ?? 60} min`}
                                         {item.category === 'weapon' &&
@@ -7531,6 +7635,7 @@ function App() {
                                                 }
                                               />
                                               {' • '}{formatSlotRule(item)}
+                                        {itemUsesControl('animal', item)}
                                               
                                               {item.category === 'light' && ` • ${item.lightMinutes ?? 60} min`}
                                               {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
@@ -7898,6 +8003,7 @@ function App() {
                                           }
                                         />
                                         {' • '}{formatSlotRule(item)}
+                                        {itemUsesControl('npc', item)}
                                         
                                         {item.category === 'light' && ` • ${item.lightMinutes ?? 60} min`}
                                         {item.category === 'weapon' &&
@@ -8113,6 +8219,7 @@ function App() {
                                             }
                                           />
                                           {' • '}{formatSlotRule(item)}
+                                        {itemUsesControl('bastion', item)}
                                           
                                           {item.category === 'light' && ` • ${item.lightMinutes ?? 60} min`}
                                           {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
@@ -9872,6 +9979,24 @@ function App() {
             Ile pierwszych sztuk nie zajmuje slotów
             <input type="number" min="0" step="1" value={catalogFreeQuantity}
               onChange={e => setCatalogFreeQuantity(Math.max(0, Number(e.target.value) || 0))} />
+          </label>
+
+          <label>
+            Liczba użyć
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={catalogMaxUses}
+              onChange={e =>
+                setCatalogMaxUses(
+                  Math.max(0, Math.floor(Number(e.target.value) || 0))
+                )
+              }
+            />
+            <span className="muted" style={{ display: 'block', marginTop: 4 }}>
+              0 = przedmiot bez licznika użyć.
+            </span>
           </label>
 
           {catalogCategory === 'light' && (
