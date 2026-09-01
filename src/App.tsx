@@ -208,6 +208,7 @@ function App() {
   const [characterGold, setCharacterGold] = useState(0)
   const [characterCurrentHp, setCharacterCurrentHp] = useState(1)
   const [characterMaxHp, setCharacterMaxHp] = useState(1)
+  const [characterTemporaryHp, setCharacterTemporaryHp] = useState(0)
   const [characterAncestry, setCharacterAncestry] = useState('')
   const [characterClassName, setCharacterClassName] = useState('')
   const [characterLevel, setCharacterLevel] = useState(1)
@@ -2838,6 +2839,7 @@ function App() {
     setCharacterGold(0)
     setCharacterMaxHp(1)
     setCharacterCurrentHp(1)
+    setCharacterTemporaryHp(0)
     setCharacterAncestry('')
     setCharacterClassName('')
     setCharacterLevel(1)
@@ -2865,6 +2867,7 @@ function App() {
     setCharacterGold(character.gold)
     setCharacterMaxHp(character.maxHp)
     setCharacterCurrentHp(character.currentHp)
+    setCharacterTemporaryHp(character.temporaryHp)
     setCharacterAncestry(character.ancestry)
     setCharacterClassName(character.className)
     setCharacterLevel(character.level)
@@ -2892,6 +2895,7 @@ function App() {
       setCharacterGold(editingCharacter.gold)
       setCharacterCurrentHp(editingCharacter.currentHp)
       setCharacterMaxHp(editingCharacter.maxHp)
+      setCharacterTemporaryHp(editingCharacter.temporaryHp)
       setCharacterAncestry(editingCharacter.ancestry)
       setCharacterClassName(editingCharacter.className)
       setCharacterLevel(editingCharacter.level)
@@ -2917,6 +2921,7 @@ function App() {
     setCharacterGold(0)
     setCharacterCurrentHp(1)
     setCharacterMaxHp(1)
+    setCharacterTemporaryHp(0)
     setCharacterAncestry('')
     setCharacterClassName('')
     setCharacterLevel(1)
@@ -2953,8 +2958,12 @@ function App() {
           wisdom: characterWisdom,
           charisma: characterCharisma,
           gold: characterGold,
-          currentHp: Math.min(characterCurrentHp, characterMaxHp),
+          currentHp: Math.min(
+            characterCurrentHp,
+            characterMaxHp + characterTemporaryHp
+          ),
           maxHp: characterMaxHp,
+          temporaryHp: characterTemporaryHp,
           ancestry: characterAncestry,
           className: characterClassName,
           level: characterLevel,
@@ -2977,8 +2986,12 @@ function App() {
           intelligence: characterIntelligence,
           wisdom: characterWisdom,
           charisma: characterCharisma,
-          currentHp: Math.min(characterCurrentHp, characterMaxHp),
+          currentHp: Math.min(
+            characterCurrentHp,
+            characterMaxHp + characterTemporaryHp
+          ),
           maxHp: characterMaxHp,
+          temporaryHp: characterTemporaryHp,
           ancestry: characterAncestry,
           className: characterClassName,
           level: characterLevel,
@@ -3010,6 +3023,7 @@ function App() {
       gold: number
       currentHp: number
       maxHp: number
+      temporaryHp: number
       xp: number
       xpNext: number
       portraitUrl: string
@@ -3027,6 +3041,7 @@ function App() {
       gold: overrides.gold ?? character.gold,
       currentHp: overrides.currentHp ?? character.currentHp,
       maxHp: overrides.maxHp ?? character.maxHp,
+      temporaryHp: overrides.temporaryHp ?? character.temporaryHp,
       ancestry: character.ancestry,
       className: character.className,
       level: character.level,
@@ -3058,6 +3073,64 @@ function App() {
       )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić XP.')
+    }
+  }
+
+  function effectiveMaxHp(character: Character) {
+    return Math.max(1, character.maxHp) + Math.max(0, character.temporaryHp)
+  }
+
+  async function adjustCharacterHp(character: Character, delta: number) {
+    const maxHp = effectiveMaxHp(character)
+    const nextHp = Math.min(
+      maxHp,
+      Math.max(0, character.currentHp + delta)
+    )
+
+    if (nextHp === character.currentHp) return
+
+    try {
+      await updateCharacter(
+        character.id,
+        fullCharacterChanges(character, { currentHp: nextHp })
+      )
+      await refreshCharacters()
+      flash(
+        `${character.name}: HP ${character.currentHp} → ${nextHp}.`,
+        'character'
+      )
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zmienić HP.')
+    }
+  }
+
+  async function setCharacterTemporaryHpValue(
+    character: Character,
+    value: number
+  ) {
+    const nextTemporaryHp = Math.max(0, Math.floor(value))
+    const nextEffectiveMax = character.maxHp + nextTemporaryHp
+    const nextCurrentHp = Math.min(character.currentHp, nextEffectiveMax)
+
+    try {
+      await updateCharacter(
+        character.id,
+        fullCharacterChanges(character, {
+          temporaryHp: nextTemporaryHp,
+          currentHp: nextCurrentHp,
+        })
+      )
+      await refreshCharacters()
+      flash(
+        `${character.name}: tymczasowe HP ${character.temporaryHp} → ${nextTemporaryHp}. Maksymalne HP: ${nextEffectiveMax}.`,
+        'character'
+      )
+    } catch (e: any) {
+      setError(
+        e?.message ||
+          e?.details ||
+          'Nie udało się zmienić tymczasowego HP.'
+      )
     }
   }
 
@@ -3692,6 +3765,7 @@ function App() {
         gold: normalized,
         currentHp: character.currentHp,
         maxHp: character.maxHp,
+        temporaryHp: character.temporaryHp,
         ancestry: character.ancestry,
         className: character.className,
         level: character.level,
@@ -5141,7 +5215,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3S.1 • eksport Postaci Fabularnych</span>
+              Etap 3T • tymczasowe HP i szybka regulacja HP</span>
           </div>
 
         </aside>
@@ -5858,7 +5932,12 @@ function App() {
 
                         <div className="slot-line">
                           <span>HP</span>
-                          <b>{character.currentHp}/{character.maxHp}</b>
+                          <b>
+                            {character.currentHp}/{effectiveMaxHp(character)}
+                            {character.temporaryHp > 0
+                              ? ` (+${character.temporaryHp} tymcz.)`
+                              : ''}
+                          </b>
                         </div>
 
                         <div className="slot-line" style={{ marginTop: 8 }}>
@@ -6295,7 +6374,7 @@ function App() {
                                   borderColor: 'rgba(164, 69, 54, 0.55)',
                                 }}
                               >
-                                <span className="muted">HP</span>
+                                <span className="muted">HP CAŁKOWITE</span>
                                 <strong
                                   style={{
                                     display: 'block',
@@ -6303,8 +6382,76 @@ function App() {
                                     fontSize: 24,
                                   }}
                                 >
-                                  {character.currentHp}/{character.maxHp}
+                                  {character.currentHp}/{effectiveMaxHp(character)}
                                 </strong>
+
+                                <div
+                                  className="button-row"
+                                  style={{ marginTop: 8, flexWrap: 'wrap' }}
+                                >
+                                  {[-10, -1, 1, 10].map(delta => (
+                                    <button
+                                      key={`hp-${delta}`}
+                                      className="secondary"
+                                      onClick={() =>
+                                        void adjustCharacterHp(character, delta)
+                                      }
+                                      disabled={
+                                        (delta < 0 && character.currentHp <= 0) ||
+                                        (delta > 0 &&
+                                          character.currentHp >=
+                                            effectiveMaxHp(character))
+                                      }
+                                      style={{
+                                        minWidth: 40,
+                                        padding: '5px 7px',
+                                      }}
+                                    >
+                                      {delta > 0 ? `+${delta}` : delta}
+                                    </button>
+                                  ))}
+                                </div>
+
+                                <div
+                                  style={{
+                                    marginTop: 9,
+                                    paddingTop: 8,
+                                    borderTop:
+                                      '1px solid rgba(164, 69, 54, 0.28)',
+                                  }}
+                                >
+                                  <span
+                                    className="muted"
+                                    style={{
+                                      display: 'block',
+                                      marginBottom: 5,
+                                    }}
+                                  >
+                                    Tymczasowe HP
+                                  </span>
+
+                                  <InventoryQuantityInput
+                                    value={character.temporaryHp}
+                                    onCommit={value =>
+                                      setCharacterTemporaryHpValue(
+                                        character,
+                                        value
+                                      )
+                                    }
+                                  />
+
+                                  <span
+                                    className="muted"
+                                    style={{
+                                      display: 'block',
+                                      marginTop: 5,
+                                      fontSize: 11,
+                                    }}
+                                  >
+                                    Bazowe max: {character.maxHp} • efektywne max:{' '}
+                                    {effectiveMaxHp(character)}
+                                  </span>
+                                </div>
                               </div>
 
                               <div
@@ -6710,7 +6857,10 @@ function App() {
                                   {character.gold} gp • Quickpull {quickpullCount(character.id)}/{quickpullLimit(character)}
                                 </span>
                                 <span style={{ display: 'block', marginTop: 4 }}>
-                                  HP <strong>{character.currentHp}/{character.maxHp}</strong>
+                                  HP <strong>{character.currentHp}/{effectiveMaxHp(character)}</strong>
+                                  {character.temporaryHp > 0 && (
+                                    <span className="muted"> (+{character.temporaryHp} tymcz.)</span>
+                                  )}
                                   {' • '}AC <strong>{armorClassForCharacter(character)}</strong>
                                   {' • '}W rękach: <strong>{handsDisplayForCharacter(character.id)}</strong>
                                 </span>
@@ -6940,7 +7090,9 @@ function App() {
                               >
                                 <span className="muted">HP</span>
                                 <strong style={{ display: 'block', marginTop: 3 }}>
-                                  {character.currentHp}/{character.maxHp}
+                                  {character.currentHp}/{effectiveMaxHp(character)}
+                                  {character.temporaryHp > 0 &&
+                                    ` (+${character.temporaryHp} tymcz.)`}
                                 </strong>
                               </div>
 
@@ -9351,7 +9503,7 @@ function App() {
                 <div style={{ border: '1px solid rgba(150,58,43,.62)', borderRadius: 7, padding: 12, background: 'rgba(88,25,20,.23)' }}>
                   <span className="muted">HP</span>
                   <strong style={{ display: 'block', fontSize: 25, marginTop: 6 }}>
-                    {characterCurrentHp}/{characterMaxHp}
+                    {characterCurrentHp}/{characterMaxHp + characterTemporaryHp}
                   </strong>
                 </div>
 
@@ -9504,7 +9656,7 @@ function App() {
               <section style={{ border: '1px solid rgba(180,135,60,.34)', borderRadius: 7, padding: 12, background: 'rgba(20,17,13,.52)' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }}>
                   <label>
-                    Maksymalne HP
+                    Bazowe maksymalne HP
                     <input
                       type="number"
                       min="1"
@@ -9512,7 +9664,9 @@ function App() {
                       onChange={e => {
                         const next = Math.max(1, Math.floor(Number(e.target.value) || 1))
                         setCharacterMaxHp(next)
-                        setCharacterCurrentHp(current => Math.min(current, next))
+                        setCharacterCurrentHp(current =>
+                          Math.min(current, next + characterTemporaryHp)
+                        )
                       }}
                     />
                   </label>
@@ -9521,13 +9675,34 @@ function App() {
                     <input
                       type="number"
                       min="0"
-                      max={characterMaxHp}
+                      max={characterMaxHp + characterTemporaryHp}
                       value={characterCurrentHp}
                       onChange={e =>
                         setCharacterCurrentHp(
-                          Math.min(characterMaxHp, Math.max(0, Math.floor(Number(e.target.value) || 0)))
+                          Math.min(
+                            characterMaxHp + characterTemporaryHp,
+                            Math.max(0, Math.floor(Number(e.target.value) || 0))
+                          )
                         )
                       }
+                    />
+                  </label>
+                  <label style={{ gridColumn: '1 / -1' }}>
+                    Tymczasowe HP
+                    <input
+                      type="number"
+                      min="0"
+                      value={characterTemporaryHp}
+                      onChange={e => {
+                        const next = Math.max(
+                          0,
+                          Math.floor(Number(e.target.value) || 0)
+                        )
+                        setCharacterTemporaryHp(next)
+                        setCharacterCurrentHp(current =>
+                          Math.min(current, characterMaxHp + next)
+                        )
+                      }}
                     />
                   </label>
                 </div>
