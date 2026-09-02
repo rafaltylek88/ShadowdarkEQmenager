@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import fantasyShopImage from './assets/fantasy-shop.png'
 import {
   ArrowRightLeft,
   Backpack,
@@ -5351,7 +5350,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3X • sklep, daj i podnieś</span>
+              Etap 3X.1 • poprawka grafiki sklepu</span>
           </div>
 
         </aside>
@@ -6788,7 +6787,7 @@ function App() {
                                   }}
                                 >
                                   <img
-                                    src={fantasyShopImage}
+                                    src="/fantasy-shop.png"
                                     alt="Fantasy sklep"
                                     style={{
                                       display: 'block',
