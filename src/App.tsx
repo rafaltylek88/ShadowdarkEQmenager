@@ -6787,7 +6787,7 @@ function App() {
                                   }}
                                 >
                                   <img
-                                    src="/fantasy-shop.png"
+                                    src={`${import.meta.env.BASE_URL}fantasy-shop.png`}
                                     alt="Fantasy sklep"
                                     style={{
                                       display: 'block',
