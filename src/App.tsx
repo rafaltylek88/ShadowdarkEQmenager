@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import fantasyShopImage from './assets/fantasy-shop.png'
 import {
   ArrowRightLeft,
   Backpack,
@@ -5350,7 +5351,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3W • sklep Postaci</span>
+              Etap 3X • sklep, daj i podnieś</span>
           </div>
 
         </aside>
@@ -6764,46 +6765,58 @@ function App() {
 
                               <div
                                 style={{
-                                  display: 'grid',
-                                  gridTemplateColumns: '1fr auto 1fr',
-                                  alignItems: 'center',
+                                  display: 'flex',
+                                  justifyContent: 'center',
                                   width: '100%',
-                                  gap: 10,
                                 }}
                               >
-                                <div>
-                                  <button
-                                    className="secondary"
-                                    onClick={() => openNewItem(character.id)}
-                                  >
-                                    <Package size={15} />
-                                    Dodaj przedmiot
-                                  </button>
-                                </div>
-
                                 <button
-                                  className="secondary"
+                                  type="button"
                                   onClick={() => openCharacterShop(character.id)}
                                   title={`Otwórz sklep dla: ${character.name}`}
                                   style={{
-                                    justifySelf: 'center',
-                                    minWidth: 150,
-                                    padding: '9px 16px',
-                                    border: '1px solid rgba(197, 148, 58, 0.72)',
-                                    background:
-                                      'linear-gradient(180deg, rgba(114, 79, 30, 0.34), rgba(29, 23, 15, 0.92))',
+                                    width: 'min(100%, 360px)',
+                                    padding: 0,
+                                    overflow: 'hidden',
+                                    borderRadius: 12,
+                                    border: '1px solid rgba(197, 148, 58, 0.78)',
+                                    background: 'rgba(15, 13, 10, 0.95)',
                                     boxShadow:
-                                      'inset 0 0 0 1px rgba(225, 184, 94, 0.09), 0 3px 12px rgba(0,0,0,.25)',
-                                    fontWeight: 800,
-                                    letterSpacing: '.5px',
+                                      'inset 0 0 0 1px rgba(225, 184, 94, 0.10), 0 5px 18px rgba(0,0,0,.34)',
+                                    cursor: 'pointer',
+                                    color: '#ead09a',
                                   }}
                                 >
-                                  <Building2 size={19} />
-                                  SKLEP
-                                  <Coins size={16} />
+                                  <img
+                                    src={fantasyShopImage}
+                                    alt="Fantasy sklep"
+                                    style={{
+                                      display: 'block',
+                                      width: '100%',
+                                      aspectRatio: '3 / 2',
+                                      objectFit: 'cover',
+                                      borderBottom:
+                                        '1px solid rgba(197, 148, 58, 0.48)',
+                                    }}
+                                  />
+                                  <span
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: 9,
+                                      padding: '10px 14px 11px',
+                                      fontWeight: 900,
+                                      fontSize: 18,
+                                      letterSpacing: 1.1,
+                                      fontFamily: 'Georgia, serif',
+                                    }}
+                                  >
+                                    <Building2 size={20} />
+                                    SKLEP
+                                    <Coins size={17} />
+                                  </span>
                                 </button>
-
-                                <div />
                               </div>
                             </div>
 
@@ -6946,7 +6959,7 @@ function App() {
                                           }
                                         >
                                           <ArrowRightLeft size={14} />
-                                          Przenieś
+                                          Daj
                                         </button>
 
                                         <button
@@ -6964,6 +6977,33 @@ function App() {
                                 )}
                               </div>
                             )}
+
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                marginTop: 16,
+                                paddingTop: 14,
+                                borderTop: '1px solid rgba(180, 135, 60, 0.24)',
+                              }}
+                            >
+                              <button
+                                className="secondary"
+                                onClick={() => openNewItem(character.id)}
+                                style={{
+                                  minWidth: 280,
+                                  padding: '11px 18px',
+                                  fontWeight: 800,
+                                  letterSpacing: '.4px',
+                                  border: '1px solid rgba(197, 148, 58, 0.62)',
+                                  background:
+                                    'linear-gradient(180deg, rgba(93, 67, 29, 0.22), rgba(24, 20, 14, 0.92))',
+                                }}
+                              >
+                                <Package size={18} />
+                                Podnieś przedmiot
+                              </button>
+                            </div>
                           </section>
                         </article>
                       )
@@ -7021,7 +7061,7 @@ function App() {
                                   onClick={() => openNewItem(character.id)}
                                 >
                                   <Package size={15} />
-                                  Dodaj przedmiot
+                                  Podnieś przedmiot
                                 </button>
                                 <button
                                   className="secondary"
@@ -7466,7 +7506,7 @@ function App() {
                                           disabled={item.isActiveLight}
                                         >
                                           <ArrowRightLeft size={14} />
-                                          Przenieś
+                                          Daj
                                         </button>
 
                                         <button
@@ -9375,7 +9415,7 @@ function App() {
             setEditingNpcItem(null)
           }}
         >
-          <p className="eyebrow">{editingNpcItem ? 'EDYCJA PRZEDMIOTU NPC' : 'NOWY PRZEDMIOT NPC'}</p>
+          <p className="eyebrow">{editingNpcItem ? 'EDYCJA PRZEDMIOTU NPC' : 'PODNIEŚ PRZEDMIOT NPC'}</p>
           <h2>{editingNpcItem ? 'Edytuj przedmiot' : 'Dodaj do ekwipunku NPC'}</h2>
 
           {!editingNpcItem && (
@@ -9421,7 +9461,7 @@ function App() {
           </label>
 
           <button className="primary full" onClick={saveNpcItem} disabled={!npcItemName.trim()}>
-            {editingNpcItem ? 'Zapisz zmiany' : 'Dodaj przedmiot'}
+            {editingNpcItem ? 'Zapisz zmiany' : 'Podnieś przedmiot'}
           </button>
         </Modal>
       )}
@@ -10024,7 +10064,7 @@ function App() {
           }}
         >
           <p className="eyebrow">
-            {editingItem ? 'EDYCJA PRZEDMIOTU' : 'NOWY PRZEDMIOT'}
+            {editingItem ? 'EDYCJA PRZEDMIOTU' : 'PODNIEŚ PRZEDMIOT'}
           </p>
           <h2>{editingItem ? 'Edytuj przedmiot' : 'Dodaj do ekwipunku'}</h2>
 
@@ -10085,7 +10125,7 @@ function App() {
           </label>
 
           <button className="primary full" onClick={saveItem} disabled={!itemName.trim()}>
-            {editingItem ? 'Zapisz zmiany' : 'Dodaj przedmiot'}
+            {editingItem ? 'Zapisz zmiany' : 'Podnieś przedmiot'}
           </button>
         </Modal>
       )}
