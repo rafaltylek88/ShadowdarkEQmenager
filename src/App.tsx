@@ -5350,7 +5350,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3Y • tła Dashboardu</span>
+              Etap 3Y.1 • mocniejsze tła Dashboardu</span>
           </div>
 
         </aside>
@@ -5633,10 +5633,10 @@ function App() {
             <div
               className="panel light-panel"
               style={{
-                backgroundImage: `linear-gradient(90deg, rgba(17, 15, 11, .72), rgba(17, 15, 11, .91) 58%, rgba(17, 15, 11, .97)), url(${import.meta.env.BASE_URL}dashboard-torch.png)`,
+                backgroundImage: `linear-gradient(90deg, rgba(17, 15, 11, .18) 0%, rgba(17, 15, 11, .34) 38%, rgba(17, 15, 11, .78) 72%, rgba(17, 15, 11, .94) 100%), url(${import.meta.env.BASE_URL}dashboard-torch.png)`,
                 backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'left center',
-                backgroundSize: 'auto 100%',
+                backgroundPosition: '-18px center',
+                backgroundSize: 'auto 118%',
                 backgroundBlendMode: 'normal',
               }}
             >
@@ -5800,10 +5800,10 @@ function App() {
             <div
               className="panel"
               style={{
-                backgroundImage: `linear-gradient(270deg, rgba(17, 15, 11, .72), rgba(17, 15, 11, .90) 58%, rgba(17, 15, 11, .97)), url(${import.meta.env.BASE_URL}dashboard-camp.png)`,
+                backgroundImage: `linear-gradient(270deg, rgba(17, 15, 11, .14) 0%, rgba(17, 15, 11, .28) 40%, rgba(17, 15, 11, .72) 74%, rgba(17, 15, 11, .93) 100%), url(${import.meta.env.BASE_URL}dashboard-camp.png)`,
                 backgroundRepeat: 'no-repeat',
                 backgroundPosition: 'right center',
-                backgroundSize: 'auto 100%',
+                backgroundSize: 'auto 120%',
                 backgroundBlendMode: 'normal',
               }}
             >
