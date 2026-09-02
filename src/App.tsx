@@ -5321,7 +5321,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3U.2 • poprawka typu licznika użyć</span>
+              Etap 3V • uporządkowana karta postaci</span>
           </div>
 
         </aside>
@@ -6011,7 +6011,21 @@ function App() {
                     const displayedUsedSlots = Number(usedSlots.toFixed(2))
 
                     return (
-                      <article className="entity-card" key={character.id}>
+                      <article
+                        className="entity-card"
+                        key={character.id}
+                        onClick={() => openCharacterCard(character.id)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            openCharacterCard(character.id)
+                          }
+                        }}
+                        title={`Otwórz kartę: ${character.name}`}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <div className="entity-head">
                           <button
                             type="button"
@@ -6084,7 +6098,10 @@ function App() {
                           <b>{formatLastFed(character.lastFedAt)}</b>
                         </div>
 
-                        <div className="button-row">
+                        <div
+                          className="button-row"
+                          onClick={event => event.stopPropagation()}
+                        >
                           <button
                             className="secondary"
                             onClick={() => openEditCharacter(character)}
@@ -6357,111 +6374,142 @@ function App() {
                               >
                                 PNG / JPG / WEBP • maks. 5 MB
                               </div>
+
+                              <div
+                                style={{
+                                  marginTop: 10,
+                                  display: 'grid',
+                                  gap: 5,
+                                }}
+                              >
+                                <div style={{ ...fieldBox, padding: '6px 8px' }}>
+                                  <span className="muted" style={{ fontSize: 9 }}>IMIĘ</span>
+                                  <strong style={{ display: 'block', marginTop: 2 }}>
+                                    {character.name || '—'}
+                                  </strong>
+                                </div>
+                                <div style={{ ...fieldBox, padding: '6px 8px' }}>
+                                  <span className="muted" style={{ fontSize: 9 }}>TYTUŁ • POZIOM</span>
+                                  <strong style={{ display: 'block', marginTop: 2 }}>
+                                    {character.title || '—'} • {character.level}
+                                  </strong>
+                                </div>
+                                <div
+                                  style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '1fr 1fr',
+                                    gap: 5,
+                                  }}
+                                >
+                                  <div style={{ ...fieldBox, padding: '6px 8px' }}>
+                                    <span className="muted" style={{ fontSize: 9 }}>ANCESTRY</span>
+                                    <strong style={{ display: 'block', marginTop: 2, fontSize: 12 }}>
+                                      {character.ancestry || '—'}
+                                    </strong>
+                                  </div>
+                                  <div style={{ ...fieldBox, padding: '6px 8px' }}>
+                                    <span className="muted" style={{ fontSize: 9 }}>KLASA</span>
+                                    <strong style={{ display: 'block', marginTop: 2, fontSize: 12 }}>
+                                      {character.className || '—'}
+                                    </strong>
+                                  </div>
+                                </div>
+                                <div
+                                  className="muted"
+                                  style={{
+                                    fontSize: 10,
+                                    lineHeight: 1.35,
+                                    padding: '2px 3px',
+                                  }}
+                                >
+                                  {character.alignment || '—'} • {character.background || '—'}
+                                  {character.deity ? ` • ${character.deity}` : ''}
+                                </div>
+                              </div>
                             </div>
 
-                            <div style={{ ...sheetPanel, padding: 12 }}>
+                            <div
+                              style={{
+                                ...sheetPanel,
+                                padding: 12,
+                                display: 'flex',
+                                flexDirection: 'column',
+                              }}
+                            >
+                              <div
+                                className="panel-title"
+                                style={{ marginBottom: 10, fontSize: 16 }}
+                              >
+                                STATYSTYKI
+                              </div>
+
                               <div
                                 style={{
                                   display: 'grid',
-                                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                                  gap: 8,
+                                  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                                  gap: 9,
+                                  flex: 1,
                                 }}
                               >
                                 {[
-                                  ['IMIĘ', character.name || '—'],
-                                  ['TYTUŁ', character.title || '—'],
-                                  ['ANCESTRY', character.ancestry || '—'],
-                                  ['ALIGNMENT', character.alignment || '—'],
-                                  ['KLASA', character.className || '—'],
-                                  ['BACKGROUND', character.background || '—'],
+                                  ['STR', character.strength],
+                                  ['DEX', character.dexterity],
+                                  ['CON', character.constitution],
+                                  ['INT', character.intelligence],
+                                  ['WIS', character.wisdom],
+                                  ['CHA', character.charisma],
                                 ].map(([label, value]) => (
-                                  <div key={String(label)} style={fieldBox}>
-                                    <span
-                                      className="muted"
-                                      style={{ fontSize: 10, letterSpacing: 1 }}
+                                  <div
+                                    key={String(label)}
+                                    style={{
+                                      ...fieldBox,
+                                      minHeight: 94,
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      textAlign: 'center',
+                                      borderColor: 'rgba(197, 148, 58, 0.52)',
+                                      background:
+                                        'linear-gradient(180deg, rgba(105, 76, 31, 0.18), rgba(12, 11, 9, 0.72))',
+                                    }}
+                                  >
+                                    <strong
+                                      style={{
+                                        fontSize: 16,
+                                        letterSpacing: 1.2,
+                                        color: '#d9b66f',
+                                      }}
                                     >
                                       {label}
-                                    </span>
+                                    </strong>
                                     <strong
                                       style={{
                                         display: 'block',
-                                        marginTop: 4,
-                                        fontSize: 16,
+                                        marginTop: 5,
+                                        fontSize: 30,
+                                        lineHeight: 1,
                                       }}
                                     >
                                       {value}
+                                    </strong>
+                                    <strong
+                                      style={{
+                                        display: 'block',
+                                        marginTop: 6,
+                                        fontSize: 18,
+                                      }}
+                                    >
+                                      {formatModifier(statModifier(Number(value)))}
                                     </strong>
                                   </div>
                                 ))}
                               </div>
 
-                              <div
-                                style={{
-                                  display: 'grid',
-                                  gridTemplateColumns: '105px minmax(0, 1fr)',
-                                  gap: 8,
-                                  marginTop: 8,
-                                }}
-                              >
-                                <div style={fieldBox}>
-                                  <span className="muted">POZIOM</span>
-                                  <strong
-                                    style={{
-                                      display: 'block',
-                                      fontSize: 20,
-                                      marginTop: 4,
-                                    }}
-                                  >
-                                    {character.level}
-                                  </strong>
-                                </div>
-
-                                <div style={fieldBox}>
-                                  <div
-                                    style={{
-                                      display: 'flex',
-                                      justifyContent: 'space-between',
-                                      alignItems: 'center',
-                                      gap: 8,
-                                    }}
-                                  >
-                                    <span className="muted">XP</span>
-                                    <strong>
-                                      {character.xp} / {character.xpNext}
-                                    </strong>
-                                  </div>
-
-                                  <div
-                                    className="button-row"
-                                    style={{ marginTop: 7, flexWrap: 'wrap' }}
-                                  >
-                                    {[-1, 1, -10, 10].map(delta => (
-                                      <button
-                                        key={delta}
-                                        className="secondary"
-                                        onClick={() =>
-                                          void adjustCharacterXp(character, delta)
-                                        }
-                                        disabled={delta < 0 && character.xp === 0}
-                                        style={{ minWidth: 42 }}
-                                      >
-                                        {delta > 0 ? `+${delta}` : delta}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div style={{ ...fieldBox, marginTop: 8 }}>
-                                <span className="muted">BÓSTWO / DEITY</span>
-                                <strong
-                                  style={{
-                                    display: 'block',
-                                    marginTop: 4,
-                                    fontSize: 16,
-                                  }}
-                                >
-                                  {character.deity || '—'}
+                              <div style={{ ...fieldBox, marginTop: 9 }}>
+                                <span className="muted">QUICKPULL (DEX)</span>
+                                <strong style={{ float: 'right' }}>
+                                  {quickpullCount(character.id)}/{quickpullLimit(character)}
                                 </strong>
                               </div>
                             </div>
@@ -6469,23 +6517,28 @@ function App() {
                             <div
                               style={{
                                 display: 'grid',
-                                gridTemplateRows: 'repeat(4, minmax(0, 1fr))',
-                                gap: 8,
+                                gridTemplateRows: 'auto auto auto',
+                                gap: 9,
                               }}
                             >
                               <div
                                 style={{
                                   ...sheetPanel,
-                                  padding: '10px 12px',
-                                  borderColor: 'rgba(164, 69, 54, 0.55)',
+                                  padding: '13px 14px',
+                                  borderColor: 'rgba(164, 69, 54, 0.72)',
+                                  background:
+                                    'linear-gradient(180deg, rgba(105, 38, 32, 0.22), rgba(18, 16, 13, 0.92))',
                                 }}
                               >
-                                <span className="muted">HP CAŁKOWITE</span>
+                                <span className="muted" style={{ letterSpacing: 1 }}>
+                                  HP CAŁKOWITE
+                                </span>
                                 <strong
                                   style={{
                                     display: 'block',
                                     marginTop: 4,
-                                    fontSize: 24,
+                                    fontSize: 34,
+                                    lineHeight: 1,
                                   }}
                                 >
                                   {character.currentHp}/{effectiveMaxHp(character)}
@@ -6493,25 +6546,19 @@ function App() {
 
                                 <div
                                   className="button-row"
-                                  style={{ marginTop: 8, flexWrap: 'wrap' }}
+                                  style={{ marginTop: 10, flexWrap: 'wrap' }}
                                 >
                                   {[-10, -1, 1, 10].map(delta => (
                                     <button
                                       key={`hp-${delta}`}
                                       className="secondary"
-                                      onClick={() =>
-                                        void adjustCharacterHp(character, delta)
-                                      }
+                                      onClick={() => void adjustCharacterHp(character, delta)}
                                       disabled={
                                         (delta < 0 && character.currentHp <= 0) ||
                                         (delta > 0 &&
-                                          character.currentHp >=
-                                            effectiveMaxHp(character))
+                                          character.currentHp >= effectiveMaxHp(character))
                                       }
-                                      style={{
-                                        minWidth: 40,
-                                        padding: '5px 7px',
-                                      }}
+                                      style={{ minWidth: 42, padding: '5px 7px' }}
                                     >
                                       {delta > 0 ? `+${delta}` : delta}
                                     </button>
@@ -6520,39 +6567,23 @@ function App() {
 
                                 <div
                                   style={{
-                                    marginTop: 9,
-                                    paddingTop: 8,
-                                    borderTop:
-                                      '1px solid rgba(164, 69, 54, 0.28)',
+                                    marginTop: 10,
+                                    paddingTop: 9,
+                                    borderTop: '1px solid rgba(164, 69, 54, 0.30)',
                                   }}
                                 >
-                                  <span
-                                    className="muted"
-                                    style={{
-                                      display: 'block',
-                                      marginBottom: 5,
-                                    }}
-                                  >
+                                  <span className="muted" style={{ display: 'block', marginBottom: 5 }}>
                                     Tymczasowe HP
                                   </span>
-
                                   <InventoryQuantityInput
                                     value={character.temporaryHp}
                                     onCommit={value =>
-                                      setCharacterTemporaryHpValue(
-                                        character,
-                                        value
-                                      )
+                                      setCharacterTemporaryHpValue(character, value)
                                     }
                                   />
-
                                   <span
                                     className="muted"
-                                    style={{
-                                      display: 'block',
-                                      marginTop: 5,
-                                      fontSize: 11,
-                                    }}
+                                    style={{ display: 'block', marginTop: 5, fontSize: 11 }}
                                   >
                                     Bazowe max: {character.maxHp} • efektywne max:{' '}
                                     {effectiveMaxHp(character)}
@@ -6563,62 +6594,75 @@ function App() {
                               <div
                                 style={{
                                   ...sheetPanel,
-                                  padding: '10px 12px',
-                                  borderColor: 'rgba(75, 118, 153, 0.55)',
+                                  padding: '13px 14px',
+                                  borderColor: 'rgba(75, 118, 153, 0.72)',
+                                  background:
+                                    'linear-gradient(180deg, rgba(38, 67, 96, 0.20), rgba(18, 16, 13, 0.92))',
                                 }}
                               >
-                                <span className="muted">AC</span>
-                                <strong
+                                <div
                                   style={{
-                                    display: 'block',
-                                    marginTop: 4,
-                                    fontSize: 24,
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'baseline',
+                                    gap: 8,
                                   }}
                                 >
-                                  {armorClassForCharacter(character)}
-                                </strong>
+                                  <span className="muted" style={{ letterSpacing: 1 }}>XP</span>
+                                  <strong style={{ fontSize: 28 }}>
+                                    {character.xp} / {character.xpNext}
+                                  </strong>
+                                </div>
+                                <div
+                                  className="button-row"
+                                  style={{ marginTop: 10, flexWrap: 'wrap' }}
+                                >
+                                  {[-10, -1, 1, 10].map(delta => (
+                                    <button
+                                      key={`xp-${delta}`}
+                                      className="secondary"
+                                      onClick={() => void adjustCharacterXp(character, delta)}
+                                      disabled={delta < 0 && character.xp === 0}
+                                      style={{ minWidth: 42 }}
+                                    >
+                                      {delta > 0 ? `+${delta}` : delta}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
 
                               <div
                                 style={{
                                   ...sheetPanel,
                                   padding: '10px 12px',
-                                  borderColor: 'rgba(83, 133, 68, 0.55)',
+                                  display: 'grid',
+                                  gap: 8,
                                 }}
                               >
-                                <span className="muted">W RĘKACH</span>
-                                <strong
-                                  style={{
-                                    display: 'block',
-                                    marginTop: 4,
-                                    lineHeight: 1.35,
-                                  }}
-                                >
-                                  {handsDisplayForCharacter(character.id)}
-                                </strong>
-                                <span
-                                  className="muted"
-                                  style={{ display: 'block', marginTop: 4 }}
-                                >
-                                  {handsUsed}/2 ręce
-                                </span>
-                              </div>
-
-                              <div style={{ ...sheetPanel, padding: '10px 12px' }}>
                                 <div className="slot-line">
-                                  <span>SLOTY</span>
-                                  <b>
-                                    {Number(usedSlots.toFixed(2))}/{maxSlots}
+                                  <span>AC</span>
+                                  <b style={{ fontSize: 20 }}>
+                                    {armorClassForCharacter(character)}
                                   </b>
+                                </div>
+                                <div className="slot-line">
+                                  <span>W rękach</span>
+                                  <b>{handsDisplayForCharacter(character.id)}</b>
+                                </div>
+                                <div className="slot-line">
+                                  <span>Ręce</span>
+                                  <b>{handsUsed}/2</b>
+                                </div>
+                                <div className="slot-line">
+                                  <span>Sloty</span>
+                                  <b>{Number(usedSlots.toFixed(2))}/{maxSlots}</b>
                                 </div>
                                 <div className="progress small">
                                   <i
                                     style={{
                                       width: `${Math.min(
                                         100,
-                                        maxSlots > 0
-                                          ? (usedSlots / maxSlots) * 100
-                                          : 0
+                                        maxSlots > 0 ? (usedSlots / maxSlots) * 100 : 0
                                       )}%`,
                                     }}
                                   />
@@ -6631,58 +6675,11 @@ function App() {
                             style={{
                               display: 'grid',
                               gridTemplateColumns:
-                                'minmax(310px, 0.85fr) minmax(390px, 1.1fr) minmax(390px, 1.1fr)',
+                                'repeat(2, minmax(0, 1fr))',
                               gap: 12,
                               marginTop: 12,
                             }}
                           >
-                            <section style={{ ...sheetPanel, padding: 12 }}>
-                              <div className="panel-title">STATYSTYKI</div>
-
-                              <div style={{ display: 'grid', gap: 0 }}>
-                                {[
-                                  ['STR', character.strength],
-                                  ['DEX', character.dexterity],
-                                  ['CON', character.constitution],
-                                  ['INT', character.intelligence],
-                                  ['WIS', character.wisdom],
-                                  ['CHA', character.charisma],
-                                ].map(([label, value]) => (
-                                  <div
-                                    key={String(label)}
-                                    style={{
-                                      display: 'grid',
-                                      gridTemplateColumns: '1fr 70px 90px',
-                                      gap: 8,
-                                      padding: '8px 4px',
-                                      borderBottom:
-                                        '1px solid rgba(180, 135, 60, 0.20)',
-                                    }}
-                                  >
-                                    <strong>{label}</strong>
-                                    <span style={{ textAlign: 'right' }}>
-                                      {value}
-                                    </span>
-                                    <strong style={{ textAlign: 'right' }}>
-                                      {formatModifier(
-                                        statModifier(Number(value))
-                                      )}
-                                    </strong>
-                                  </div>
-                                ))}
-                              </div>
-
-                              <div style={{ ...fieldBox, marginTop: 10 }}>
-                                <span className="muted">
-                                  QUICKPULL (DEX)
-                                </span>
-                                <strong style={{ float: 'right' }}>
-                                  {quickpullCount(character.id)}/
-                                  {quickpullLimit(character)}
-                                </strong>
-                              </div>
-                            </section>
-
                             <section style={{ ...sheetPanel, padding: 12 }}>
                               <div className="panel-title">
                                 TALENTY / ZAKLĘCIA / JĘZYKI / BIEGŁOŚCI
@@ -6690,7 +6687,7 @@ function App() {
                               <div
                                 style={{
                                   ...fieldBox,
-                                  minHeight: 270,
+                                  minHeight: 190,
                                   whiteSpace: 'pre-wrap',
                                   lineHeight: 1.45,
                                 }}
@@ -6706,7 +6703,7 @@ function App() {
                               <div
                                 style={{
                                   ...fieldBox,
-                                  minHeight: 270,
+                                  minHeight: 190,
                                   whiteSpace: 'pre-wrap',
                                   lineHeight: 1.5,
                                 }}
