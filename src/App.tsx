@@ -390,6 +390,9 @@ function App() {
   const [sellSp, setSellSp] = useState(0)
   const [sellCp, setSellCp] = useState(0)
   const [sellingItem, setSellingItem] = useState(false)
+  const [showCharacterShop, setShowCharacterShop] = useState(false)
+  const [showShopSellPicker, setShowShopSellPicker] = useState(false)
+  const [shopCharacterId, setShopCharacterId] = useState('')
 
   const [showTransferItem, setShowTransferItem] = useState(false)
   const [transferFromType, setTransferFromType] = useState<InventoryOwnerType>('character')
@@ -4127,12 +4130,29 @@ function App() {
     bastionItems,
   ])
 
+  function openCharacterShop(characterId: string) {
+    setShopCharacterId(characterId)
+    setShowCharacterShop(true)
+  }
+
+  function openCharacterShopBuy() {
+    if (!shopCharacterId) return
+    setShowCharacterShop(false)
+    openBuyItem('character', shopCharacterId)
+  }
+
+  function openCharacterShopSell() {
+    if (!shopCharacterId) return
+    setShowCharacterShop(false)
+    setShowShopSellPicker(true)
+  }
+
   function openBuyItem(ownerType: InventoryOwnerType, ownerId: string) {
     setBuyOwnerType(ownerType)
     setBuyOwnerId(ownerId)
     setBuyCatalogItemId(catalog[0]?.id ?? '')
     setBuyQuantity(1)
-    setBuyCharacterId(characters[0]?.id ?? '')
+    setBuyCharacterId(ownerType === 'character' ? ownerId : '')
     setBuyGp(0)
     setBuySp(0)
     setBuyCp(0)
@@ -4141,14 +4161,23 @@ function App() {
 
   function openSellItem(
     ownerType: InventoryOwnerType,
-    item: { id: string; name: string; quantity: number }
+    item: {
+      id: string
+      name: string
+      quantity: number
+      characterId?: string
+    }
   ) {
     setSellOwnerType(ownerType)
     setSellItemId(item.id)
     setSellItemName(item.name)
     setSellMaxQuantity(item.quantity)
     setSellQuantity(1)
-    setSellCharacterId(characters[0]?.id ?? '')
+    setSellCharacterId(
+      ownerType === 'character'
+        ? item.characterId ?? shopCharacterId
+        : ''
+    )
     setSellGp(0)
     setSellSp(0)
     setSellCp(0)
@@ -4174,7 +4203,7 @@ function App() {
 
   async function executeBuyItem() {
     if (!activeId || !buyOwnerId || !buyCatalogItemId || !buyCharacterId) {
-      setError('Wybierz przedmiot, miejsce docelowe i postać płacącą.')
+      setError('Wybierz przedmiot do zakupu.')
       return
     }
 
@@ -4210,7 +4239,7 @@ function App() {
 
   async function executeSellItem() {
     if (!activeId || !sellItemId || !sellCharacterId) {
-      setError('Wybierz postać, która otrzyma pieniądze.')
+      setError('Nie udało się ustalić postaci otrzymującej pieniądze.')
       return
     }
 
@@ -5321,7 +5350,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3V • uporządkowana karta postaci</span>
+              Etap 3W • sklep Postaci</span>
           </div>
 
         </aside>
@@ -6733,23 +6762,48 @@ function App() {
                                 EKWIPUNEK
                               </div>
 
-                              <div className="button-row">
+                              <div
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: '1fr auto 1fr',
+                                  alignItems: 'center',
+                                  width: '100%',
+                                  gap: 10,
+                                }}
+                              >
+                                <div>
+                                  <button
+                                    className="secondary"
+                                    onClick={() => openNewItem(character.id)}
+                                  >
+                                    <Package size={15} />
+                                    Dodaj przedmiot
+                                  </button>
+                                </div>
+
                                 <button
                                   className="secondary"
-                                  onClick={() => openNewItem(character.id)}
+                                  onClick={() => openCharacterShop(character.id)}
+                                  title={`Otwórz sklep dla: ${character.name}`}
+                                  style={{
+                                    justifySelf: 'center',
+                                    minWidth: 150,
+                                    padding: '9px 16px',
+                                    border: '1px solid rgba(197, 148, 58, 0.72)',
+                                    background:
+                                      'linear-gradient(180deg, rgba(114, 79, 30, 0.34), rgba(29, 23, 15, 0.92))',
+                                    boxShadow:
+                                      'inset 0 0 0 1px rgba(225, 184, 94, 0.09), 0 3px 12px rgba(0,0,0,.25)',
+                                    fontWeight: 800,
+                                    letterSpacing: '.5px',
+                                  }}
                                 >
-                                  <Package size={15} />
-                                  Dodaj przedmiot
+                                  <Building2 size={19} />
+                                  SKLEP
+                                  <Coins size={16} />
                                 </button>
-                                <button
-                                  className="secondary"
-                                  onClick={() =>
-                                    openBuyItem('character', character.id)
-                                  }
-                                >
-                                  <Coins size={15} />
-                                  Kup
-                                </button>
+
+                                <div />
                               </div>
                             </div>
 
@@ -6896,19 +6950,6 @@ function App() {
                                         </button>
 
                                         <button
-                                          className="secondary"
-                                          onClick={() =>
-                                            openSellItem(
-                                              'character',
-                                              item
-                                            )
-                                          }
-                                        >
-                                          <Coins size={14} />
-                                          Sprzedaj
-                                        </button>
-
-                                        <button
                                           className="danger"
                                           onClick={() =>
                                             removeItem(item)
@@ -6982,14 +7023,6 @@ function App() {
                                   <Package size={15} />
                                   Dodaj przedmiot
                                 </button>
-                                <button
-                                  className="secondary"
-                                  onClick={() => openBuyItem('character', character.id)}
-                                >
-                                  <Coins size={15} />
-                                  Kup
-                                </button>
-
                                 <button
                                   className="secondary"
                                   onClick={() => openEditCharacter(character)}
@@ -7437,13 +7470,6 @@ function App() {
                                         </button>
 
                                         <button
-                                          className="secondary"
-                                          onClick={() => openSellItem('character', item)}
-                                        >
-                                          <Coins size={14} />
-                                          Sprzedaj
-                                        </button>
-                                        <button
                                           className="danger"
                                           onClick={() => removeItem(item)}
                                         >
@@ -7525,10 +7551,6 @@ function App() {
                                 <button className="secondary" onClick={() => openNewAnimalItem(animal.id)}>
                                   <Package size={15} />
                                   Dodaj wyposażenie
-                                </button>
-                                <button className="secondary" onClick={() => openBuyItem('animal', animal.id)}>
-                                  <Coins size={15} />
-                                  Kup
                                 </button>
                                 <button className="secondary" onClick={() => openEditAnimal(animal)}>
                                   <Pencil size={15} />
@@ -7656,10 +7678,6 @@ function App() {
                                           >
                                             <ArrowRightLeft size={14} />
                                             Przenieś
-                                          </button>
-                                          <button className="secondary" onClick={() => openSellItem('animal', item)}>
-                                            <Coins size={14} />
-                                            Sprzedaj
                                           </button>
                                           <button className="danger" onClick={() => removeAnimalItem(item)}>
                                             <Trash2 size={14} />
@@ -7950,10 +7968,6 @@ function App() {
                                   <Package size={15} />
                                   Dodaj przedmiot
                                 </button>
-                                <button className="secondary" onClick={() => openBuyItem('npc', npc.id)}>
-                                  <Coins size={15} />
-                                  Kup
-                                </button>
                                 <button className="secondary" onClick={() => openEditNpc(npc)}>
                                   <Pencil size={15} />
                                   Edytuj
@@ -8021,10 +8035,6 @@ function App() {
                                         >
                                           <ArrowRightLeft size={14} />
                                           Przenieś
-                                        </button>
-                                        <button className="secondary" onClick={() => openSellItem('npc', item)}>
-                                          <Coins size={14} />
-                                          Sprzedaj
                                         </button>
                                         <button className="danger" onClick={() => removeNpcItem(item)}>
                                           <Trash2 size={14} />
@@ -8188,9 +8198,6 @@ function App() {
                                       {Number(usedBastionSlots(bastion.id).toFixed(2))}/100 slotów
                                     </span>
                                   </div>
-                                  <button className="secondary" onClick={() => openBuyItem('bastion', bastion.id)}>
-                                    <Coins size={15} /> Kup do Vault
-                                  </button>
                                 </div>
 
                                 {bastionItemsLoading ? (
@@ -8239,12 +8246,6 @@ function App() {
                                           >
                                             <ArrowRightLeft size={14} /> Przenieś
                                           </button>
-                                        <button
-                                          className="secondary"
-                                          onClick={() => openSellItem('bastion', item)}
-                                        >
-                                          <Coins size={14} /> Sprzedaj
-                                        </button>
                                         </span>
                                       </div>
                                     ))}
@@ -8676,6 +8677,144 @@ function App() {
         </Modal>
       )}
 
+      {showCharacterShop && shopCharacterId && (
+        <Modal
+          onClose={() => {
+            setShowCharacterShop(false)
+            setShopCharacterId('')
+          }}
+        >
+          <div style={{ textAlign: 'center' }}>
+            <div
+              style={{
+                width: 82,
+                height: 82,
+                margin: '0 auto 12px',
+                borderRadius: 16,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid rgba(197, 148, 58, 0.68)',
+                background:
+                  'radial-gradient(circle at 50% 35%, rgba(151, 103, 38, .35), rgba(21, 18, 13, .96) 72%)',
+                boxShadow:
+                  'inset 0 0 22px rgba(218, 174, 83, .10), 0 5px 18px rgba(0,0,0,.28)',
+              }}
+            >
+              <Building2 size={45} strokeWidth={1.5} />
+            </div>
+
+            <p className="eyebrow">SKLEP</p>
+            <h2 style={{ marginBottom: 4 }}>
+              {characters.find(character => character.id === shopCharacterId)?.name ?? 'Postać'}
+            </h2>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Zakupy i sprzedaż dotyczą wyłącznie tej Postaci.
+            </p>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                gap: 12,
+                marginTop: 18,
+              }}
+            >
+              <button
+                className="primary"
+                onClick={openCharacterShopBuy}
+                style={{
+                  minHeight: 88,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 17,
+                }}
+              >
+                <Coins size={28} />
+                KUP
+              </button>
+
+              <button
+                className="secondary"
+                onClick={openCharacterShopSell}
+                disabled={
+                  itemsForCharacter(shopCharacterId).filter(
+                    item => !isCoinInventoryItem(item)
+                  ).length === 0
+                }
+                style={{
+                  minHeight: 88,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 17,
+                }}
+              >
+                <Package size={28} />
+                SPRZEDAJ
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showShopSellPicker && shopCharacterId && (
+        <Modal
+          onClose={() => {
+            setShowShopSellPicker(false)
+          }}
+        >
+          <p className="eyebrow">SKLEP • SPRZEDAŻ</p>
+          <h2>Wybierz przedmiot</h2>
+          <p className="muted">
+            Sprzedaje:{' '}
+            <strong>
+              {characters.find(character => character.id === shopCharacterId)?.name ?? 'Postać'}
+            </strong>
+          </p>
+
+          <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
+            {sortInventoryForDisplay(
+              itemsForCharacter(shopCharacterId).filter(
+                item => !isCoinInventoryItem(item)
+              )
+            ).map(item => (
+              <button
+                key={`shop-sell-${item.id}`}
+                className="secondary"
+                onClick={() => {
+                  setShowShopSellPicker(false)
+                  openSellItem('character', item)
+                }}
+                style={{
+                  width: '100%',
+                  justifyContent: 'space-between',
+                  padding: '10px 12px',
+                  textAlign: 'left',
+                }}
+              >
+                <span>
+                  {inventoryCategoryMarker(item)}
+                  <strong>{item.name}</strong>
+                </span>
+                <span className="muted">ilość: {item.quantity}</span>
+              </button>
+            ))}
+
+            {itemsForCharacter(shopCharacterId).filter(
+              item => !isCoinInventoryItem(item)
+            ).length === 0 && (
+              <p className="muted">Brak przedmiotów możliwych do sprzedaży.</p>
+            )}
+          </div>
+        </Modal>
+      )}
+
       {showBuyItem && (
         <Modal onClose={() => setShowBuyItem(false)}>
           <p className="eyebrow">ZAKUP</p>
@@ -8706,17 +8845,23 @@ function App() {
             />
           </label>
 
-          <label>
-            Płaci postać
-            <select value={buyCharacterId} onChange={e => setBuyCharacterId(e.target.value)}>
-              <option value="">— wybierz —</option>
-              {characters.map(character => (
-                <option key={character.id} value={character.id}>
-                  {character.name} • {Number(character.gold.toFixed(2))} GP
-                </option>
-              ))}
-            </select>
-          </label>
+          <div
+            style={{
+              padding: '10px 12px',
+              border: '1px solid rgba(197, 148, 58, 0.42)',
+              borderRadius: 8,
+              background: 'rgba(93, 67, 29, 0.13)',
+            }}
+          >
+            <span className="muted">Płaci</span>
+            <strong style={{ display: 'block', marginTop: 4 }}>
+              {characters.find(character => character.id === buyCharacterId)?.name ?? '—'}
+              {' • '}
+              {Number(
+                (characters.find(character => character.id === buyCharacterId)?.gold ?? 0).toFixed(2)
+              )} GP
+            </strong>
+          </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             <label>
@@ -8768,17 +8913,19 @@ function App() {
             />
           </label>
 
-          <label>
-            Pieniądze otrzymuje
-            <select value={sellCharacterId} onChange={e => setSellCharacterId(e.target.value)}>
-              <option value="">— wybierz postać —</option>
-              {characters.map(character => (
-                <option key={character.id} value={character.id}>
-                  {character.name} • {Number(character.gold.toFixed(2))} GP
-                </option>
-              ))}
-            </select>
-          </label>
+          <div
+            style={{
+              padding: '10px 12px',
+              border: '1px solid rgba(197, 148, 58, 0.42)',
+              borderRadius: 8,
+              background: 'rgba(93, 67, 29, 0.13)',
+            }}
+          >
+            <span className="muted">Pieniądze otrzymuje</span>
+            <strong style={{ display: 'block', marginTop: 4 }}>
+              {characters.find(character => character.id === sellCharacterId)?.name ?? '—'}
+            </strong>
+          </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             <label>
