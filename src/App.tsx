@@ -5350,7 +5350,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3Y.1 • mocniejsze tła Dashboardu</span>
+              Etap 3Y.2 • widoczne grafiki Dashboardu</span>
           </div>
 
         </aside>
@@ -5633,13 +5633,29 @@ function App() {
             <div
               className="panel light-panel"
               style={{
-                backgroundImage: `linear-gradient(90deg, rgba(17, 15, 11, .18) 0%, rgba(17, 15, 11, .34) 38%, rgba(17, 15, 11, .78) 72%, rgba(17, 15, 11, .94) 100%), url(${import.meta.env.BASE_URL}dashboard-torch.png)`,
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: '-18px center',
-                backgroundSize: 'auto 118%',
-                backgroundBlendMode: 'normal',
+                position: 'relative',
+                overflow: 'hidden',
+                paddingLeft: 235,
               }}
             >
+              <img
+                src={`${import.meta.env.BASE_URL}dashboard-torch.png`}
+                alt=""
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  left: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 200,
+                  maxHeight: '88%',
+                  objectFit: 'contain',
+                  borderRadius: 8,
+                  border: '1px solid rgba(197, 148, 58, 0.34)',
+                  boxShadow: '0 6px 18px rgba(0,0,0,.34)',
+                  pointerEvents: 'none',
+                }}
+              />
 
               <div className="panel-title">
                 <Flame size={18} />
@@ -5800,13 +5816,29 @@ function App() {
             <div
               className="panel"
               style={{
-                backgroundImage: `linear-gradient(270deg, rgba(17, 15, 11, .14) 0%, rgba(17, 15, 11, .28) 40%, rgba(17, 15, 11, .72) 74%, rgba(17, 15, 11, .93) 100%), url(${import.meta.env.BASE_URL}dashboard-camp.png)`,
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right center',
-                backgroundSize: 'auto 120%',
-                backgroundBlendMode: 'normal',
+                position: 'relative',
+                overflow: 'hidden',
+                paddingRight: 255,
               }}
             >
+              <img
+                src={`${import.meta.env.BASE_URL}dashboard-camp.png`}
+                alt=""
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 225,
+                  maxHeight: '88%',
+                  objectFit: 'contain',
+                  borderRadius: 8,
+                  border: '1px solid rgba(197, 148, 58, 0.34)',
+                  boxShadow: '0 6px 18px rgba(0,0,0,.34)',
+                  pointerEvents: 'none',
+                }}
+              />
 
               <div className="panel-title">
                 <Beef size={18} />
