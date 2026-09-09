@@ -359,6 +359,8 @@ function App() {
   const [catalogMagicDescription, setCatalogMagicDescription] = useState('')
   const [catalogDescription, setCatalogDescription] = useState('')
   const [catalogContainerContent, setCatalogContainerContent] = useState('')
+  const [catalogContainerFill, setCatalogContainerFill] = useState(0)
+  const [fillingContainerItem, setFillingContainerItem] = useState<CharacterItem | null>(null)
   const [catalogMaxUses, setCatalogMaxUses] = useState(0)
   const [showCatalogImport, setShowCatalogImport] = useState(false)
   const [catalogImportText, setCatalogImportText] = useState('')
@@ -3840,6 +3842,99 @@ function App() {
     setShowItem(true)
   }
 
+  function containerBaseName(
+    name: string,
+    content?: string | null
+  ) {
+    const trimmed = name.trim()
+
+    if (
+      trimmed.toLowerCase() === "miner's putty jar" ||
+      trimmed.toLowerCase() === 'miner’s putty jar'
+    ) {
+      return 'Jar'
+    }
+
+    const currentContent = (content ?? '').trim()
+    if (
+      currentContent &&
+      trimmed.toLowerCase().endsWith(
+        ` - ${currentContent}`.toLowerCase()
+      )
+    ) {
+      return trimmed.slice(
+        0,
+        trimmed.length - currentContent.length - 3
+      ).trim()
+    }
+
+    const separatorIndex = trimmed.indexOf(' - ')
+    if (separatorIndex > 0) {
+      return trimmed.slice(0, separatorIndex).trim()
+    }
+
+    return trimmed
+  }
+
+  function containerDisplayName(
+    name: string,
+    content?: string | null
+  ) {
+    const base = containerBaseName(name, content)
+    const normalizedContent = (content ?? '').trim()
+    return normalizedContent
+      ? `${base} - ${normalizedContent}`
+      : base
+  }
+
+  function openFillContainer(
+    character: Character,
+    item: CharacterItem
+  ) {
+    const entry = catalogEntryForItem(item.catalogItemId)
+
+    if (!entry) {
+      setError(
+        'Ten pojemnik nie jest połączony z przedmiotem w Bibliotece.'
+      )
+      return
+    }
+
+    setFillingContainerItem(item)
+    setEditingCatalogItem(entry)
+    setCatalogName(
+      containerBaseName(
+        entry.name,
+        entry.containerContent
+      )
+    )
+    setCatalogSlotsPerUnit(entry.slotsPerUnit)
+    setCatalogSlotGroupSize(entry.slotGroupSize)
+    setCatalogFreeQuantity(entry.freeQuantity)
+    setCatalogCategory('container')
+    setCatalogLightMinutes(entry.lightMinutes ?? 60)
+    setCatalogWeaponDamage(entry.weaponDamage ?? '')
+    setCatalogWeaponRange(entry.weaponRange ?? '')
+    setCatalogWeaponProperties(entry.weaponProperties ?? '')
+    setCatalogHandsRequired(entry.handsRequired)
+    setCatalogArmorClass(entry.armorClass ?? '')
+    setCatalogArmorProperties(entry.armorProperties ?? '')
+    setCatalogIsMagical(entry.isMagical)
+    setCatalogIsQuestItem(entry.isQuestItem)
+    setCatalogMagicDescription(entry.magicDescription ?? '')
+    setCatalogDescription(entry.description ?? '')
+    setCatalogContainerContent(entry.containerContent ?? '')
+    setCatalogMaxUses(entry.maxUses)
+    setCatalogContainerFill(
+      Math.min(
+        entry.maxUses,
+        Math.max(0, item.usesRemaining)
+      )
+    )
+    setActiveView('Biblioteka')
+    setShowCatalogItem(true)
+  }
+
   function openNewCatalogItem() {
     setEditingCatalogItem(null)
     setCatalogName('')
@@ -3859,11 +3954,14 @@ function App() {
     setCatalogMagicDescription('')
     setCatalogDescription('')
     setCatalogContainerContent('')
+    setCatalogContainerFill(0)
+    setFillingContainerItem(null)
     setCatalogMaxUses(0)
     setShowCatalogItem(true)
   }
 
   function openEditCatalogItem(entry: CatalogItem) {
+    setFillingContainerItem(null)
     setEditingCatalogItem(entry)
     setCatalogName(entry.name)
     setCatalogSlotsPerUnit(entry.slotsPerUnit)
@@ -3889,8 +3987,16 @@ function App() {
   async function saveCatalogItem() {
     if (!activeId || !catalogName.trim()) return
 
+    const effectiveCatalogName =
+      catalogCategory === 'container'
+        ? containerDisplayName(
+            catalogName,
+            catalogContainerContent
+          )
+        : catalogName
+
     const changes = {
-      name: catalogName,
+      name: effectiveCatalogName,
       slotsPerUnit: catalogSlotsPerUnit,
       slotGroupSize: catalogSlotGroupSize,
       freeQuantity: catalogFreeQuantity,
@@ -3920,6 +4026,98 @@ function App() {
     }
 
     try {
+      if (
+        fillingContainerItem &&
+        editingCatalogItem &&
+        catalogCategory === 'container'
+      ) {
+        const normalizedContent =
+          catalogContainerContent.trim()
+        const baseName = containerBaseName(
+          editingCatalogItem.name,
+          editingCatalogItem.containerContent
+        )
+        const variantName = normalizedContent
+          ? `${baseName} - ${normalizedContent}`
+          : baseName
+
+        let targetEntry = catalog.find(
+          entry =>
+            entry.category === 'container' &&
+            entry.name.trim().toLowerCase() ===
+              variantName.trim().toLowerCase() &&
+            (entry.containerContent ?? '')
+              .trim()
+              .toLowerCase() ===
+              normalizedContent.toLowerCase()
+        )
+
+        if (!targetEntry) {
+          targetEntry = await createCatalogItem({
+            campaignId: activeId,
+            ...changes,
+            name: variantName,
+          })
+        } else {
+          targetEntry = await updateCatalogItem(
+            targetEntry.id,
+            {
+              ...changes,
+              name: variantName,
+            }
+          )
+        }
+
+        const maxUses = Math.max(
+          0,
+          Math.floor(catalogMaxUses)
+        )
+        const usesRemaining = Math.max(
+          0,
+          Math.min(
+            maxUses,
+            Math.floor(catalogContainerFill)
+          )
+        )
+
+        await updateItem(
+          fillingContainerItem.id,
+          fillingContainerItem.characterId,
+          {
+            catalogItemId: targetEntry.id,
+            name: variantName,
+            quantity: fillingContainerItem.quantity,
+            slotsPerUnit: targetEntry.slotsPerUnit,
+            slotGroupSize: targetEntry.slotGroupSize,
+            freeQuantity: targetEntry.freeQuantity,
+            category: 'container',
+            lightMinutes: null,
+            weaponDamage: null,
+            weaponRange: null,
+            weaponProperties: null,
+            armorClass: null,
+            armorProperties: null,
+            maxUses,
+            usesRemaining,
+          }
+        )
+
+        await Promise.all([
+          refreshCatalog(),
+          refreshItems(),
+          refreshCharacters(),
+        ])
+
+        setShowCatalogItem(false)
+        setEditingCatalogItem(null)
+        setFillingContainerItem(null)
+        flash(
+          `${variantName}: ustawiono zawartość ${usesRemaining}/${maxUses}.`,
+          'inventory'
+        )
+        return
+      }
+
       if (editingCatalogItem) {
         const updated = await updateCatalogItem(
           editingCatalogItem.id,
@@ -6492,7 +6690,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AH • opisy, żywność i pojemniki</span>
+              Etap 3AI • napełnianie i nazwy pojemników</span>
           </div>
 
         </aside>
@@ -8169,6 +8367,27 @@ function App() {
                                         >
                                           Quickpull
                                         </button>
+
+                                        {item.category === 'container' && (
+                                          <button
+                                            type="button"
+                                            className="secondary"
+                                            onClick={() =>
+                                              openFillContainer(
+                                                character,
+                                                item
+                                              )
+                                            }
+                                            style={{
+                                              border:
+                                                '1px solid rgba(167, 126, 55, 0.72)',
+                                              color: '#e3c27b',
+                                              fontWeight: 800,
+                                            }}
+                                          >
+                                            NAPEŁNIJ
+                                          </button>
+                                        )}
 
                                         {isUnidentifiedMagicalInventoryItem(
                                           item.catalogItemId
@@ -11794,29 +12013,144 @@ function App() {
           </label>
 
           {catalogCategory === 'container' && (
-            <label>
-              Zawartość
-              <input
-                value={catalogContainerContent}
-                onChange={e =>
-                  setCatalogContainerContent(e.target.value)
-                }
-                placeholder="np. Miner's Putty"
-              />
-            </label>
+            <div
+              style={{
+                display: 'grid',
+                gap: 12,
+                padding: '14px 16px',
+                borderRadius: 10,
+                border: '1px solid rgba(175, 132, 58, 0.48)',
+                background:
+                  'linear-gradient(180deg, rgba(73, 50, 21, 0.18), rgba(22, 18, 13, 0.72))',
+              }}
+            >
+              <div>
+                <strong
+                  style={{
+                    display: 'block',
+                    color: '#e6c782',
+                    marginBottom: 3,
+                  }}
+                >
+                  Zawartość pojemnika
+                </strong>
+                <span className="muted">
+                  Pusta zawartość oznacza pusty pojemnik.
+                </span>
+              </div>
+
+              <label style={{ margin: 0 }}>
+                Substancja
+                <input
+                  value={catalogContainerContent}
+                  onChange={e =>
+                    setCatalogContainerContent(e.target.value)
+                  }
+                  placeholder="np. Miner's Putty albo Glow Paste"
+                  style={{
+                    background: 'rgba(15, 13, 10, 0.96)',
+                    color: '#ead6aa',
+                    border: '1px solid rgba(164, 122, 52, 0.62)',
+                  }}
+                />
+              </label>
+
+              {fillingContainerItem && (
+                <label style={{ margin: 0 }}>
+                  Aktualne napełnienie
+                  <input
+                    type="number"
+                    min="0"
+                    max={catalogMaxUses}
+                    step="1"
+                    value={catalogContainerFill}
+                    onChange={e =>
+                      setCatalogContainerFill(
+                        Math.max(
+                          0,
+                          Math.min(
+                            catalogMaxUses,
+                            Math.floor(
+                              Number(e.target.value) || 0
+                            )
+                          )
+                        )
+                      )
+                    }
+                    style={{
+                      background: 'rgba(15, 13, 10, 0.96)',
+                      color: '#ead6aa',
+                      border: '1px solid rgba(164, 122, 52, 0.62)',
+                    }}
+                  />
+                  <span
+                    className="muted"
+                    style={{ display: 'block', marginTop: 4 }}
+                  >
+                    Ile jednostek zawartości ma teraz ten konkretny pojemnik.
+                  </span>
+                </label>
+              )}
+
+              <div
+                style={{
+                  fontSize: 13,
+                  color: '#c6a96e',
+                  lineHeight: 1.5,
+                }}
+              >
+                Nazwa w ekwipunku:{' '}
+                <strong>
+                  {containerDisplayName(
+                    catalogName || 'Pojemnik',
+                    catalogContainerContent
+                  )}
+                </strong>
+              </div>
+            </div>
           )}
 
-          <label>
-            Opis
+          <label
+            style={{
+              display: 'grid',
+              gap: 7,
+              padding: '12px 14px',
+              borderRadius: 9,
+              border: '1px solid rgba(118, 93, 50, 0.42)',
+              background: 'rgba(27, 23, 17, 0.72)',
+            }}
+          >
+            <span>
+              <strong>Opis</strong>
+              <span
+                className="muted"
+                style={{ display: 'block', marginTop: 3 }}
+              >
+                Opcjonalny opis dostępny dla każdego przedmiotu.
+              </span>
+            </span>
             <textarea
               rows={4}
               value={catalogDescription}
-              onChange={e => setCatalogDescription(e.target.value)}
+              onChange={e =>
+                setCatalogDescription(e.target.value)
+              }
               placeholder="Opis przedmiotu, jego wyglądu, działania lub dodatkowych informacji..."
+              style={{
+                width: '100%',
+                resize: 'vertical',
+                background: 'rgba(15, 13, 10, 0.96)',
+                color: '#ead6aa',
+                border: '1px solid rgba(118, 93, 50, 0.58)',
+                borderRadius: 7,
+                padding: '10px 11px',
+                lineHeight: 1.5,
+                fontFamily: 'inherit',
+                fontSize: 14,
+              }}
             />
-            <span className="muted" style={{ display: 'block', marginTop: 4 }}>
-              Pole dostępne dla każdego rodzaju przedmiotu. Jeśli je uzupełnisz,
-              w ekwipunku pojawi się przycisk „Opis”.
+            <span className="muted">
+              Jeśli opis jest wpisany, w ekwipunku pojawi się przycisk „Opis”.
             </span>
           </label>
 
@@ -11946,8 +12280,16 @@ function App() {
             </>
           )}
 
-          <button className="primary full" onClick={saveCatalogItem} disabled={!catalogName.trim()}>
-            {editingCatalogItem ? 'Zapisz zmiany' : 'Dodaj do biblioteki'} do katalogu
+          <button
+            className="primary full"
+            onClick={saveCatalogItem}
+            disabled={!catalogName.trim()}
+          >
+            {fillingContainerItem
+              ? 'Zapisz napełnienie pojemnika'
+              : editingCatalogItem
+                ? 'Zapisz zmiany w katalogu'
+                : 'Dodaj do biblioteki'}
           </button>
           <p className="muted">Przedmiot będzie dostępny wszystkim użytkownikom tej kampanii.</p>
         </Modal>
