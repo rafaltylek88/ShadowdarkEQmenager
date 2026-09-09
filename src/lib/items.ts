@@ -120,7 +120,7 @@ export async function createItem(input: {
 }): Promise<CharacterItem> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
 
-  if (input.catalogItemId) {
+  if (input.catalogItemId && input.category !== 'container') {
     let existingQuery = supabase
       .from('character_items')
       .select('*')
@@ -158,7 +158,10 @@ export async function createItem(input: {
       campaign_id: input.campaignId,
       character_id: input.characterId,
       catalog_item_id: input.catalogItemId ?? null,
-      name: input.name.trim(),
+      name:
+        input.category === 'container'
+          ? input.name.split(' - ')[0].trim()
+          : input.name.trim(),
       quantity: input.quantity,
       slots_per_unit: input.slotsPerUnit,
       slot_group_size: Math.max(1, input.slotGroupSize ?? 1),
@@ -179,7 +182,10 @@ export async function createItem(input: {
       armor_properties:
         input.category === 'armor' ? input.armorProperties?.trim() || null : null,
       max_uses: Math.max(0, Math.floor(input.maxUses ?? 0)),
-      uses_remaining: Math.max(0, Math.floor(input.maxUses ?? 0)),
+      uses_remaining:
+        input.category === 'container'
+          ? 0
+          : Math.max(0, Math.floor(input.maxUses ?? 0)),
     })
     .select('*')
     .single()
