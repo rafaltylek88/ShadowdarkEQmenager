@@ -119,6 +119,7 @@ import type {
   HistoryUndoPayload,
 } from './lib/history'
 import {
+  adjustInventoryItemUse,
   consumeInventoryItemUse,
   setInventoryItemQuantity,
   transferInventoryItem,
@@ -212,6 +213,10 @@ function App() {
   const [undoingHistoryId, setUndoingHistoryId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [magicDescriptionItem, setMagicDescriptionItem] = useState<{
+    name: string
+    description: string
+  } | null>(null)
+  const [descriptionItem, setDescriptionItem] = useState<{
     name: string
     description: string
   } | null>(null)
@@ -352,6 +357,8 @@ function App() {
   const [catalogIsMagical, setCatalogIsMagical] = useState(false)
   const [catalogIsQuestItem, setCatalogIsQuestItem] = useState(false)
   const [catalogMagicDescription, setCatalogMagicDescription] = useState('')
+  const [catalogDescription, setCatalogDescription] = useState('')
+  const [catalogContainerContent, setCatalogContainerContent] = useState('')
   const [catalogMaxUses, setCatalogMaxUses] = useState(0)
   const [showCatalogImport, setShowCatalogImport] = useState(false)
   const [catalogImportText, setCatalogImportText] = useState('')
@@ -1506,6 +1513,43 @@ function App() {
       catalogEntryForItem(catalogItemId)?.magicDescription ?? null,
     [catalogEntryForItem]
   )
+
+  const descriptionForItem = useCallback(
+    (catalogItemId: string | null) =>
+      catalogEntryForItem(catalogItemId)?.description ?? null,
+    [catalogEntryForItem]
+  )
+
+  const containerContentForItem = useCallback(
+    (catalogItemId: string | null) =>
+      catalogEntryForItem(catalogItemId)?.containerContent ?? null,
+    [catalogEntryForItem]
+  )
+
+  function openInventoryItemDescription(item: {
+    name: string
+    catalogItemId: string | null
+  }) {
+    const entry = catalogEntryForItem(item.catalogItemId)
+    if (!entry) return
+
+    const parts: string[] = []
+    if ((entry.description ?? '').trim()) {
+      parts.push(entry.description!.trim())
+    }
+    if (
+      entry.isMagical &&
+      (entry.magicDescription ?? '').trim()
+    ) {
+      parts.push(`MAGICZNE WŁAŚCIWOŚCI\n${entry.magicDescription!.trim()}`)
+    }
+
+    if (!parts.length) return
+    setDescriptionItem({
+      name: item.name,
+      description: parts.join('\n\n'),
+    })
+  }
 
   const isUnidentifiedMagicalInventoryItem = useCallback(
     (catalogItemId: string | null) => {
@@ -3159,6 +3203,8 @@ function App() {
       isMagical: entry.isMagical,
       isQuestItem: entry.isQuestItem,
       magicDescription: entry.magicDescription,
+      description: entry.description,
+      containerContent: entry.containerContent,
       maxUses: entry.maxUses,
     }
   }
@@ -3811,6 +3857,8 @@ function App() {
     setCatalogIsMagical(false)
     setCatalogIsQuestItem(false)
     setCatalogMagicDescription('')
+    setCatalogDescription('')
+    setCatalogContainerContent('')
     setCatalogMaxUses(0)
     setShowCatalogItem(true)
   }
@@ -3832,6 +3880,8 @@ function App() {
     setCatalogIsMagical(entry.isMagical)
     setCatalogIsQuestItem(entry.isQuestItem)
     setCatalogMagicDescription(entry.magicDescription ?? '')
+    setCatalogDescription(entry.description ?? '')
+    setCatalogContainerContent(entry.containerContent ?? '')
     setCatalogMaxUses(entry.maxUses)
     setShowCatalogItem(true)
   }
@@ -3863,6 +3913,9 @@ function App() {
       isQuestItem: catalogIsQuestItem,
       magicDescription:
         catalogIsMagical ? catalogMagicDescription : null,
+      description: catalogDescription,
+      containerContent:
+        catalogCategory === 'container' ? catalogContainerContent : null,
       maxUses: catalogMaxUses,
     }
 
@@ -4065,11 +4118,54 @@ function App() {
     }
   }
 
+  async function adjustContainerContent(
+    ownerType: InventoryOwnerType,
+    item: {
+      id: string
+      name: string
+      maxUses?: number
+      usesRemaining?: number
+    },
+    delta: number
+  ) {
+    const maxUses = Math.max(0, Number(item.maxUses ?? 0))
+    const usesRemaining = Math.max(0, Number(item.usesRemaining ?? 0))
+    if (!activeId || maxUses <= 0) return
+
+    const next = Math.max(0, Math.min(maxUses, usesRemaining + delta))
+    if (next === usesRemaining) return
+
+    try {
+      await adjustInventoryItemUse({
+        campaignId: activeId,
+        ownerType,
+        itemId: item.id,
+        delta,
+      })
+      await refreshInventoryOwners(
+        [ownerType],
+        ownerType === 'character'
+      )
+      flash(
+        `${item.name}: zawartość ${usesRemaining} → ${next}.`,
+        'inventory'
+      )
+    } catch (e: any) {
+      setError(
+        e?.message ||
+          e?.details ||
+          'Nie udało się zmienić zawartości pojemnika.'
+      )
+    }
+  }
+
   function itemUsesControl(
     ownerType: InventoryOwnerType,
     item: {
       id: string
       name: string
+      category?: ItemCategory
+      catalogItemId?: string | null
       maxUses?: number
       usesRemaining?: number
     }
@@ -4077,6 +4173,11 @@ function App() {
     const maxUses = Math.max(0, Number(item.maxUses ?? 0))
     const usesRemaining = Math.max(0, Number(item.usesRemaining ?? 0))
     if (maxUses <= 0) return null
+
+    const isContainer = item.category === 'container'
+    const contentName = isContainer
+      ? containerContentForItem(item.catalogItemId ?? null)
+      : null
 
     return (
       <span
@@ -4092,19 +4193,51 @@ function App() {
           whiteSpace: 'nowrap',
         }}
       >
-        <span className="muted">Użycia</span>
+        <span className="muted">
+          {isContainer
+            ? `Zawartość${contentName ? `: ${contentName}` : ''}`
+            : 'Użycia'}
+        </span>
         <strong>
           {usesRemaining}/{maxUses}
         </strong>
+
+        {isContainer && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={usesRemaining >= maxUses}
+            onClick={() =>
+              void adjustContainerContent(ownerType, item, 1)
+            }
+            title="Uzupełnij pojemnik o 1"
+            style={{
+              minWidth: 28,
+              minHeight: 24,
+              padding: '2px 6px',
+            }}
+          >
+            +1
+          </button>
+        )}
+
         <button
           type="button"
           className="secondary"
           disabled={usesRemaining <= 0}
-          onClick={() => void consumeItemUse(ownerType, item)}
+          onClick={() =>
+            isContainer
+              ? void adjustContainerContent(ownerType, item, -1)
+              : void consumeItemUse(ownerType, item)
+          }
           title={
             usesRemaining > 0
-              ? 'Zużyj 1 użycie'
-              : 'Brak pozostałych użyć'
+              ? isContainer
+                ? 'Opróżnij pojemnik o 1'
+                : 'Zużyj 1 użycie'
+              : isContainer
+                ? 'Pojemnik jest pusty'
+                : 'Brak pozostałych użyć'
           }
           style={{
             minWidth: 28,
@@ -5646,11 +5779,12 @@ function App() {
       const [name, categoryRaw = 'normal', slotsRaw = '1', lightRaw = '',
         weaponDamage = '', weaponRange = '', weaponProperties = '',
         armorClass = '', armorProperties = '', slotGroupRaw = '1',
-        freeQuantityRaw = '0', magicalRaw = 'false', magicDescription = '', questRaw = 'false', handsRaw = '1', maxUsesRaw = '0'] = cols
+        freeQuantityRaw = '0', magicalRaw = 'false', magicDescription = '', questRaw = 'false',
+        handsRaw = '1', maxUsesRaw = '0', description = '', containerContent = ''] = cols
 
       if (!name) throw new Error(`Brak nazwy przedmiotu w wierszu ${index + 1 + start}.`)
 
-      const allowed: CatalogItemCategory[] = ['normal', 'food', 'light', 'weapon', 'armor']
+      const allowed: CatalogItemCategory[] = ['normal', 'food', 'light', 'weapon', 'armor', 'container']
       const category = allowed.includes(categoryRaw as CatalogItemCategory)
         ? (categoryRaw as CatalogItemCategory) : 'normal'
 
@@ -5710,13 +5844,14 @@ function App() {
   }
 
   function exportCatalogCsv() {
-    const header = 'name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties;slot_group_size;free_quantity;magical;magic_description;quest_item;hands_required;max_uses'
+    const header = 'name;category;slots;light_minutes;weapon_damage;weapon_range;weapon_properties;armor_class;armor_properties;slot_group_size;free_quantity;magical;magic_description;quest_item;hands_required;max_uses;description;container_content'
     const rows = catalog.map(entry =>
       [entry.name, entry.category, entry.slotsPerUnit, entry.lightMinutes ?? '',
        entry.weaponDamage ?? '', entry.weaponRange ?? '', entry.weaponProperties ?? '',
        entry.armorClass ?? '', entry.armorProperties ?? '', entry.slotGroupSize, entry.freeQuantity,
        entry.isMagical ? 'true' : 'false', entry.magicDescription ?? '',
-       entry.isQuestItem ? 'true' : 'false', entry.handsRequired, entry.maxUses]
+       entry.isQuestItem ? 'true' : 'false', entry.handsRequired, entry.maxUses,
+       entry.description ?? '', entry.containerContent ?? '']
         .map(value => String(value).split(';').join(',')).join(';')
     )
 
@@ -6357,7 +6492,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AG • identyfikacja magicznych przedmiotów</span>
+              Etap 3AH • opisy, żywność i pojemniki</span>
           </div>
 
         </aside>
@@ -7977,6 +8112,19 @@ function App() {
                                               ? '2 ręce'
                                               : '1 ręka'
                                           }`}
+                                        {item.category === 'food' && (
+                                          <span
+                                            style={{
+                                              marginLeft: 7,
+                                              color: '#9fbd7f',
+                                              fontSize: '0.9em',
+                                              fontWeight: 700,
+                                              fontStyle: 'italic',
+                                            }}
+                                          >
+                                            • Jedzenie i przekazywanie obsługiwane z Dashboardu, Usuń jeśli chcesz wyrzucić.
+                                          </span>
+                                        )}
                                         {item.name.trim().toLowerCase() === 'torch' && (
                                           <span
                                             style={{
@@ -8049,16 +8197,30 @@ function App() {
                                           </button>
                                         )}
 
-                                        {isMagicalInventoryItem(
-                                          item.catalogItemId
+                                        {(
+                                          Boolean(
+                                            descriptionForItem(
+                                              item.catalogItemId
+                                            )?.trim()
+                                          ) ||
+                                          (
+                                            isMagicalInventoryItem(
+                                              item.catalogItemId
+                                            ) &&
+                                            Boolean(
+                                              magicDescriptionForItem(
+                                                item.catalogItemId
+                                              )?.trim()
+                                            )
+                                          )
                                         ) &&
-                                          magicDescriptionForItem(
+                                          !isUnidentifiedMagicalInventoryItem(
                                             item.catalogItemId
                                           ) && (
                                             <button
                                               className="secondary"
                                               onClick={() =>
-                                                openMagicItemDescription(item)
+                                                openInventoryItemDescription(item)
                                               }
                                             >
                                               <BookOpen size={14} />
@@ -9957,6 +10119,25 @@ function App() {
         </Modal>
       )}
 
+      {descriptionItem && (
+        <Modal onClose={() => setDescriptionItem(null)}>
+          <p className="eyebrow">OPIS PRZEDMIOTU</p>
+          <h2>{descriptionItem.name}</h2>
+          <div
+            style={{
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.65,
+              padding: '14px 16px',
+              borderRadius: 8,
+              border: '1px solid rgba(180, 135, 60, 0.38)',
+              background: 'rgba(24, 20, 14, 0.72)',
+            }}
+          >
+            {descriptionItem.description}
+          </div>
+        </Modal>
+      )}
+
       {magicDescriptionItem && (
         <Modal onClose={() => setMagicDescriptionItem(null)}>
           <div
@@ -11568,6 +11749,7 @@ function App() {
               <option value="light">Źródło światła</option>
               <option value="weapon">Broń</option>
               <option value="armor">Pancerz / tarcza</option>
+              <option value="container">Pojemnik</option>
             </select>
           </label>
 
@@ -11590,7 +11772,9 @@ function App() {
           </label>
 
           <label>
-            Liczba użyć
+            {catalogCategory === 'container'
+              ? 'Pojemność pojemnika'
+              : 'Liczba użyć'}
             <input
               type="number"
               min="0"
@@ -11603,7 +11787,36 @@ function App() {
               }
             />
             <span className="muted" style={{ display: 'block', marginTop: 4 }}>
-              0 = przedmiot bez licznika użyć.
+              {catalogCategory === 'container'
+                ? 'Maksymalna liczba jednostek zawartości.'
+                : '0 = przedmiot bez licznika użyć.'}
+            </span>
+          </label>
+
+          {catalogCategory === 'container' && (
+            <label>
+              Zawartość
+              <input
+                value={catalogContainerContent}
+                onChange={e =>
+                  setCatalogContainerContent(e.target.value)
+                }
+                placeholder="np. Miner's Putty"
+              />
+            </label>
+          )}
+
+          <label>
+            Opis
+            <textarea
+              rows={4}
+              value={catalogDescription}
+              onChange={e => setCatalogDescription(e.target.value)}
+              placeholder="Opis przedmiotu, jego wyglądu, działania lub dodatkowych informacji..."
+            />
+            <span className="muted" style={{ display: 'block', marginTop: 4 }}>
+              Pole dostępne dla każdego rodzaju przedmiotu. Jeśli je uzupełnisz,
+              w ekwipunku pojawi się przycisk „Opis”.
             </span>
           </label>
 
@@ -11746,7 +11959,7 @@ function App() {
           <p className="eyebrow">IMPORT BIBLIOTEKI</p>
           <h2>Importuj przedmioty z CSV</h2>
           <p className="muted">
-            Każdy wiersz: nazwa;typ;sloty;czas światła;obrażenia;zasięg;właściwości broni;KP/AC;właściwości pancerza;wielkość grupy slotu;darmowa ilość;magiczny;opis magii;przedmiot zadania;wymagane ręce.
+            Każdy wiersz: nazwa;typ;sloty;czas światła;obrażenia;zasięg;właściwości broni;KP/AC;właściwości pancerza;wielkość grupy slotu;darmowa ilość;magiczny;opis magii;przedmiot zadania;wymagane ręce;liczba użyć;opis;zawartość pojemnika.
           </p>
           <textarea
             rows={12}
@@ -11760,7 +11973,7 @@ Coin;normal;1;;;;;;;100;100`}
           <button className="primary full" onClick={importCatalogCsv} disabled={!catalogImportText.trim()}>
             Importuj do kampanii
           </button>
-          <p className="muted">Dozwolone typy: normal, food, light, weapon, armor. Nazwy już istniejące zostaną pominięte.</p>
+          <p className="muted">Dozwolone typy: normal, food, light, weapon, armor, container. Nazwy już istniejące zostaną pominięte.</p>
         </Modal>
       )}
 
