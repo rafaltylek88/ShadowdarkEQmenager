@@ -119,7 +119,7 @@ import type {
   HistoryUndoPayload,
 } from './lib/history'
 import {
-  adjustInventoryItemUse,
+  adjustContainerInventoryContent,
   consumeInventoryItemUse,
   setInventoryItemQuantity,
   transferInventoryItem,
@@ -407,6 +407,8 @@ function App() {
   const [buyGp, setBuyGp] = useState(0)
   const [buySp, setBuySp] = useState(0)
   const [buyCp, setBuyCp] = useState(0)
+  const [buyContainerContent, setBuyContainerContent] = useState('')
+  const [buyContainerFill, setBuyContainerFill] = useState(0)
   const [buyingItem, setBuyingItem] = useState(false)
 
   const [showSellItem, setShowSellItem] = useState(false)
@@ -1527,6 +1529,67 @@ function App() {
       catalogEntryForItem(catalogItemId)?.containerContent ?? null,
     [catalogEntryForItem]
   )
+
+  function inventoryDisplayName(item: {
+    name: string
+    category: ItemCategory
+    catalogItemId: string | null
+    usesRemaining?: number
+  }) {
+    if (item.category !== 'container') return item.name
+
+    const entry = catalogEntryForItem(item.catalogItemId)
+    const content = (entry?.containerContent ?? '').trim()
+    const base = containerBaseName(
+      entry?.name ?? item.name,
+      content
+    )
+    const fill = Math.max(0, Number(item.usesRemaining ?? 0))
+
+    return fill > 0 && content
+      ? `${base} - ${content}`
+      : base
+  }
+
+  const shopCatalogOptions = useMemo(() => {
+    const regular = catalog.filter(
+      entry => entry.category !== 'container'
+    )
+
+    const containers = new Map<string, CatalogItem>()
+    for (const entry of catalog.filter(
+      candidate => candidate.category === 'container'
+    )) {
+      const base = containerBaseName(
+        entry.name,
+        entry.containerContent
+      )
+      const key = base.trim().toLowerCase()
+      const current = containers.get(key)
+
+      if (
+        !current ||
+        (!(entry.containerContent ?? '').trim() &&
+          (current.containerContent ?? '').trim())
+      ) {
+        containers.set(key, entry)
+      }
+    }
+
+    return [...regular, ...containers.values()].sort(
+      (a, b) =>
+        (
+          a.category === 'container'
+            ? containerBaseName(a.name, a.containerContent)
+            : a.name
+        ).localeCompare(
+          b.category === 'container'
+            ? containerBaseName(b.name, b.containerContent)
+            : b.name,
+          'pl'
+        )
+    )
+  }, [catalog])
 
   function openInventoryItemDescription(item: {
     name: string
@@ -3888,7 +3951,6 @@ function App() {
   }
 
   function openFillContainer(
-    character: Character,
     item: CharacterItem
   ) {
     const entry = catalogEntryForItem(item.catalogItemId)
@@ -3989,7 +4051,7 @@ function App() {
 
     const effectiveCatalogName =
       catalogCategory === 'container'
-        ? containerDisplayName(
+        ? containerBaseName(
             catalogName,
             catalogContainerContent
           )
@@ -4021,7 +4083,9 @@ function App() {
         catalogIsMagical ? catalogMagicDescription : null,
       description: catalogDescription,
       containerContent:
-        catalogCategory === 'container' ? catalogContainerContent : null,
+        catalogCategory === 'container' && fillingContainerItem
+          ? catalogContainerContent
+          : null,
       maxUses: catalogMaxUses,
     }
 
@@ -4031,8 +4095,26 @@ function App() {
         editingCatalogItem &&
         catalogCategory === 'container'
       ) {
-        const normalizedContent =
+        const enteredContent =
           catalogContainerContent.trim()
+
+        const maxUses = Math.max(
+          0,
+          Math.floor(catalogMaxUses)
+        )
+        const usesRemaining = enteredContent
+          ? Math.max(
+              0,
+              Math.min(
+                maxUses,
+                Math.floor(catalogContainerFill)
+              )
+            )
+          : 0
+
+        const normalizedContent =
+          usesRemaining > 0 ? enteredContent : ''
+
         const baseName = containerBaseName(
           editingCatalogItem.name,
           editingCatalogItem.containerContent
@@ -4052,40 +4134,36 @@ function App() {
               normalizedContent.toLowerCase()
         )
 
+        const fillChanges = {
+          ...changes,
+          name: variantName,
+          containerContent: normalizedContent || null,
+          maxUses,
+        }
+
         if (!targetEntry) {
           targetEntry = await createCatalogItem({
             campaignId: activeId,
-            ...changes,
-            name: variantName,
+            ...fillChanges,
           })
         } else {
           targetEntry = await updateCatalogItem(
             targetEntry.id,
-            {
-              ...changes,
-              name: variantName,
-            }
+            fillChanges
           )
         }
 
-        const maxUses = Math.max(
-          0,
-          Math.floor(catalogMaxUses)
-        )
-        const usesRemaining = Math.max(
-          0,
-          Math.min(
-            maxUses,
-            Math.floor(catalogContainerFill)
-          )
-        )
+        const inventoryName =
+          usesRemaining > 0 && normalizedContent
+            ? variantName
+            : baseName
 
         await updateItem(
           fillingContainerItem.id,
           fillingContainerItem.characterId,
           {
             catalogItemId: targetEntry.id,
-            name: variantName,
+            name: inventoryName,
             quantity: fillingContainerItem.quantity,
             slotsPerUnit: targetEntry.slotsPerUnit,
             slotGroupSize: targetEntry.slotGroupSize,
@@ -4112,7 +4190,7 @@ function App() {
         setEditingCatalogItem(null)
         setFillingContainerItem(null)
         flash(
-          `${variantName}: ustawiono zawartość ${usesRemaining}/${maxUses}.`,
+          `${inventoryName}: ustawiono zawartość ${usesRemaining}/${maxUses}.`,
           'inventory'
         )
         return
@@ -4298,10 +4376,13 @@ function App() {
         itemId: item.id,
       })
 
-      await refreshInventoryOwners(
-        [ownerType],
-        ownerType === 'character'
-      )
+      await Promise.all([
+        refreshInventoryOwners(
+          [ownerType],
+          ownerType === 'character'
+        ),
+        refreshCatalog(),
+      ])
 
       flash(
         `${item.name}: użycia ${usesRemaining} → ${usesRemaining - 1}.`,
@@ -4321,6 +4402,7 @@ function App() {
     item: {
       id: string
       name: string
+      catalogItemId?: string | null
       maxUses?: number
       usesRemaining?: number
     },
@@ -4330,11 +4412,22 @@ function App() {
     const usesRemaining = Math.max(0, Number(item.usesRemaining ?? 0))
     if (!activeId || maxUses <= 0) return
 
+    const contentName = (
+      containerContentForItem(item.catalogItemId ?? null) ?? ''
+    ).trim()
+
+    if (delta > 0 && !contentName) {
+      setError(
+        'Pusty pojemnik nie ma przypisanej substancji. Użyj przycisku NAPEŁNIJ.'
+      )
+      return
+    }
+
     const next = Math.max(0, Math.min(maxUses, usesRemaining + delta))
     if (next === usesRemaining) return
 
     try {
-      await adjustInventoryItemUse({
+      await adjustContainerInventoryContent({
         campaignId: activeId,
         ownerType,
         itemId: item.id,
@@ -4345,7 +4438,7 @@ function App() {
         ownerType === 'character'
       )
       flash(
-        `${item.name}: zawartość ${usesRemaining} → ${next}.`,
+        `${item.name}: zawartość ${usesRemaining}/${maxUses} → ${next}/${maxUses}.`,
         'inventory'
       )
     } catch (e: any) {
@@ -4393,7 +4486,9 @@ function App() {
       >
         <span className="muted">
           {isContainer
-            ? `Zawartość${contentName ? `: ${contentName}` : ''}`
+            ? usesRemaining > 0 && contentName
+              ? `Zawartość: ${contentName}`
+              : 'Zawartość: pusto'
             : 'Użycia'}
         </span>
         <strong>
@@ -4404,11 +4499,18 @@ function App() {
           <button
             type="button"
             className="secondary"
-            disabled={usesRemaining >= maxUses}
+            disabled={
+              usesRemaining >= maxUses ||
+              !String(contentName ?? '').trim()
+            }
             onClick={() =>
               void adjustContainerContent(ownerType, item, 1)
             }
-            title="Uzupełnij pojemnik o 1"
+            title={
+              !String(contentName ?? '').trim()
+                ? 'Najpierw użyj NAPEŁNIJ i wybierz substancję'
+                : 'Uzupełnij pojemnik o 1'
+            }
             style={{
               minWidth: 28,
               minHeight: 24,
@@ -5017,7 +5119,7 @@ function App() {
   }
 
   function openBuyItem(ownerType: InventoryOwnerType, ownerId: string) {
-    const firstCatalogItem = catalog[0]
+    const firstCatalogItem = shopCatalogOptions[0]
     const firstIsRations = isRationCatalogItem(firstCatalogItem)
 
     setBuyOwnerType(ownerType)
@@ -5028,6 +5130,8 @@ function App() {
     setBuyGp(0)
     setBuySp(firstIsRations ? 5 : 0)
     setBuyCp(0)
+    setBuyContainerContent('')
+    setBuyContainerFill(0)
     setShowBuyItem(true)
   }
 
@@ -5088,6 +5192,16 @@ function App() {
       ? rationBuyPriceCp(normalizedBuyQuantity)
       : moneyToCp(buyGp, buySp, buyCp)
 
+    if (
+      boughtItem?.category === 'container' &&
+      buyOwnerType !== 'character'
+    ) {
+      setError(
+        'Zakup pojemników z zawartością jest obsługiwany w sklepie Postaci.'
+      )
+      return
+    }
+
     const undoBefore = await captureUndoScopes([
       { table: 'characters', filters: { id: buyCharacterId } },
       inventoryScopeSpec(buyOwnerType, buyOwnerId),
@@ -5095,15 +5209,57 @@ function App() {
 
     setBuyingItem(true)
     try {
-      await buyInventoryItem({
-        campaignId: activeId,
-        ownerType: buyOwnerType,
-        ownerId: buyOwnerId,
-        buyerCharacterId: buyCharacterId,
-        catalogItemId: buyCatalogItemId,
-        quantity: normalizedBuyQuantity,
-        priceCp,
-      })
+      if (boughtItem?.category === 'container') {
+        if (!supabase) {
+          throw new Error('Supabase nie jest skonfigurowany.')
+        }
+
+        const capacity = Math.max(
+          0,
+          Math.floor(boughtItem.maxUses)
+        )
+        const normalizedContent =
+          buyContainerContent.trim()
+        const fill = normalizedContent
+          ? Math.max(
+              0,
+              Math.min(
+                capacity,
+                Math.floor(buyContainerFill)
+              )
+            )
+          : 0
+
+        const { error: containerBuyError } =
+          await supabase.rpc(
+            'buy_character_container_item',
+            {
+              p_campaign_id: activeId,
+              p_character_id: buyOwnerId,
+              p_buyer_character_id: buyCharacterId,
+              p_base_catalog_item_id: buyCatalogItemId,
+              p_quantity: normalizedBuyQuantity,
+              p_price_cp: priceCp,
+              p_content: normalizedContent || null,
+              p_fill: fill,
+            }
+          )
+
+        if (containerBuyError) throw containerBuyError
+
+        await refreshCatalog()
+      } else {
+        await buyInventoryItem({
+          campaignId: activeId,
+          ownerType: buyOwnerType,
+          ownerId: buyOwnerId,
+          buyerCharacterId: buyCharacterId,
+          catalogItemId: buyCatalogItemId,
+          quantity: normalizedBuyQuantity,
+          priceCp,
+        })
+      }
+
       const buyer = characters.find(character => character.id === buyCharacterId)
       const targetLabel = inventoryOwnerLabel(buyOwnerType, buyOwnerId)
       const boughtQuantity = normalizedBuyQuantity
@@ -5111,8 +5267,24 @@ function App() {
       setShowBuyItem(false)
       await refreshInventoryOwners([buyOwnerType], true)
       const undoPayload = await finalizeUndoScopes(undoBefore)
+      const purchasedName =
+        boughtItem?.category === 'container'
+          ? (
+              buyContainerContent.trim() &&
+              buyContainerFill > 0
+                ? `${containerBaseName(
+                    boughtItem.name,
+                    boughtItem.containerContent
+                  )} - ${buyContainerContent.trim()}`
+                : containerBaseName(
+                    boughtItem.name,
+                    boughtItem.containerContent
+                  )
+            )
+          : boughtItem?.name ?? 'przedmiot'
+
       flash(
-        `${buyer?.name ?? 'Postać'} kupił(a) ${boughtQuantity} × ${boughtItem?.name ?? 'przedmiot'} za ${formatMoneyCp(priceCp)} → ${targetLabel}.`,
+        `${buyer?.name ?? 'Postać'} kupił(a) ${boughtQuantity} × ${purchasedName} za ${formatMoneyCp(priceCp)} → ${targetLabel}.`,
         'trade',
         undoPayload
       )
@@ -6690,7 +6862,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AI • napełnianie i nazwy pojemników</span>
+              Etap 3AJ • docelowa logika pojemników</span>
           </div>
 
         </aside>
@@ -8270,7 +8442,7 @@ function App() {
                                             <Hand size={13} />
                                           </span>
                                         )}
-                                        <strong>{item.name}</strong>
+                                        <strong>{inventoryDisplayName(item)}</strong>
                                         {' • ilość: '}
                                         <InventoryQuantityInput
                                           value={
@@ -8373,10 +8545,7 @@ function App() {
                                             type="button"
                                             className="secondary"
                                             onClick={() =>
-                                              openFillContainer(
-                                                character,
-                                                item
-                                              )
+                                              openFillContainer(item)
                                             }
                                             style={{
                                               border:
@@ -10526,7 +10695,7 @@ function App() {
               >
                 <span>
                   {inventoryCategoryMarker(item)}
-                  <strong>{item.name}</strong>
+                  <strong>{inventoryDisplayName(item)}</strong>
                 </span>
                 <span className="muted">ilość: {item.quantity}</span>
               </button>
@@ -10560,12 +10729,19 @@ function App() {
                 setBuyGp(0)
                 setBuySp(nextIsRations ? 5 : 0)
                 setBuyCp(0)
+                setBuyContainerContent('')
+                setBuyContainerFill(0)
               }}
             >
               <option value="">— wybierz —</option>
-              {catalog.map(entry => (
+              {shopCatalogOptions.map(entry => (
                 <option key={entry.id} value={entry.id}>
-                  {entry.name}
+                  {entry.category === 'container'
+                    ? containerBaseName(
+                        entry.name,
+                        entry.containerContent
+                      )
+                    : entry.name}
                 </option>
               ))}
             </select>
@@ -10617,6 +10793,119 @@ function App() {
               </span>
             )}
           </label>
+
+          {catalog.find(
+            entry => entry.id === buyCatalogItemId
+          )?.category === 'container' && (
+            <div
+              style={{
+                display: 'grid',
+                gap: 10,
+                marginBottom: 12,
+                padding: '12px 14px',
+                borderRadius: 9,
+                border: '1px solid rgba(175, 132, 58, 0.48)',
+                background:
+                  'linear-gradient(180deg, rgba(73, 50, 21, 0.18), rgba(22, 18, 13, 0.72))',
+              }}
+            >
+              <div>
+                <strong style={{ color: '#e6c782' }}>
+                  Zawartość pojemnika
+                </strong>
+                <span
+                  className="muted"
+                  style={{ display: 'block', marginTop: 3 }}
+                >
+                  Pojemnik jest domyślnie pusty. Zostaw substancję pustą,
+                  aby kupić pusty pojemnik.
+                </span>
+              </div>
+
+              <label style={{ margin: 0 }}>
+                Substancja
+                <input
+                  value={buyContainerContent}
+                  onChange={e => {
+                    const value = e.target.value
+                    setBuyContainerContent(value)
+                    if (!value.trim()) {
+                      setBuyContainerFill(0)
+                    }
+                  }}
+                  placeholder="np. Miner's Putty albo Glow Paste"
+                />
+              </label>
+
+              <label style={{ margin: 0 }}>
+                Ilość zawartości
+                <input
+                  type="number"
+                  min="0"
+                  max={
+                    catalog.find(
+                      entry => entry.id === buyCatalogItemId
+                    )?.maxUses ?? 0
+                  }
+                  step="1"
+                  value={buyContainerFill}
+                  disabled={!buyContainerContent.trim()}
+                  onChange={e => {
+                    const capacity =
+                      catalog.find(
+                        entry => entry.id === buyCatalogItemId
+                      )?.maxUses ?? 0
+
+                    setBuyContainerFill(
+                      Math.max(
+                        0,
+                        Math.min(
+                          capacity,
+                          Math.floor(
+                            Number(e.target.value) || 0
+                          )
+                        )
+                      )
+                    )
+                  }}
+                />
+                <span
+                  className="muted"
+                  style={{ display: 'block', marginTop: 4 }}
+                >
+                  {buyContainerFill}/
+                  {catalog.find(
+                    entry => entry.id === buyCatalogItemId
+                  )?.maxUses ?? 0}
+                </span>
+              </label>
+
+              <div
+                style={{
+                  fontSize: 13,
+                  color: '#c6a96e',
+                }}
+              >
+                Nazwa po zakupie:{' '}
+                <strong>
+                  {(() => {
+                    const selected = catalog.find(
+                      entry => entry.id === buyCatalogItemId
+                    )
+                    if (!selected) return 'Pojemnik'
+                    const base = containerBaseName(
+                      selected.name,
+                      selected.containerContent
+                    )
+                    return buyContainerContent.trim() &&
+                      buyContainerFill > 0
+                      ? `${base} - ${buyContainerContent.trim()}`
+                      : base
+                  })()}
+                </strong>
+              </div>
+            </div>
+          )}
 
           <div
             style={{
@@ -12032,64 +12321,75 @@ function App() {
                     marginBottom: 3,
                   }}
                 >
-                  Zawartość pojemnika
+                  {fillingContainerItem
+                    ? 'Napełnianie pojemnika'
+                    : 'Pusty pojemnik'}
                 </strong>
                 <span className="muted">
-                  Pusta zawartość oznacza pusty pojemnik.
+                  {fillingContainerItem
+                    ? 'Wybierz substancję i ustaw, ile jednostek znajduje się w tym konkretnym pojemniku.'
+                    : `Nowy pojemnik jest zawsze pusty: 0/${catalogMaxUses}. Zawartość ustawisz później przyciskiem „NAPEŁNIJ” w ekwipunku.`}
                 </span>
               </div>
 
-              <label style={{ margin: 0 }}>
-                Substancja
-                <input
-                  value={catalogContainerContent}
-                  onChange={e =>
-                    setCatalogContainerContent(e.target.value)
-                  }
-                  placeholder="np. Miner's Putty albo Glow Paste"
-                  style={{
-                    background: 'rgba(15, 13, 10, 0.96)',
-                    color: '#ead6aa',
-                    border: '1px solid rgba(164, 122, 52, 0.62)',
-                  }}
-                />
-              </label>
-
               {fillingContainerItem && (
-                <label style={{ margin: 0 }}>
-                  Aktualne napełnienie
-                  <input
-                    type="number"
-                    min="0"
-                    max={catalogMaxUses}
-                    step="1"
-                    value={catalogContainerFill}
-                    onChange={e =>
-                      setCatalogContainerFill(
-                        Math.max(
-                          0,
-                          Math.min(
-                            catalogMaxUses,
-                            Math.floor(
-                              Number(e.target.value) || 0
+                <>
+                  <label style={{ margin: 0 }}>
+                    Substancja
+                    <input
+                      value={catalogContainerContent}
+                      onChange={e => {
+                        const value = e.target.value
+                        setCatalogContainerContent(value)
+                        if (!value.trim()) {
+                          setCatalogContainerFill(0)
+                        }
+                      }}
+                      placeholder="np. Miner's Putty albo Glow Paste"
+                      style={{
+                        background: 'rgba(15, 13, 10, 0.96)',
+                        color: '#ead6aa',
+                        border: '1px solid rgba(164, 122, 52, 0.62)',
+                      }}
+                    />
+                  </label>
+
+                  <label style={{ margin: 0 }}>
+                    Aktualne napełnienie
+                    <input
+                      type="number"
+                      min="0"
+                      max={catalogMaxUses}
+                      step="1"
+                      value={catalogContainerFill}
+                      disabled={!catalogContainerContent.trim()}
+                      onChange={e =>
+                        setCatalogContainerFill(
+                          Math.max(
+                            0,
+                            Math.min(
+                              catalogMaxUses,
+                              Math.floor(
+                                Number(e.target.value) || 0
+                              )
                             )
                           )
                         )
-                      )
-                    }
-                    style={{
-                      background: 'rgba(15, 13, 10, 0.96)',
-                      color: '#ead6aa',
-                      border: '1px solid rgba(164, 122, 52, 0.62)',
-                    }}
-                  />
-                  <span
-                    className="muted"
-                    style={{ display: 'block', marginTop: 4 }}
-                  >
-                    Ile jednostek zawartości ma teraz ten konkretny pojemnik.
-                  </span>
-                </label>
+                      }
+                      style={{
+                        background: 'rgba(15, 13, 10, 0.96)',
+                        color: '#ead6aa',
+                        border: '1px solid rgba(164, 122, 52, 0.62)',
+                      }}
+                    />
+                    <span
+                      className="muted"
+                      style={{ display: 'block', marginTop: 4 }}
+                    >
+                      {catalogContainerFill}/{catalogMaxUses}
+                    </span>
+                  </label>
+                </>
               )}
 
               <div
@@ -12101,10 +12401,17 @@ function App() {
               >
                 Nazwa w ekwipunku:{' '}
                 <strong>
-                  {containerDisplayName(
-                    catalogName || 'Pojemnik',
-                    catalogContainerContent
-                  )}
+                  {fillingContainerItem &&
+                  catalogContainerFill > 0 &&
+                  catalogContainerContent.trim()
+                    ? `${containerBaseName(
+                        catalogName || 'Pojemnik',
+                        catalogContainerContent
+                      )} - ${catalogContainerContent.trim()}`
+                    : containerBaseName(
+                        catalogName || 'Pojemnik',
+                        catalogContainerContent
+                      )}
                 </strong>
               </div>
             </div>
