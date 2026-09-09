@@ -6230,7 +6230,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AD • opis magicznych przedmiotów</span>
+              Etap 3AE • AC pancerzy w ekwipunku</span>
           </div>
 
         </aside>
@@ -7839,6 +7839,9 @@ function App() {
                                         {item.category === 'weapon' &&
                                           item.weaponDamage &&
                                           ` • ${item.weaponDamage}`}
+                                        {item.category === 'armor' &&
+                                          item.armorClass &&
+                                          ` • AC ${item.armorClass}`}
                                         {item.category === 'weapon' &&
                                           ` • ${
                                             weaponHandsRequired(item) === 2
@@ -8376,7 +8379,8 @@ function App() {
                                         {item.category === 'weapon' &&
                                           ` • broń${item.weaponDamage ? ` • obrażenia ${item.weaponDamage}` : ''}${item.weaponRange ? ` • zasięg ${item.weaponRange}` : ''}`}
                                         {item.category === 'armor' &&
-                                          ` • pancerz${item.armorClass ? ` • KP/AC ${item.armorClass}` : ''}`}
+                                          item.armorClass &&
+                                          ` • AC ${item.armorClass}`}
                                         {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
                                         {isQuestInventoryItem(item.catalogItemId) && ' • PRZEDMIOT ZADANIA'}
                                         {isMagicalInventoryItem(item.catalogItemId) &&
