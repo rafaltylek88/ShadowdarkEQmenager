@@ -39,6 +39,16 @@ export type HistoryUndoPayload =
       before: Record<string, unknown>
       after: Record<string, unknown>
     }
+  | {
+      kind: 'db_restore'
+      scopes: Array<{
+        table: string
+        filters: Record<string, string | number | boolean | null>
+        keyColumns: string[]
+        beforeRows: Record<string, unknown>[]
+        afterRows: Record<string, unknown>[]
+      }>
+    }
 
 export type HistoryEntry = {
   id: string
