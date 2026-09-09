@@ -5756,13 +5756,40 @@ function App() {
       }
 
       for (const row of scope.beforeRows) {
-        const { error } = await (supabase as any)
-          .from(scope.table)
-          .upsert(row, {
-            onConflict: scope.keyColumns.join(','),
-          })
+        const rowKey = scope.keyColumns
+          .map(column => String(row[column] ?? ''))
+          .join('::')
 
-        if (error) throw error
+        const existingRow = currentRows.find(candidate => {
+          const candidateKey = scope.keyColumns
+            .map(column => String(candidate[column] ?? ''))
+            .join('::')
+          return candidateKey === rowKey
+        })
+
+        if (existingRow) {
+          // Jeżeli rekord nadal istnieje, wykonujemy zwykły UPDATE.
+          // To jest ważne m.in. dla tabeli characters: UPSERT wymagał także
+          // polityki INSERT i powodował błąd RLS podczas cofania sprzedaży.
+          let updateQuery: any = (supabase as any)
+            .from(scope.table)
+            .update(row)
+
+          for (const column of scope.keyColumns) {
+            updateQuery = updateQuery.eq(column, row[column])
+          }
+
+          const { error } = await updateQuery
+          if (error) throw error
+        } else {
+          // INSERT jest potrzebny wyłącznie wtedy, gdy cofamy operację,
+          // która faktycznie usunęła rekord.
+          const { error } = await (supabase as any)
+            .from(scope.table)
+            .insert(row)
+
+          if (error) throw error
+        }
       }
     }
   }
@@ -5939,10 +5966,11 @@ function App() {
       setMessage('Zmiana została cofnięta.')
       window.setTimeout(() => setMessage(null), 3000)
     } catch (e: any) {
+      const rawMessage = e?.message || e?.details || ''
       setError(
-        e?.message ||
-          e?.details ||
-          'Nie udało się cofnąć zmiany.'
+        rawMessage.includes('row-level security')
+          ? `Nie udało się cofnąć zmiany z powodu polityki RLS: ${rawMessage}`
+          : rawMessage || 'Nie udało się cofnąć zmiany.'
       )
     } finally {
       setUndoingHistoryId(null)
@@ -6185,7 +6213,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AC.2 • stabilne porównanie cofania</span>
+              Etap 3AC.4 • poprawka cofania sprzedaży</span>
           </div>
 
         </aside>
