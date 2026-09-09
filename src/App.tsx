@@ -72,7 +72,12 @@ import {
 import type { CharacterItem, ItemCategory } from './lib/items'
 import { setCharacterItemQuickpull } from './lib/quickpull'
 import { setCharacterItemEquipped } from './lib/equipment'
-import { createCatalogItem, deleteCatalogItem, loadCatalog } from './lib/catalog'
+import {
+  createCatalogItem,
+  deleteCatalogItem,
+  loadCatalog,
+  updateCatalogItem,
+} from './lib/catalog'
 import type { CatalogItem, CatalogItemCategory } from './lib/catalog'
 import {
   extinguishCampaignLight,
@@ -316,6 +321,7 @@ function App() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
   const [catalogLoading, setCatalogLoading] = useState(false)
   const [showCatalogItem, setShowCatalogItem] = useState(false)
+  const [editingCatalogItem, setEditingCatalogItem] = useState<CatalogItem | null>(null)
   const [catalogName, setCatalogName] = useState('')
   const [catalogSlotsPerUnit, setCatalogSlotsPerUnit] = useState(1)
   const [catalogSlotGroupSize, setCatalogSlotGroupSize] = useState(1)
@@ -3482,6 +3488,7 @@ function App() {
   }
 
   function openNewCatalogItem() {
+    setEditingCatalogItem(null)
     setCatalogName('')
     setCatalogSlotsPerUnit(1)
     setCatalogSlotGroupSize(1)
@@ -3501,35 +3508,99 @@ function App() {
     setShowCatalogItem(true)
   }
 
+  function openEditCatalogItem(entry: CatalogItem) {
+    setEditingCatalogItem(entry)
+    setCatalogName(entry.name)
+    setCatalogSlotsPerUnit(entry.slotsPerUnit)
+    setCatalogSlotGroupSize(entry.slotGroupSize)
+    setCatalogFreeQuantity(entry.freeQuantity)
+    setCatalogCategory(entry.category)
+    setCatalogLightMinutes(entry.lightMinutes ?? 60)
+    setCatalogWeaponDamage(entry.weaponDamage ?? '')
+    setCatalogWeaponRange(entry.weaponRange ?? '')
+    setCatalogWeaponProperties(entry.weaponProperties ?? '')
+    setCatalogHandsRequired(entry.handsRequired)
+    setCatalogArmorClass(entry.armorClass ?? '')
+    setCatalogArmorProperties(entry.armorProperties ?? '')
+    setCatalogIsMagical(entry.isMagical)
+    setCatalogIsQuestItem(entry.isQuestItem)
+    setCatalogMagicDescription(entry.magicDescription ?? '')
+    setCatalogMaxUses(entry.maxUses)
+    setShowCatalogItem(true)
+  }
+
   async function saveCatalogItem() {
     if (!activeId || !catalogName.trim()) return
 
+    const changes = {
+      name: catalogName,
+      slotsPerUnit: catalogSlotsPerUnit,
+      slotGroupSize: catalogSlotGroupSize,
+      freeQuantity: catalogFreeQuantity,
+      category: catalogCategory,
+      lightMinutes:
+        catalogCategory === 'light' ? catalogLightMinutes : null,
+      weaponDamage:
+        catalogCategory === 'weapon' ? catalogWeaponDamage : null,
+      weaponRange:
+        catalogCategory === 'weapon' ? catalogWeaponRange : null,
+      weaponProperties:
+        catalogCategory === 'weapon' ? catalogWeaponProperties : null,
+      handsRequired:
+        catalogCategory === 'weapon' ? catalogHandsRequired : (1 as const),
+      armorClass:
+        catalogCategory === 'armor' ? catalogArmorClass : null,
+      armorProperties:
+        catalogCategory === 'armor' ? catalogArmorProperties : null,
+      isMagical: catalogIsMagical,
+      isQuestItem: catalogIsQuestItem,
+      magicDescription:
+        catalogIsMagical ? catalogMagicDescription : null,
+      maxUses: catalogMaxUses,
+    }
+
     try {
-      const created = await createCatalogItem({
-        campaignId: activeId,
-        name: catalogName,
-        slotsPerUnit: catalogSlotsPerUnit,
-        slotGroupSize: catalogSlotGroupSize,
-        freeQuantity: catalogFreeQuantity,
-        category: catalogCategory,
-        lightMinutes: catalogCategory === 'light' ? catalogLightMinutes : null,
-        weaponDamage: catalogCategory === 'weapon' ? catalogWeaponDamage : null,
-        weaponRange: catalogCategory === 'weapon' ? catalogWeaponRange : null,
-        weaponProperties: catalogCategory === 'weapon' ? catalogWeaponProperties : null,
-        handsRequired: catalogCategory === 'weapon' ? catalogHandsRequired : 1,
-        armorClass: catalogCategory === 'armor' ? catalogArmorClass : null,
-        armorProperties: catalogCategory === 'armor' ? catalogArmorProperties : null,
-        isMagical: catalogIsMagical,
-        isQuestItem: catalogIsQuestItem,
-        magicDescription: catalogIsMagical ? catalogMagicDescription : null,
-        maxUses: catalogMaxUses,
-      })
-      setCatalog(prev => [...prev.filter(i => i.id !== created.id), created].sort((a, b) => a.name.localeCompare(b.name, 'pl')))
-      applyCatalogItem(created)
-      setShowCatalogItem(false)
-      flash(`Biblioteka — dodano: ${created.name}.`, 'library')
+      if (editingCatalogItem) {
+        const updated = await updateCatalogItem(
+          editingCatalogItem.id,
+          changes
+        )
+
+        setCatalog(prev =>
+          [
+            ...prev.filter(item => item.id !== updated.id),
+            updated,
+          ].sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+        )
+
+        setShowCatalogItem(false)
+        setEditingCatalogItem(null)
+        flash(`Biblioteka — zaktualizowano: ${updated.name}.`, 'library')
+      } else {
+        const created = await createCatalogItem({
+          campaignId: activeId,
+          ...changes,
+        })
+
+        setCatalog(prev =>
+          [
+            ...prev.filter(item => item.id !== created.id),
+            created,
+          ].sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+        )
+
+        applyCatalogItem(created)
+        setShowCatalogItem(false)
+        flash(`Biblioteka — dodano: ${created.name}.`, 'library')
+      }
     } catch (e: any) {
-      setError(e?.message || e?.details || 'Nie udało się dodać przedmiotu do katalogu.')
+      setError(
+        e?.message ||
+          e?.details ||
+          (editingCatalogItem
+            ? 'Nie udało się zaktualizować przedmiotu w katalogu.'
+            : 'Nie udało się dodać przedmiotu do katalogu.')
+      )
     }
   }
 
@@ -5385,7 +5456,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3Z • stała cena racji</span>
+              Etap 3AA • edycja Biblioteki</span>
           </div>
 
         </aside>
@@ -8658,8 +8729,19 @@ function App() {
                           </div>
                           <p className="muted" style={{ marginTop: 10 }}>{catalogItemDetails(entry)}</p>
                           <div className="button-row">
-                            <button className="danger" onClick={() => removeCatalogEntry(entry)}>
-                              <Trash2 size={15} />Usuń z biblioteki
+                            <button
+                              className="secondary"
+                              onClick={() => openEditCatalogItem(entry)}
+                            >
+                              <Pencil size={15} />
+                              Edytuj
+                            </button>
+                            <button
+                              className="danger"
+                              onClick={() => removeCatalogEntry(entry)}
+                            >
+                              <Trash2 size={15} />
+                              Usuń z biblioteki
                             </button>
                           </div>
                         </article>
@@ -10340,9 +10422,18 @@ function App() {
       )}
 
       {showCatalogItem && (
-        <Modal onClose={() => setShowCatalogItem(false)}>
+        <Modal
+          onClose={() => {
+            setShowCatalogItem(false)
+            setEditingCatalogItem(null)
+          }}
+        >
           <p className="eyebrow">KATALOG KAMPANII</p>
-          <h2>Nowy przedmiot katalogowy</h2>
+          <h2>
+            {editingCatalogItem
+              ? `Edytuj: ${editingCatalogItem.name}`
+              : 'Nowy przedmiot katalogowy'}
+          </h2>
 
           <label>
             Nazwa
@@ -10493,7 +10584,7 @@ function App() {
           )}
 
           <button className="primary full" onClick={saveCatalogItem} disabled={!catalogName.trim()}>
-            Dodaj do katalogu
+            {editingCatalogItem ? 'Zapisz zmiany' : 'Dodaj do biblioteki'} do katalogu
           </button>
           <p className="muted">Przedmiot będzie dostępny wszystkim użytkownikom tej kampanii.</p>
         </Modal>
