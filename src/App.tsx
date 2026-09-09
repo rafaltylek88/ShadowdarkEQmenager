@@ -5649,6 +5649,28 @@ function App() {
     rows: Record<string, unknown>[],
     keyColumns: string[]
   ) {
+    const canonicalize = (value: unknown): unknown => {
+      if (Array.isArray(value)) {
+        return value.map(canonicalize)
+      }
+
+      if (
+        value !== null &&
+        typeof value === 'object'
+      ) {
+        return Object.fromEntries(
+          Object.entries(value as Record<string, unknown>)
+            .sort(([a], [b]) => a.localeCompare(b, 'en'))
+            .map(([key, nestedValue]) => [
+              key,
+              canonicalize(nestedValue),
+            ])
+        )
+      }
+
+      return value
+    }
+
     const normalizeRow = (row: Record<string, unknown>) => {
       const cleaned: Record<string, unknown> = {}
 
@@ -5663,10 +5685,12 @@ function App() {
           continue
         }
 
-        cleaned[key] = value
+        cleaned[key] = canonicalize(value)
       }
 
-      return cleaned
+      // JSONB może zwracać klucze obiektu w innej kolejności niż SELECT z tabeli.
+      // Dlatego przed porównaniem zawsze sortujemy klucze.
+      return canonicalize(cleaned) as Record<string, unknown>
     }
 
     const normalized = rows.map(normalizeRow)
@@ -5696,7 +5720,7 @@ function App() {
         JSON.stringify(normalizedUndoRows(scope.afterRows, scope.keyColumns))
       ) {
         throw new Error(
-          `Nie można bezpiecznie cofnąć zmiany: stan danych w ${scope.table} różni się od zapisanego stanu po operacji. Pola techniczne (updated_at / created_at / used_slots) są ignorowane.`
+          `Nie można bezpiecznie cofnąć zmiany: stan danych w ${scope.table} faktycznie różni się od zapisanego stanu po operacji.`
         )
       }
     }
@@ -6161,7 +6185,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AC.1 • poprawka porównania cofania</span>
+              Etap 3AC.2 • stabilne porównanie cofania</span>
           </div>
 
         </aside>
