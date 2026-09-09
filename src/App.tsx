@@ -6332,7 +6332,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AF • minikalkulator Coins</span>
+              Etap 3AF.1 • kalkulator Coins na karcie postaci</span>
           </div>
 
         </aside>
@@ -7935,6 +7935,8 @@ function App() {
                                                 )
                                           }
                                         />
+                                        {isCoinInventoryItem(item) &&
+                                          coinCalculatorControl(character)}
                                         {' • '}
                                         {formatSlotRule(item)}
                                         {itemUsesControl('character', item)}
@@ -8460,7 +8462,6 @@ function App() {
                                                 changeCharacterCoins(character, value)
                                               }
                                             />
-                                            {coinCalculatorControl(character)}
                                           </>
                                         ) : (
                                           <InventoryQuantityInput
