@@ -6213,7 +6213,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AC.4 • poprawka cofania sprzedaży</span>
+              Etap 3AC.5 • przewijane okna modalne</span>
           </div>
 
         </aside>
@@ -11554,10 +11554,23 @@ function Modal({
         onMouseDown={e =>
           e.stopPropagation()
         }
+        style={{
+          maxHeight: 'calc(100vh - 48px)',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          overscrollBehavior: 'contain',
+          scrollbarGutter: 'stable',
+        }}
       >
         <button
           className="close"
           onClick={onClose}
+          style={{
+            position: 'sticky',
+            top: 0,
+            float: 'right',
+            zIndex: 20,
+          }}
         >
           <X />
         </button>
