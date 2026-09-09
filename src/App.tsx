@@ -1507,6 +1507,31 @@ function App() {
     [catalogEntryForItem]
   )
 
+  const isUnidentifiedMagicalInventoryItem = useCallback(
+    (catalogItemId: string | null) => {
+      const entry = catalogEntryForItem(catalogItemId)
+      return Boolean(
+        entry?.isMagical &&
+          !(entry.magicDescription ?? '').trim()
+      )
+    },
+    [catalogEntryForItem]
+  )
+
+  function identifyMagicalInventoryItem(
+    item: { catalogItemId: string | null }
+  ) {
+    if (!item.catalogItemId) return
+
+    const entry = catalogEntryForItem(item.catalogItemId)
+    if (!entry) {
+      setError('Nie znaleziono tego przedmiotu w Bibliotece.')
+      return
+    }
+
+    openEditCatalogItem(entry)
+  }
+
   function openMagicItemDescription(
     item: { name: string; catalogItemId: string | null }
   ) {
@@ -6332,7 +6357,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AF.2 • wskazówka użycia Torch</span>
+              Etap 3AG • identyfikacja magicznych przedmiotów</span>
           </div>
 
         </aside>
@@ -7996,6 +8021,33 @@ function App() {
                                         >
                                           Quickpull
                                         </button>
+
+                                        {isUnidentifiedMagicalInventoryItem(
+                                          item.catalogItemId
+                                        ) && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              identifyMagicalInventoryItem(item)
+                                            }
+                                            title="Kliknij, aby zidentyfikować przedmiot i wpisać jego opis."
+                                            style={{
+                                              border:
+                                                '1px solid rgba(199, 151, 55, 0.78)',
+                                              background:
+                                                'linear-gradient(180deg, rgba(108, 76, 22, 0.34), rgba(44, 30, 14, 0.88))',
+                                              color: '#e6c56f',
+                                              borderRadius: 7,
+                                              padding: '6px 9px',
+                                              fontSize: 12,
+                                              fontWeight: 900,
+                                              letterSpacing: '.45px',
+                                              cursor: 'pointer',
+                                            }}
+                                          >
+                                            NIEZIDENTYFIKOWANY
+                                          </button>
+                                        )}
 
                                         {isMagicalInventoryItem(
                                           item.catalogItemId
@@ -11640,15 +11692,45 @@ function App() {
           </label>
 
           {catalogIsMagical && (
-            <label>
-              Opis magicznych właściwości
-              <textarea
-                rows={5}
-                value={catalogMagicDescription}
-                onChange={e => setCatalogMagicDescription(e.target.value)}
-                placeholder="np. +1 do ataków; świeci bladym światłem; raz dziennie pozwala..."
-              />
-            </label>
+            <>
+              <div
+                style={{
+                  padding: '9px 11px',
+                  borderRadius: 8,
+                  border: catalogMagicDescription.trim()
+                    ? '1px solid rgba(84, 143, 77, 0.62)'
+                    : '1px solid rgba(199, 151, 55, 0.68)',
+                  background: catalogMagicDescription.trim()
+                    ? 'rgba(54, 99, 49, 0.16)'
+                    : 'rgba(108, 76, 22, 0.16)',
+                }}
+              >
+                <strong>
+                  Status:{' '}
+                  {catalogMagicDescription.trim()
+                    ? 'ZIDENTYFIKOWANY'
+                    : 'NIEZIDENTYFIKOWANY'}
+                </strong>
+                <span
+                  className="muted"
+                  style={{ display: 'block', marginTop: 3 }}
+                >
+                  {catalogMagicDescription.trim()
+                    ? 'Opis jest uzupełniony. W ekwipunku pojawi się przycisk „Opis”.'
+                    : 'Bez opisu przedmiot będzie oznaczony na karcie postaci jako „NIEZIDENTYFIKOWANY”.'}
+                </span>
+              </div>
+
+              <label>
+                Opis magicznych właściwości
+                <textarea
+                  rows={5}
+                  value={catalogMagicDescription}
+                  onChange={e => setCatalogMagicDescription(e.target.value)}
+                  placeholder="Wpisz właściwości przedmiotu, aby go zidentyfikować..."
+                />
+              </label>
+            </>
           )}
 
           <button className="primary full" onClick={saveCatalogItem} disabled={!catalogName.trim()}>
