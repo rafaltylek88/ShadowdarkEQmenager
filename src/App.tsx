@@ -6332,7 +6332,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AF.1 • kalkulator Coins na karcie postaci</span>
+              Etap 3AF.2 • wskazówka użycia Torch</span>
           </div>
 
         </aside>
@@ -7952,6 +7952,19 @@ function App() {
                                               ? '2 ręce'
                                               : '1 ręka'
                                           }`}
+                                        {item.name.trim().toLowerCase() === 'torch' && (
+                                          <span
+                                            style={{
+                                              marginLeft: 7,
+                                              color: '#d6b56c',
+                                              fontSize: '0.9em',
+                                              fontWeight: 700,
+                                              fontStyle: 'italic',
+                                            }}
+                                          >
+                                            • Użyj z panelu Dashboard
+                                          </span>
+                                        )}
                                         {item.isQuickpull && ' • QUICKPULL'}
                                         {item.isEquipped && ' • WYPOSAŻONE'}
                                       </span>
