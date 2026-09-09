@@ -795,6 +795,35 @@ function App() {
         },
         refreshCampaigns
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'campaign_history',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        payload => {
+          const row = payload.new as any
+          const updated: HistoryEntry = {
+            id: row.id,
+            campaignId: row.campaign_id,
+            eventType: row.event_type as HistoryEventType,
+            message: row.message,
+            createdBy: row.created_by ?? null,
+            createdAt: row.created_at,
+            undoPayload: row.undo_payload ?? null,
+            undoneAt: row.undone_at ?? null,
+            undoneBy: row.undone_by ?? null,
+          }
+
+          setHistory(current =>
+            current.map(entry =>
+              entry.id === updated.id ? updated : entry
+            )
+          )
+        }
+      )
       .subscribe()
 
     return () => {
@@ -2653,6 +2682,9 @@ function App() {
             message: row.message,
             createdBy: row.created_by ?? null,
             createdAt: row.created_at,
+            undoPayload: row.undo_payload ?? null,
+            undoneAt: row.undone_at ?? null,
+            undoneBy: row.undone_by ?? null,
           }
 
           setHistory(current => {
@@ -5786,7 +5818,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AB • cofanie zmian z Historii</span>
+              Etap 3AB.1 • poprawka realtime Historii</span>
           </div>
 
         </aside>
