@@ -57,3 +57,22 @@ export async function consumeInventoryItemUse(input: {
 
   if (error) throw error
 }
+
+
+export async function adjustInventoryItemUse(input: {
+  campaignId: string
+  ownerType: InventoryOwnerType
+  itemId: string
+  delta: number
+}): Promise<void> {
+  if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
+
+  const { error } = await supabase.rpc('adjust_inventory_item_use', {
+    p_campaign_id: input.campaignId,
+    p_owner_type: input.ownerType,
+    p_item_id: input.itemId,
+    p_delta: Math.trunc(input.delta),
+  })
+
+  if (error) throw error
+}

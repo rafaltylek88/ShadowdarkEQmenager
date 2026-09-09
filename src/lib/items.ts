@@ -6,6 +6,7 @@ export type ItemCategory =
   | 'light'
   | 'weapon'
   | 'armor'
+  | 'container'
 
 export type CharacterItem = {
   id: string
