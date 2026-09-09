@@ -5,6 +5,7 @@ import {
   ArrowRightLeft,
   Backpack,
   Beef,
+  BookOpen,
   Building2,
   Castle,
   Coins,
@@ -210,6 +211,10 @@ function App() {
   const [historyFilter, setHistoryFilter] = useState<'all' | HistoryEventType>('all')
   const [undoingHistoryId, setUndoingHistoryId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [magicDescriptionItem, setMagicDescriptionItem] = useState<{
+    name: string
+    description: string
+  } | null>(null)
 
   const [characters, setCharacters] = useState<Character[]>([])
   const [charactersLoading, setCharactersLoading] = useState(false)
@@ -1500,6 +1505,18 @@ function App() {
       catalogEntryForItem(catalogItemId)?.magicDescription ?? null,
     [catalogEntryForItem]
   )
+
+  function openMagicItemDescription(
+    item: { name: string; catalogItemId: string | null }
+  ) {
+    const description = magicDescriptionForItem(item.catalogItemId)
+    if (!description) return
+
+    setMagicDescriptionItem({
+      name: item.name,
+      description,
+    })
+  }
 
   const isQuestInventoryItem = useCallback(
     (catalogItemId: string | null) =>
@@ -6213,7 +6230,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AC.5 • przewijane okna modalne</span>
+              Etap 3AD • opis magicznych przedmiotów</span>
           </div>
 
         </aside>
@@ -7860,6 +7877,23 @@ function App() {
                                           Quickpull
                                         </button>
 
+                                        {isMagicalInventoryItem(
+                                          item.catalogItemId
+                                        ) &&
+                                          magicDescriptionForItem(
+                                            item.catalogItemId
+                                          ) && (
+                                            <button
+                                              className="secondary"
+                                              onClick={() =>
+                                                openMagicItemDescription(item)
+                                              }
+                                            >
+                                              <BookOpen size={14} />
+                                              Opis
+                                            </button>
+                                          )}
+
                                         <button
                                           className="secondary"
                                           onClick={() =>
@@ -8406,6 +8440,23 @@ function App() {
                                           {item.isQuickpull ? 'Usuń Quickpull' : 'Quickpull'}
                                         </button>
 
+                                        {isMagicalInventoryItem(
+                                          item.catalogItemId
+                                        ) &&
+                                          magicDescriptionForItem(
+                                            item.catalogItemId
+                                          ) && (
+                                            <button
+                                              className="secondary"
+                                              onClick={() =>
+                                                openMagicItemDescription(item)
+                                              }
+                                            >
+                                              <BookOpen size={14} />
+                                              Opis
+                                            </button>
+                                          )}
+
                                         <button
                                           className="secondary"
                                           onClick={() =>
@@ -8615,15 +8666,29 @@ function App() {
                                               {item.category === 'light' && ` • ${item.lightMinutes ?? 60} min`}
                                               {isMagicalInventoryItem(item.catalogItemId) && ' • MAGICZNY'}
                                         {isQuestInventoryItem(item.catalogItemId) && ' • PRZEDMIOT ZADANIA'}
-                                              {isMagicalInventoryItem(item.catalogItemId) &&
-                                                magicDescriptionForItem(item.catalogItemId) &&
-                                                ` • ${magicDescriptionForItem(item.catalogItemId)}`}
                                               {isSaddleName(item.name) && ' • pierwsze siodło bez slotu'}
                                             </>
                                           )}
                                         </span>
 
                                         <span className="button-row">
+                                          {isMagicalInventoryItem(
+                                            item.catalogItemId
+                                          ) &&
+                                            magicDescriptionForItem(
+                                              item.catalogItemId
+                                            ) && (
+                                              <button
+                                                className="secondary"
+                                                onClick={() =>
+                                                  openMagicItemDescription(item)
+                                                }
+                                              >
+                                                <BookOpen size={14} />
+                                                Opis
+                                              </button>
+                                            )}
+
                                           <button
                                             className="secondary"
                                             onClick={() => openTransferItem('animal', animal.id, item)}
@@ -8980,6 +9045,23 @@ function App() {
                                       </span>
 
                                       <span className="button-row">
+                                        {isMagicalInventoryItem(
+                                          item.catalogItemId
+                                        ) &&
+                                          magicDescriptionForItem(
+                                            item.catalogItemId
+                                          ) && (
+                                            <button
+                                              className="secondary"
+                                              onClick={() =>
+                                                openMagicItemDescription(item)
+                                              }
+                                            >
+                                              <BookOpen size={14} />
+                                              Opis
+                                            </button>
+                                          )}
+
                                         <button
                                           className="secondary"
                                           onClick={() => openTransferItem('npc', npc.id, item)}
@@ -9186,6 +9268,23 @@ function App() {
                                         {isQuestInventoryItem(item.catalogItemId) && ' • PRZEDMIOT ZADANIA'}
                                         </span>
                                         <span className="button-row">
+                                          {isMagicalInventoryItem(
+                                            item.catalogItemId
+                                          ) &&
+                                            magicDescriptionForItem(
+                                              item.catalogItemId
+                                            ) && (
+                                              <button
+                                                className="secondary"
+                                                onClick={() =>
+                                                  openMagicItemDescription(item)
+                                                }
+                                              >
+                                                <BookOpen size={14} />
+                                                Opis
+                                              </button>
+                                            )}
+
                                           <button
                                             className="secondary"
                                             onClick={() =>
@@ -9680,6 +9779,52 @@ function App() {
           >
             {transferringItem ? 'Przenoszenie…' : 'Przenieś'}
           </button>
+        </Modal>
+      )}
+
+      {magicDescriptionItem && (
+        <Modal onClose={() => setMagicDescriptionItem(null)}>
+          <div
+            style={{
+              textAlign: 'center',
+              marginBottom: 14,
+            }}
+          >
+            <div
+              style={{
+                width: 58,
+                height: 58,
+                margin: '0 auto 10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 12,
+                border: '1px solid rgba(98, 142, 194, 0.65)',
+                background:
+                  'linear-gradient(180deg, rgba(45, 76, 119, 0.32), rgba(20, 27, 38, 0.78))',
+                boxShadow:
+                  'inset 0 0 18px rgba(106, 162, 221, 0.10)',
+              }}
+            >
+              <BookOpen size={30} />
+            </div>
+            <p className="eyebrow">MAGICZNY PRZEDMIOT</p>
+            <h2>{magicDescriptionItem.name}</h2>
+          </div>
+
+          <div
+            style={{
+              padding: '14px 16px',
+              borderRadius: 9,
+              border: '1px solid rgba(98, 142, 194, 0.46)',
+              background:
+                'linear-gradient(180deg, rgba(44, 66, 96, 0.18), rgba(18, 18, 17, 0.86))',
+              lineHeight: 1.65,
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {magicDescriptionItem.description}
+          </div>
         </Modal>
       )}
 
