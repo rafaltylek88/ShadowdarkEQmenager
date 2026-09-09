@@ -3726,6 +3726,31 @@ function App() {
     )
   }
 
+  function isRationCatalogItem(entry: CatalogItem | undefined | null) {
+    if (!entry) return false
+    const normalized = entry.name
+      .trim()
+      .toLocaleLowerCase('pl-PL')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+
+    return (
+      entry.category === 'food' &&
+      (normalized.includes('ration') ||
+        normalized.includes('racja') ||
+        normalized.includes('racje'))
+    )
+  }
+
+  function normalizeRationBuyQuantity(value: number) {
+    const safe = Math.max(3, Math.floor(Number(value) || 3))
+    return Math.ceil(safe / 3) * 3
+  }
+
+  function rationBuyPriceCp(quantity: number) {
+    return (normalizeRationBuyQuantity(quantity) / 3) * 50
+  }
+
   function moneyToCp(gp: number, sp: number, cp: number) {
     return Math.max(0, Math.round(gp) * 100 + Math.round(sp) * 10 + Math.round(cp))
   }
@@ -4148,13 +4173,16 @@ function App() {
   }
 
   function openBuyItem(ownerType: InventoryOwnerType, ownerId: string) {
+    const firstCatalogItem = catalog[0]
+    const firstIsRations = isRationCatalogItem(firstCatalogItem)
+
     setBuyOwnerType(ownerType)
     setBuyOwnerId(ownerId)
-    setBuyCatalogItemId(catalog[0]?.id ?? '')
-    setBuyQuantity(1)
+    setBuyCatalogItemId(firstCatalogItem?.id ?? '')
+    setBuyQuantity(firstIsRations ? 3 : 1)
     setBuyCharacterId(ownerType === 'character' ? ownerId : '')
     setBuyGp(0)
-    setBuySp(0)
+    setBuySp(firstIsRations ? 5 : 0)
     setBuyCp(0)
     setShowBuyItem(true)
   }
@@ -4207,7 +4235,15 @@ function App() {
       return
     }
 
-    const priceCp = moneyToCp(buyGp, buySp, buyCp)
+    const boughtItem = catalog.find(entry => entry.id === buyCatalogItemId)
+    const buyingRations = isRationCatalogItem(boughtItem)
+    const normalizedBuyQuantity = buyingRations
+      ? normalizeRationBuyQuantity(buyQuantity)
+      : Math.max(1, buyQuantity)
+    const priceCp = buyingRations
+      ? rationBuyPriceCp(normalizedBuyQuantity)
+      : moneyToCp(buyGp, buySp, buyCp)
+
     setBuyingItem(true)
     try {
       await buyInventoryItem({
@@ -4216,13 +4252,12 @@ function App() {
         ownerId: buyOwnerId,
         buyerCharacterId: buyCharacterId,
         catalogItemId: buyCatalogItemId,
-        quantity: Math.max(1, buyQuantity),
+        quantity: normalizedBuyQuantity,
         priceCp,
       })
-      const boughtItem = catalog.find(entry => entry.id === buyCatalogItemId)
       const buyer = characters.find(character => character.id === buyCharacterId)
       const targetLabel = inventoryOwnerLabel(buyOwnerType, buyOwnerId)
-      const boughtQuantity = Math.max(1, buyQuantity)
+      const boughtQuantity = normalizedBuyQuantity
 
       setShowBuyItem(false)
       await refreshInventoryOwners([buyOwnerType], true)
@@ -5350,7 +5385,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3Y.2 • widoczne grafiki Dashboardu</span>
+              Etap 3Z • stała cena racji</span>
           </div>
 
         </aside>
@@ -8913,7 +8948,17 @@ function App() {
             Przedmiot z Biblioteki
             <select
               value={buyCatalogItemId}
-              onChange={e => setBuyCatalogItemId(e.target.value)}
+              onChange={e => {
+                const nextId = e.target.value
+                const nextItem = catalog.find(entry => entry.id === nextId)
+                const nextIsRations = isRationCatalogItem(nextItem)
+
+                setBuyCatalogItemId(nextId)
+                setBuyQuantity(nextIsRations ? 3 : 1)
+                setBuyGp(0)
+                setBuySp(nextIsRations ? 5 : 0)
+                setBuyCp(0)
+              }}
             >
               <option value="">— wybierz —</option>
               {catalog.map(entry => (
@@ -8928,10 +8973,47 @@ function App() {
             Ilość
             <input
               type="number"
-              min="1"
+              min={
+                isRationCatalogItem(
+                  catalog.find(entry => entry.id === buyCatalogItemId)
+                )
+                  ? 3
+                  : 1
+              }
+              step={
+                isRationCatalogItem(
+                  catalog.find(entry => entry.id === buyCatalogItemId)
+                )
+                  ? 3
+                  : 1
+              }
               value={buyQuantity}
-              onChange={e => setBuyQuantity(Math.max(1, Number(e.target.value) || 1))}
+              onChange={e => {
+                const next = Number(e.target.value) || 1
+                const selectedItem = catalog.find(
+                  entry => entry.id === buyCatalogItemId
+                )
+
+                if (isRationCatalogItem(selectedItem)) {
+                  const normalized = normalizeRationBuyQuantity(next)
+                  const totalCp = rationBuyPriceCp(normalized)
+
+                  setBuyQuantity(normalized)
+                  setBuyGp(Math.floor(totalCp / 100))
+                  setBuySp(Math.floor((totalCp % 100) / 10))
+                  setBuyCp(totalCp % 10)
+                } else {
+                  setBuyQuantity(Math.max(1, Math.floor(next)))
+                }
+              }}
             />
+            {isRationCatalogItem(
+              catalog.find(entry => entry.id === buyCatalogItemId)
+            ) && (
+              <span className="muted" style={{ display: 'block', marginTop: 4 }}>
+                Racje są sprzedawane wyłącznie w paczkach po 3.
+              </span>
+            )}
           </label>
 
           <div
@@ -8955,22 +9037,100 @@ function App() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             <label>
               GP
-              <input type="number" min="0" value={buyGp} onChange={e => setBuyGp(Math.max(0, Number(e.target.value) || 0))} />
+              <input
+                type="number"
+                min="0"
+                value={
+                  isRationCatalogItem(
+                    catalog.find(entry => entry.id === buyCatalogItemId)
+                  )
+                    ? Math.floor(rationBuyPriceCp(buyQuantity) / 100)
+                    : buyGp
+                }
+                disabled={isRationCatalogItem(
+                  catalog.find(entry => entry.id === buyCatalogItemId)
+                )}
+                onChange={e =>
+                  setBuyGp(Math.max(0, Number(e.target.value) || 0))
+                }
+              />
             </label>
             <label>
               SP
-              <input type="number" min="0" value={buySp} onChange={e => setBuySp(Math.max(0, Number(e.target.value) || 0))} />
+              <input
+                type="number"
+                min="0"
+                value={
+                  isRationCatalogItem(
+                    catalog.find(entry => entry.id === buyCatalogItemId)
+                  )
+                    ? Math.floor((rationBuyPriceCp(buyQuantity) % 100) / 10)
+                    : buySp
+                }
+                disabled={isRationCatalogItem(
+                  catalog.find(entry => entry.id === buyCatalogItemId)
+                )}
+                onChange={e =>
+                  setBuySp(Math.max(0, Number(e.target.value) || 0))
+                }
+              />
             </label>
             <label>
               CP
-              <input type="number" min="0" value={buyCp} onChange={e => setBuyCp(Math.max(0, Number(e.target.value) || 0))} />
+              <input
+                type="number"
+                min="0"
+                value={
+                  isRationCatalogItem(
+                    catalog.find(entry => entry.id === buyCatalogItemId)
+                  )
+                    ? rationBuyPriceCp(buyQuantity) % 10
+                    : buyCp
+                }
+                disabled={isRationCatalogItem(
+                  catalog.find(entry => entry.id === buyCatalogItemId)
+                )}
+                onChange={e =>
+                  setBuyCp(Math.max(0, Number(e.target.value) || 0))
+                }
+              />
             </label>
           </div>
 
           <p className="muted">
-            Cena całkowita: {formatMoneyCp(moneyToCp(buyGp, buySp, buyCp))}
+            Cena całkowita:{' '}
+            {formatMoneyCp(
+              isRationCatalogItem(
+                catalog.find(entry => entry.id === buyCatalogItemId)
+              )
+                ? rationBuyPriceCp(buyQuantity)
+                : moneyToCp(buyGp, buySp, buyCp)
+            )}
             {' • '}1 GP = 10 SP = 100 CP.
           </p>
+
+          {isRationCatalogItem(
+            catalog.find(entry => entry.id === buyCatalogItemId)
+          ) && (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: '9px 11px',
+                borderRadius: 7,
+                border: '1px solid rgba(197, 148, 58, 0.48)',
+                background: 'rgba(104, 76, 31, 0.14)',
+              }}
+            >
+              <strong>Stała cena racji: 5 SP za 3 racje.</strong>
+              <span
+                className="muted"
+                style={{ display: 'block', marginTop: 3 }}
+              >
+                Cena jest zablokowana i przelicza się automatycznie dla kolejnych
+                paczek po 3.
+              </span>
+            </div>
+          )}
 
           <button
             className="primary full"
