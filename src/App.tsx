@@ -5649,10 +5649,32 @@ function App() {
     rows: Record<string, unknown>[],
     keyColumns: string[]
   ) {
+    const normalizeRow = (row: Record<string, unknown>) => {
+      const cleaned: Record<string, unknown> = {}
+
+      for (const [key, value] of Object.entries(row)) {
+        // Pola techniczne mogą zmieniać się automatycznie przez trigger/RPC
+        // i nie oznaczają faktycznej zmiany stanu przez użytkownika.
+        if (
+          key === 'updated_at' ||
+          key === 'created_at' ||
+          key === 'used_slots'
+        ) {
+          continue
+        }
+
+        cleaned[key] = value
+      }
+
+      return cleaned
+    }
+
+    const normalized = rows.map(normalizeRow)
+
     const keyFor = (row: Record<string, unknown>) =>
       keyColumns.map(column => String(row[column] ?? '')).join('::')
 
-    return [...rows].sort((a, b) =>
+    return normalized.sort((a, b) =>
       keyFor(a).localeCompare(keyFor(b), 'en')
     )
   }
@@ -5674,7 +5696,7 @@ function App() {
         JSON.stringify(normalizedUndoRows(scope.afterRows, scope.keyColumns))
       ) {
         throw new Error(
-          `Nie można bezpiecznie cofnąć zmiany: dane w ${scope.table} zostały później zmodyfikowane.`
+          `Nie można bezpiecznie cofnąć zmiany: stan danych w ${scope.table} różni się od zapisanego stanu po operacji. Pola techniczne (updated_at / created_at / used_slots) są ignorowane.`
         )
       }
     }
@@ -6139,7 +6161,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AC • rozszerzone cofanie + limit 100</span>
+              Etap 3AC.1 • poprawka porównania cofania</span>
           </div>
 
         </aside>
