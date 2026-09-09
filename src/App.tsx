@@ -107,8 +107,16 @@ import { loadBastionItems } from './lib/bastionItems'
 import type { BastionItem } from './lib/bastionItems'
 import { buyInventoryItem, sellInventoryItem } from './lib/trade'
 import type { InventoryOwnerType } from './lib/trade'
-import { addCampaignHistory, loadCampaignHistory } from './lib/history'
-import type { HistoryEntry, HistoryEventType } from './lib/history'
+import {
+  addCampaignHistory,
+  loadCampaignHistory,
+  markCampaignHistoryUndone,
+} from './lib/history'
+import type {
+  HistoryEntry,
+  HistoryEventType,
+  HistoryUndoPayload,
+} from './lib/history'
 import {
   consumeInventoryItemUse,
   setInventoryItemQuantity,
@@ -200,6 +208,7 @@ function App() {
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyFilter, setHistoryFilter] = useState<'all' | HistoryEventType>('all')
+  const [undoingHistoryId, setUndoingHistoryId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const [characters, setCharacters] = useState<Character[]>([])
@@ -2815,7 +2824,8 @@ function App() {
 
   async function recordOperation(
     text: string,
-    type?: HistoryEventType
+    type?: HistoryEventType,
+    undoPayload: HistoryUndoPayload | null = null
   ) {
     if (!activeId || !isCloudMode || !shouldStoreHistory(text)) return
 
@@ -2823,17 +2833,22 @@ function App() {
       await addCampaignHistory(
         activeId,
         type ?? historyTypeForMessage(text),
-        text
+        text,
+        undoPayload
       )
     } catch (e) {
       console.warn('HISTORY WRITE ERROR:', e)
     }
   }
 
-  function flash(text: string, historyType?: HistoryEventType) {
+  function flash(
+    text: string,
+    historyType?: HistoryEventType,
+    undoPayload: HistoryUndoPayload | null = null
+  ) {
     setMessage(text)
 
-    void recordOperation(text, historyType)
+    void recordOperation(text, historyType, undoPayload)
 
     window.setTimeout(
       () => setMessage(null),
@@ -2950,6 +2965,59 @@ function App() {
     setCharacterPortraitUrl('')
   }
 
+  function characterHistorySnapshot(character: Character) {
+    return {
+      name: character.name,
+      strength: character.strength,
+      dexterity: character.dexterity,
+      constitution: character.constitution,
+      intelligence: character.intelligence,
+      wisdom: character.wisdom,
+      charisma: character.charisma,
+      gold: character.gold,
+      currentHp: character.currentHp,
+      maxHp: character.maxHp,
+      temporaryHp: character.temporaryHp,
+      ancestry: character.ancestry,
+      className: character.className,
+      level: character.level,
+      xp: character.xp,
+      xpNext: character.xpNext,
+      title: character.title,
+      alignment: character.alignment,
+      background: character.background,
+      deity: character.deity,
+      talentsSpells: character.talentsSpells,
+      backstory: character.backstory,
+      portraitUrl: character.portraitUrl,
+      usedSlots: character.usedSlots,
+    }
+  }
+
+  function catalogHistorySnapshot(entry: CatalogItem) {
+    return {
+      name: entry.name,
+      slotsPerUnit: entry.slotsPerUnit,
+      slotGroupSize: entry.slotGroupSize,
+      freeQuantity: entry.freeQuantity,
+      category: entry.category,
+      lightMinutes: entry.lightMinutes,
+      lightConsumesSource: entry.lightConsumesSource,
+      lightFuelItemName: entry.lightFuelItemName,
+      lightFuelQuantity: entry.lightFuelQuantity,
+      weaponDamage: entry.weaponDamage,
+      weaponRange: entry.weaponRange,
+      weaponProperties: entry.weaponProperties,
+      handsRequired: entry.handsRequired,
+      armorClass: entry.armorClass,
+      armorProperties: entry.armorProperties,
+      isMagical: entry.isMagical,
+      isQuestItem: entry.isQuestItem,
+      magicDescription: entry.magicDescription,
+      maxUses: entry.maxUses,
+    }
+  }
+
   async function saveCharacter() {
     if (!activeId) {
       setError('Najpierw wybierz kampanię.')
@@ -2992,7 +3060,44 @@ function App() {
           portraitUrl: characterPortraitUrl,
           usedSlots: usedSlotsForCharacter(editingCharacter.id),
         })
-        flash(`Zaktualizowano Postać: ${characterName}.`, 'character')
+        flash(
+          `Zaktualizowano Postać: ${characterName}.`,
+          'character',
+          {
+            kind: 'character_patch',
+            characterId: editingCharacter.id,
+            before: characterHistorySnapshot(editingCharacter),
+            after: {
+              name: characterName,
+              strength: characterStrength,
+              dexterity: characterDexterity,
+              constitution: characterConstitution,
+              intelligence: characterIntelligence,
+              wisdom: characterWisdom,
+              charisma: characterCharisma,
+              gold: characterGold,
+              currentHp: Math.min(
+                characterCurrentHp,
+                characterMaxHp + characterTemporaryHp
+              ),
+              maxHp: characterMaxHp,
+              temporaryHp: characterTemporaryHp,
+              ancestry: characterAncestry,
+              className: characterClassName,
+              level: characterLevel,
+              xp: characterXp,
+              xpNext: characterXpNext,
+              title: characterTitle,
+              alignment: characterAlignment,
+              background: characterBackground,
+              deity: characterDeity,
+              talentsSpells: characterTalentsSpells,
+              backstory: characterBackstory,
+              portraitUrl: characterPortraitUrl,
+              usedSlots: usedSlotsForCharacter(editingCharacter.id),
+            },
+          }
+        )
       } else {
         await createCharacter(activeId, characterName, characterStrength, characterGold, {
           dexterity: characterDexterity,
@@ -3083,7 +3188,13 @@ function App() {
       await refreshCharacters()
       flash(
         `${character.name}: XP ${character.xp} → ${nextXp}.`,
-        'character'
+        'character',
+        {
+          kind: 'character_patch',
+          characterId: character.id,
+          before: { xp: character.xp },
+          after: { xp: nextXp },
+        }
       )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić XP.')
@@ -3111,7 +3222,13 @@ function App() {
       await refreshCharacters()
       flash(
         `${character.name}: HP ${character.currentHp} → ${nextHp}.`,
-        'character'
+        'character',
+        {
+          kind: 'character_patch',
+          characterId: character.id,
+          before: { currentHp: character.currentHp },
+          after: { currentHp: nextHp },
+        }
       )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić HP.')
@@ -3137,7 +3254,19 @@ function App() {
       await refreshCharacters()
       flash(
         `${character.name}: tymczasowe HP ${character.temporaryHp} → ${nextTemporaryHp}. Maksymalne HP: ${nextEffectiveMax}.`,
-        'character'
+        'character',
+        {
+          kind: 'character_patch',
+          characterId: character.id,
+          before: {
+            temporaryHp: character.temporaryHp,
+            currentHp: character.currentHp,
+          },
+          after: {
+            temporaryHp: nextTemporaryHp,
+            currentHp: nextCurrentHp,
+          },
+        }
       )
     } catch (e: any) {
       setError(
@@ -3192,7 +3321,16 @@ function App() {
       )
 
       await refreshCharacters()
-      flash(`${character.name}: zmieniono portret.`, 'character')
+      flash(
+        `${character.name}: zmieniono portret.`,
+        'character',
+        {
+          kind: 'character_patch',
+          characterId: character.id,
+          before: { portraitUrl: character.portraitUrl },
+          after: { portraitUrl },
+        }
+      )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się przesłać portretu.')
     }
@@ -3384,7 +3522,14 @@ function App() {
         item.isEquipped
           ? `${character.name} — zdjęto/odłożono ${item.name}.`
           : `${character.name} — wyposażono ${item.name}.`,
-        'inventory'
+        'inventory',
+        {
+          kind: 'character_item_flag',
+          itemId: item.id,
+          flag: 'equipped',
+          before: item.isEquipped,
+          after: !item.isEquipped,
+        }
       )
     } catch (e: any) {
       setError(
@@ -3407,7 +3552,19 @@ function App() {
     try {
       await setCharacterItemQuickpull(item.id, !item.isQuickpull)
       await refreshItems()
-      flash(item.isQuickpull ? `"${item.name}" usunięto z Quickpull.` : `"${item.name}" oznaczono jako Quickpull.`)
+      flash(
+        item.isQuickpull
+          ? `"${item.name}" usunięto z Quickpull.`
+          : `"${item.name}" oznaczono jako Quickpull.`,
+        'inventory',
+        {
+          kind: 'character_item_flag',
+          itemId: item.id,
+          flag: 'quickpull',
+          before: item.isQuickpull,
+          after: !item.isQuickpull,
+        }
+      )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić Quickpull.')
     }
@@ -3574,8 +3731,17 @@ function App() {
         )
 
         setShowCatalogItem(false)
+        flash(
+          `Biblioteka — zaktualizowano: ${updated.name}.`,
+          'library',
+          {
+            kind: 'catalog_restore',
+            catalogItemId: editingCatalogItem.id,
+            before: catalogHistorySnapshot(editingCatalogItem),
+            after: catalogHistorySnapshot(updated),
+          }
+        )
         setEditingCatalogItem(null)
-        flash(`Biblioteka — zaktualizowano: ${updated.name}.`, 'library')
       } else {
         const created = await createCatalogItem({
           campaignId: activeId,
@@ -3984,7 +4150,13 @@ function App() {
       await refreshInventoryOwners(['character'], true)
       flash(
         `${character.name}: ustawiono Coins na ${normalized.toLocaleString('pl-PL')} GP.`,
-        'inventory'
+        'inventory',
+        {
+          kind: 'character_patch',
+          characterId: character.id,
+          before: { gold: character.gold },
+          after: { gold: normalized },
+        }
       )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić stanu Coins.')
@@ -4013,7 +4185,14 @@ function App() {
       if (context) {
         flash(
           `${context.owner} — ${context.name}: ilość ${context.oldQuantity} → ${quantity}.`,
-          'inventory'
+          'inventory',
+          {
+            kind: 'inventory_quantity',
+            ownerType,
+            itemId,
+            before: context.oldQuantity,
+            after: quantity,
+          }
         )
       } else {
         flash(`Zmieniono ilość przedmiotu na ${quantity}.`, 'inventory')
@@ -5220,6 +5399,157 @@ function App() {
     link.click()
     URL.revokeObjectURL(url)
   }
+  function valuesMatch(
+    current: Record<string, unknown>,
+    expected: Record<string, unknown>
+  ) {
+    return Object.entries(expected).every(
+      ([key, value]) => JSON.stringify(current[key]) === JSON.stringify(value)
+    )
+  }
+
+  async function undoHistoryEntry(entry: HistoryEntry) {
+    if (!entry.undoPayload || entry.undoneAt || !activeId) return
+
+    if (
+      !window.confirm(
+        `Cofnąć tę zmianę?\n\n${entry.message}\n\nOperacja zostanie wykonana tylko, jeśli dane nie zostały później zmienione w tym samym miejscu.`
+      )
+    ) {
+      return
+    }
+
+    setUndoingHistoryId(entry.id)
+
+    try {
+      const payload = entry.undoPayload
+
+      if (payload.kind === 'character_patch') {
+        const character = characters.find(
+          candidate => candidate.id === payload.characterId
+        )
+
+        if (!character) {
+          throw new Error('Nie znaleziono Postaci, której dotyczy ta zmiana.')
+        }
+
+        const current = characterHistorySnapshot(character)
+
+        if (!valuesMatch(current, payload.after)) {
+          throw new Error(
+            'Nie można bezpiecznie cofnąć tej zmiany, ponieważ te dane Postaci zostały później zmodyfikowane.'
+          )
+        }
+
+        const restored = {
+          ...current,
+          ...payload.before,
+        } as ReturnType<typeof characterHistorySnapshot>
+
+        await updateCharacter(character.id, restored)
+        await refreshCharacters()
+      } else if (payload.kind === 'inventory_quantity') {
+        const context = inventoryItemContext(
+          payload.ownerType,
+          payload.itemId
+        )
+
+        if (!context) {
+          throw new Error(
+            'Nie znaleziono przedmiotu. Nie można cofnąć tej zmiany.'
+          )
+        }
+
+        if (context.oldQuantity !== payload.after) {
+          throw new Error(
+            'Nie można bezpiecznie cofnąć tej zmiany, ponieważ ilość przedmiotu została później zmodyfikowana.'
+          )
+        }
+
+        await setInventoryItemQuantity({
+          campaignId: activeId,
+          ownerType: payload.ownerType,
+          itemId: payload.itemId,
+          quantity: payload.before,
+        })
+
+        await refreshInventoryOwners(
+          [payload.ownerType],
+          payload.ownerType === 'character'
+        )
+      } else if (payload.kind === 'character_item_flag') {
+        const item = items.find(candidate => candidate.id === payload.itemId)
+
+        if (!item) {
+          throw new Error(
+            'Nie znaleziono przedmiotu Postaci. Nie można cofnąć tej zmiany.'
+          )
+        }
+
+        const current =
+          payload.flag === 'quickpull'
+            ? item.isQuickpull
+            : item.isEquipped
+
+        if (current !== payload.after) {
+          throw new Error(
+            'Nie można bezpiecznie cofnąć tej zmiany, ponieważ stan przedmiotu został później zmodyfikowany.'
+          )
+        }
+
+        if (payload.flag === 'quickpull') {
+          await setCharacterItemQuickpull(payload.itemId, payload.before)
+        } else {
+          await setCharacterItemEquipped(payload.itemId, payload.before)
+        }
+
+        await refreshItems()
+      } else if (payload.kind === 'catalog_restore') {
+        const entryNow = catalog.find(
+          candidate => candidate.id === payload.catalogItemId
+        )
+
+        if (!entryNow) {
+          throw new Error(
+            'Nie znaleziono pozycji Biblioteki. Nie można cofnąć tej zmiany.'
+          )
+        }
+
+        const current = catalogHistorySnapshot(entryNow)
+
+        if (!valuesMatch(current, payload.after)) {
+          throw new Error(
+            'Nie można bezpiecznie cofnąć tej zmiany, ponieważ pozycja Biblioteki została później ponownie edytowana.'
+          )
+        }
+
+        await updateCatalogItem(
+          payload.catalogItemId,
+          payload.before as Parameters<typeof updateCatalogItem>[1]
+        )
+        await refreshCatalog()
+      }
+
+      await markCampaignHistoryUndone(entry.id)
+      await addCampaignHistory(
+        activeId,
+        entry.eventType,
+        `Cofnięto zmianę: ${entry.message}`
+      )
+      await refreshHistory()
+      setMessage('Zmiana została cofnięta.')
+      window.setTimeout(() => setMessage(null), 3000)
+    } catch (e: any) {
+      setError(
+        e?.message ||
+          e?.details ||
+          'Nie udało się cofnąć zmiany.'
+      )
+    } finally {
+      setUndoingHistoryId(null)
+    }
+  }
+
   const filteredHistory = useMemo(
     () =>
       historyFilter === 'all'
@@ -5456,7 +5786,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AA • edycja Biblioteki</span>
+              Etap 3AB • cofanie zmian z Historii</span>
           </div>
 
         </aside>
@@ -8493,7 +8823,8 @@ function App() {
                   <h1>{active?.name ?? 'Brak aktywnej kampanii'}</h1>
                   <p>
                     Wspólny, synchronizowany zapis najważniejszych operacji
-                    wykonywanych przez użytkowników kampanii.
+                    wykonywanych przez użytkowników kampanii. Nowe, odwracalne
+                    zmiany można bezpiecznie cofnąć bezpośrednio z Historii.
                   </p>
                 </div>
 
@@ -8564,7 +8895,7 @@ function App() {
                         className="entity-card"
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: '165px 110px 1fr',
+                          gridTemplateColumns: '165px 110px minmax(0, 1fr) auto',
                           gap: 14,
                           alignItems: 'center',
                         }}
@@ -8588,7 +8919,49 @@ function App() {
                         </span>
 
                         <div>
-                          <strong>{entry.message}</strong>
+                          <strong
+                            style={{
+                              textDecoration: entry.undoneAt
+                                ? 'line-through'
+                                : 'none',
+                              opacity: entry.undoneAt ? 0.58 : 1,
+                            }}
+                          >
+                            {entry.message}
+                          </strong>
+                          {entry.undoneAt && (
+                            <span
+                              className="muted"
+                              style={{ display: 'block', marginTop: 3 }}
+                            >
+                              Cofnięto: {formatHistoryTime(entry.undoneAt)}
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ justifySelf: 'end' }}>
+                          {entry.undoPayload && !entry.undoneAt ? (
+                            <button
+                              className="secondary"
+                              onClick={() => void undoHistoryEntry(entry)}
+                              disabled={undoingHistoryId === entry.id}
+                              title="Cofnij tę zmianę"
+                            >
+                              <ArrowRightLeft size={14} />
+                              {undoingHistoryId === entry.id
+                                ? 'Cofanie…'
+                                : 'Cofnij'}
+                            </button>
+                          ) : entry.undoneAt ? (
+                            <span className="muted">Cofnięta</span>
+                          ) : (
+                            <span
+                              className="muted"
+                              title="Ta starsza operacja nie zawiera danych potrzebnych do bezpiecznego cofnięcia."
+                            >
+                              —
+                            </span>
+                          )}
                         </div>
                       </article>
                     ))}
