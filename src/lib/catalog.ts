@@ -147,6 +147,94 @@ export async function createCatalogItem(input: {
   return mapCatalogItem(data)
 }
 
+
+export async function updateCatalogItem(
+  id: string,
+  input: {
+    name: string
+    slotsPerUnit: number
+    slotGroupSize?: number
+    freeQuantity?: number
+    category: CatalogItemCategory
+    lightMinutes?: number | null
+    lightConsumesSource?: boolean
+    lightFuelItemName?: string | null
+    lightFuelQuantity?: number
+    weaponDamage?: string | null
+    weaponRange?: string | null
+    weaponProperties?: string | null
+    handsRequired?: 1 | 2
+    armorClass?: string | null
+    armorProperties?: string | null
+    isMagical?: boolean
+    isQuestItem?: boolean
+    magicDescription?: string | null
+    maxUses?: number
+  }
+): Promise<CatalogItem> {
+  if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
+
+  const { data, error } = await supabase
+    .from('item_catalog')
+    .update({
+      name: input.name.trim(),
+      slots_per_unit: Math.max(0, input.slotsPerUnit),
+      slot_group_size: Math.max(1, input.slotGroupSize ?? 1),
+      free_quantity: Math.max(0, input.freeQuantity ?? 0),
+      category: input.category,
+      light_minutes:
+        input.category === 'light' ? input.lightMinutes ?? 60 : null,
+      light_consumes_source:
+        input.category === 'light' ? input.lightConsumesSource ?? true : true,
+      light_fuel_item_name:
+        input.category === 'light'
+          ? input.lightFuelItemName?.trim() || null
+          : null,
+      light_fuel_quantity:
+        input.category === 'light'
+          ? Math.max(0, input.lightFuelQuantity ?? 0)
+          : 0,
+      weapon_damage:
+        input.category === 'weapon'
+          ? input.weaponDamage?.trim() || null
+          : null,
+      weapon_range:
+        input.category === 'weapon'
+          ? input.weaponRange?.trim() || null
+          : null,
+      weapon_properties:
+        input.category === 'weapon'
+          ? input.weaponProperties?.trim() || null
+          : null,
+      hands_required:
+        input.category === 'weapon'
+          ? input.handsRequired === 2
+            ? 2
+            : 1
+          : 1,
+      armor_class:
+        input.category === 'armor'
+          ? input.armorClass?.trim() || null
+          : null,
+      armor_properties:
+        input.category === 'armor'
+          ? input.armorProperties?.trim() || null
+          : null,
+      is_magical: Boolean(input.isMagical),
+      is_quest_item: Boolean(input.isQuestItem),
+      magic_description:
+        input.isMagical ? input.magicDescription?.trim() || null : null,
+      max_uses: Math.max(0, Math.floor(input.maxUses ?? 0)),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return mapCatalogItem(data)
+}
+
 export async function deleteCatalogItem(id: string): Promise<void> {
   if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
   const { error } = await supabase.from('item_catalog').delete().eq('id', id)
