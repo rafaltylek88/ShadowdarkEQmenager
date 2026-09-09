@@ -1951,6 +1951,15 @@ function App() {
       return
     }
 
+    const undoBefore = await captureUndoScopes([
+      from.type === 'character'
+        ? { table: 'character_items', filters: { character_id: from.id } }
+        : { table: 'npc_items', filters: { npc_id: from.id } },
+      to.type === 'character'
+        ? { table: 'character_items', filters: { character_id: to.id } }
+        : { table: 'npc_items', filters: { npc_id: to.id } },
+    ])
+
     setTransferringRation(true)
 
     try {
@@ -1961,7 +1970,12 @@ function App() {
         refreshNpcItems(),
         refreshNpcs(),
       ])
-      flash(`${from.name} → ${to.name}: przekazano 1 × Rations.`, 'food')
+      const undoPayload = await finalizeUndoScopes(undoBefore)
+      flash(
+        `${from.name} → ${to.name}: przekazano 1 × Rations.`,
+        'food',
+        undoPayload
+      )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się przekazać racji.')
     } finally {
@@ -1995,17 +2009,24 @@ function App() {
       return
     }
 
+    const undoBefore = await captureUndoScopes([
+      { table: 'animals', filters: { campaign_id: activeId } },
+      { table: 'animal_items', filters: { campaign_id: activeId } },
+    ])
+
     setFeedingAnimals(true)
 
     try {
       const result = await feedAnimals(activeId, animalFeedMethod)
       await Promise.all([refreshAnimalItems(), refreshAnimals()])
 
+      const undoPayload = await finalizeUndoScopes(undoBefore)
       flash(
         result.method === 'pasture'
           ? `Nakarmiono ${result.animalsFed} zwierząt na pastwisku — nie zużyto Rations.`
           : `Nakarmiono ${result.animalsFed} zwierząt — zużyto ${result.animalsFed} × Rations.`,
-        'food'
+        'food',
+        undoPayload
       )
     } catch (e: any) {
       setError(
@@ -2029,6 +2050,13 @@ function App() {
       return
     }
 
+    const undoBefore = await captureUndoScopes([
+      { table: 'characters', filters: { campaign_id: activeId } },
+      { table: 'npcs', filters: { campaign_id: activeId } },
+      { table: 'character_items', filters: { campaign_id: activeId } },
+      { table: 'npc_items', filters: { campaign_id: activeId } },
+    ])
+
     setFeedingExpedition(true)
 
     try {
@@ -2039,11 +2067,13 @@ function App() {
         refreshNpcItems(),
         refreshNpcs(),
       ])
+      const undoPayload = await finalizeUndoScopes(undoBefore)
       flash(
         `Nakarmiono ekspedycję — ${result.membersFed} ${
           result.membersFed === 1 ? 'członek' : 'członków'
         }, zużyto ${result.membersFed} × Rations.`,
-        'food'
+        'food',
+        undoPayload
       )
     } catch (e: any) {
       console.error('FEED EXPEDITION ERROR:', e)
@@ -2382,8 +2412,25 @@ function App() {
     lightState?.status,
   ])
 
+  function lightUndoScopeSpecs(): UndoScopeSpec[] {
+    if (!activeId) return []
+    return [
+      {
+        table: 'campaign_light',
+        filters: { campaign_id: activeId },
+        keyColumns: ['campaign_id'],
+      },
+      { table: 'character_items', filters: { campaign_id: activeId } },
+      { table: 'npc_items', filters: { campaign_id: activeId } },
+      { table: 'characters', filters: { campaign_id: activeId } },
+      { table: 'npcs', filters: { campaign_id: activeId } },
+    ]
+  }
+
   async function handleLightStartOrResume() {
     if (!activeId) return
+
+    const undoBefore = await captureUndoScopes(lightUndoScopeSpecs())
 
     try {
       setLightLoading(true)
@@ -2391,7 +2438,8 @@ function App() {
       if (lightState?.status === 'paused') {
         setLightState(await resumeCampaignLight(activeId))
         setLightNow(Date.now())
-        flash('Wznowiono licznik światła.', 'light')
+        const undoPayload = await finalizeUndoScopes(undoBefore)
+        flash('Wznowiono licznik światła.', 'light', undoPayload)
         return
       }
 
@@ -2424,7 +2472,12 @@ function App() {
         refreshNpcItems(),
         refreshNpcs(),
       ])
-      flash(`${selectedLightChoice?.memberName ?? 'Ekspedycja'} zapalił(a): ${selectedLightChoice?.itemName ?? 'źródło światła'}.`, 'light')
+      const undoPayload = await finalizeUndoScopes(undoBefore)
+      flash(
+        `${selectedLightChoice?.memberName ?? 'Ekspedycja'} zapalił(a): ${selectedLightChoice?.itemName ?? 'źródło światła'}.`,
+        'light',
+        undoPayload
+      )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się uruchomić światła.')
     } finally {
@@ -2435,11 +2488,14 @@ function App() {
   async function handleLightPause() {
     if (!activeId || lightState?.status !== 'running') return
 
+    const undoBefore = await captureUndoScopes(lightUndoScopeSpecs())
+
     try {
       setLightLoading(true)
       setLightState(await pauseCampaignLight(activeId))
       setLightNow(Date.now())
-      flash('Wstrzymano licznik światła.', 'light')
+      const undoPayload = await finalizeUndoScopes(undoBefore)
+      flash('Wstrzymano licznik światła.', 'light', undoPayload)
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zatrzymać licznika.')
     } finally {
@@ -2449,6 +2505,8 @@ function App() {
 
   async function handleLightExtinguish() {
     if (!activeId) return
+
+    const undoBefore = await captureUndoScopes(lightUndoScopeSpecs())
 
     try {
       setLightLoading(true)
@@ -2460,7 +2518,12 @@ function App() {
         refreshNpcItems(),
         refreshNpcs(),
       ])
-      flash(`Zgaszono: ${lightSourceName} • niosący: ${lightCarrierName}.`, 'light')
+      const undoPayload = await finalizeUndoScopes(undoBefore)
+      flash(
+        `Zgaszono: ${lightSourceName} • niosący: ${lightCarrierName}.`,
+        'light',
+        undoPayload
+      )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zgasić światła.')
     } finally {
@@ -2491,6 +2554,8 @@ function App() {
       }
     }
 
+    const undoBefore = await captureUndoScopes(lightUndoScopeSpecs())
+
     try {
       setLightLoading(true)
       const next = await transferCampaignLight(activeId, target.type, target.id)
@@ -2502,7 +2567,12 @@ function App() {
         refreshNpcItems(),
         refreshNpcs(),
       ])
-      flash(`${lightCarrierName} → ${target.name}: przekazano ${lightSourceName} bez zatrzymywania licznika.`, 'light')
+      const undoPayload = await finalizeUndoScopes(undoBefore)
+      flash(
+        `${lightCarrierName} → ${target.name}: przekazano ${lightSourceName} bez zatrzymywania licznika.`,
+        'light',
+        undoPayload
+      )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się przekazać światła.')
     } finally {
@@ -3610,8 +3680,13 @@ function App() {
     if (!confirmed) return
 
     try {
+      const undoBefore = await captureUndoScopes([
+        { table: 'characters', filters: { id: character.id } },
+        { table: 'character_items', filters: { character_id: character.id } },
+      ])
       await deleteCharacter(character.id)
-      flash(`Usunięto Postać: ${character.name}.`, 'character')
+      const undoPayload = await finalizeUndoScopes(undoBefore)
+      flash(`Usunięto Postać: ${character.name}.`, 'character', undoPayload)
       await refreshCharacters()
     } catch (e: any) {
       console.error('DELETE CHARACTER ERROR:', e)
@@ -3860,10 +3935,15 @@ function App() {
   async function removeItem(item: CharacterItem) {
     if (!window.confirm(`Czy na pewno usunąć "${item.name}" z ekwipunku?`)) return
     try {
+      const undoBefore = await captureUndoScopes([
+        { table: 'character_items', filters: { id: item.id } },
+      ])
       await deleteItem(item.id, item.characterId)
+      const undoPayload = await finalizeUndoScopes(undoBefore)
       flash(
         `${characters.find(character => character.id === item.characterId)?.name ?? 'Postać'} — usunięto ${item.quantity} × ${item.name}.`,
-        'inventory'
+        'inventory',
+        undoPayload
       )
       await Promise.all([refreshItems(), refreshCharacters()])
     } catch (e: any) {
@@ -4107,6 +4187,11 @@ function App() {
       return
     }
 
+    const undoBefore = await captureUndoScopes([
+      inventoryScopeSpec(transferFromType, transferFromOwnerId),
+      inventoryScopeSpec(target.type, target.id),
+    ])
+
     setTransferringItem(true)
     try {
       await transferInventoryItem({
@@ -4132,9 +4217,11 @@ function App() {
 
       setShowTransferItem(false)
       await refreshInventoryOwners([transferFromType, target.type])
+      const undoPayload = await finalizeUndoScopes(undoBefore)
       flash(
         `${sourceLabel} → ${target.label}: przeniesiono ${movedQuantity} × ${transferItemName}.`,
-        'inventory'
+        'inventory',
+        undoPayload
       )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się przenieść przedmiotu.')
@@ -4526,6 +4613,11 @@ function App() {
       ? rationBuyPriceCp(normalizedBuyQuantity)
       : moneyToCp(buyGp, buySp, buyCp)
 
+    const undoBefore = await captureUndoScopes([
+      { table: 'characters', filters: { id: buyCharacterId } },
+      inventoryScopeSpec(buyOwnerType, buyOwnerId),
+    ])
+
     setBuyingItem(true)
     try {
       await buyInventoryItem({
@@ -4543,9 +4635,11 @@ function App() {
 
       setShowBuyItem(false)
       await refreshInventoryOwners([buyOwnerType], true)
+      const undoPayload = await finalizeUndoScopes(undoBefore)
       flash(
         `${buyer?.name ?? 'Postać'} kupił(a) ${boughtQuantity} × ${boughtItem?.name ?? 'przedmiot'} za ${formatMoneyCp(priceCp)} → ${targetLabel}.`,
-        'trade'
+        'trade',
+        undoPayload
       )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się kupić przedmiotu.')
@@ -4561,6 +4655,13 @@ function App() {
     }
 
     const priceCp = moneyToCp(sellGp, sellSp, sellCp)
+    const sourceBefore = inventoryItemContext(sellOwnerType, sellItemId)
+    const undoBefore = await captureUndoScopes([
+      { table: 'characters', filters: { id: sellCharacterId } },
+      ...(sourceBefore
+        ? [inventoryScopeSpec(sellOwnerType, sourceBefore.ownerId)]
+        : []),
+    ])
     setSellingItem(true)
     try {
       await sellInventoryItem({
@@ -4580,9 +4681,11 @@ function App() {
 
       setShowSellItem(false)
       await refreshInventoryOwners([sellOwnerType], true)
+      const undoPayload = await finalizeUndoScopes(undoBefore)
       flash(
         `${source?.owner ?? 'Ekwipunek'} — sprzedano ${soldQuantity} × ${sellItemName} za ${formatMoneyCp(priceCp)}. Pieniądze otrzymał(a): ${receiver?.name ?? 'Postać'}.`,
-        'trade'
+        'trade',
+        undoPayload
       )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się sprzedać przedmiotu.')
@@ -4625,8 +4728,14 @@ function App() {
   async function removeBastion(bastion: Bastion) {
     if (!window.confirm(`Usunąć bastion "${bastion.name}" wraz z ulepszeniami?`)) return
     try {
+      const undoBefore = await captureUndoScopes([
+        { table: 'bastions', filters: { id: bastion.id } },
+        { table: 'bastion_upgrades', filters: { bastion_id: bastion.id } },
+        { table: 'bastion_items', filters: { bastion_id: bastion.id } },
+      ])
       await deleteBastion(bastion.id)
-      flash(`Usunięto Bastion: ${bastion.name}.`, 'bastion')
+      const undoPayload = await finalizeUndoScopes(undoBefore)
+      flash(`Usunięto Bastion: ${bastion.name}.`, 'bastion', undoPayload)
       await refreshBastions()
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się usunąć bastionu.')
@@ -4642,10 +4751,18 @@ function App() {
   async function saveBastionHp() {
     if (!editingBastionHp) return
     try {
+      const undoBefore = await captureUndoScopes([
+        { table: 'bastions', filters: { id: editingBastionHp.id } },
+      ])
       await setBastionHp(editingBastionHp.id, bastionHpValue)
       setShowBastionHp(false)
       setEditingBastionHp(null)
-      flash(`${editingBastionHp.name}: ustawiono HP na ${bastionHpValue}/${editingBastionHp.maxHp}.`, 'bastion')
+      const undoPayload = await finalizeUndoScopes(undoBefore)
+      flash(
+        `${editingBastionHp.name}: ustawiono HP na ${bastionHpValue}/${editingBastionHp.maxHp}.`,
+        'bastion',
+        undoPayload
+      )
       await refreshBastions()
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić HP bastionu.')
@@ -4661,10 +4778,19 @@ function App() {
   async function saveBastionRepair() {
     if (!repairingBastion) return
     try {
+      const undoBefore = await captureUndoScopes([
+        { table: 'bastions', filters: { id: repairingBastion.id } },
+        { table: 'characters', filters: { id: repairingBastion.ownerCharacterId } },
+      ])
       const result = await repairBastion(repairingBastion.id, bastionRepairHp)
       setShowBastionRepair(false)
       setRepairingBastion(null)
-      flash(`${repairingBastion.name}: naprawiono ${result.repaired} HP za ${result.costGp} GP. Czas: 1 tydzień.`, 'bastion')
+      const undoPayload = await finalizeUndoScopes(undoBefore)
+      flash(
+        `${repairingBastion.name}: naprawiono ${result.repaired} HP za ${result.costGp} GP. Czas: 1 tydzień.`,
+        'bastion',
+        undoPayload
+      )
       await Promise.all([refreshBastions(), refreshCharacters()])
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się naprawić bastionu.')
@@ -4762,8 +4888,13 @@ function App() {
     if (!window.confirm(`Czy na pewno usunąć zwierzę "${animal.name}" wraz z jego ekwipunkiem?`)) return
 
     try {
+      const undoBefore = await captureUndoScopes([
+        { table: 'animals', filters: { id: animal.id } },
+        { table: 'animal_items', filters: { animal_id: animal.id } },
+      ])
       await deleteAnimal(animal.id)
-      flash(`Usunięto Zwierzę: ${animal.name}.`, 'animal')
+      const undoPayload = await finalizeUndoScopes(undoBefore)
+      flash(`Usunięto Zwierzę: ${animal.name}.`, 'animal', undoPayload)
       await Promise.all([refreshAnimals(), refreshAnimalItems()])
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się usunąć zwierzęcia.')
@@ -4887,12 +5018,17 @@ function App() {
     if (!window.confirm(`Usunąć ${label} z wyposażenia zwierzęcia?`)) return
 
     try {
+      const undoBefore = await captureUndoScopes([
+        { table: 'animal_items', filters: { id: item.id } },
+      ])
       await deleteAnimalItem(item.id)
+      const undoPayload = await finalizeUndoScopes(undoBefore)
       flash(
         isWagonName(item.name)
           ? `${animals.find(animal => animal.id === item.animalId)?.name ?? 'Zwierzę'} (Zwierzę) — odpięto Wóz.`
           : `${animals.find(animal => animal.id === item.animalId)?.name ?? 'Zwierzę'} (Zwierzę) — usunięto ${item.quantity} × ${item.name}.`,
-        'inventory'
+        'inventory',
+        undoPayload
       )
       await Promise.all([refreshAnimalItems(), refreshAnimals()])
     } catch (e: any) {
@@ -4963,8 +5099,12 @@ function App() {
     if (!confirmed) return
 
     try {
+      const undoBefore = await captureUndoScopes([
+        { table: 'story_characters', filters: { id: character.id } },
+      ])
       await deleteStoryCharacter(character.id)
-      flash(`Usunięto Postać Fabularną: ${character.name}.`, 'other')
+      const undoPayload = await finalizeUndoScopes(undoBefore)
+      flash(`Usunięto Postać Fabularną: ${character.name}.`, 'other', undoPayload)
       await refreshStoryCharacters()
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się usunąć Postaci Fabularnej.')
@@ -5261,10 +5401,15 @@ function App() {
     if (!window.confirm(`Usunąć "${item.name}" z ekwipunku NPC?`)) return
 
     try {
+      const undoBefore = await captureUndoScopes([
+        { table: 'npc_items', filters: { id: item.id } },
+      ])
       await deleteNpcItem(item.id, item.npcId)
+      const undoPayload = await finalizeUndoScopes(undoBefore)
       flash(
         `${npcs.find(npc => npc.id === item.npcId)?.name ?? 'NPC'} (NPC) — usunięto ${item.quantity} × ${item.name}.`,
-        'inventory'
+        'inventory',
+        undoPayload
       )
       await Promise.all([refreshNpcItems(), refreshNpcs()])
     } catch (e: any) {
@@ -5331,9 +5476,17 @@ function App() {
   async function removeCatalogEntry(entry: CatalogItem) {
     if (!window.confirm(`Usunąć "${entry.name}" z biblioteki kampanii? Przedmioty już w ekwipunku pozostaną.`)) return
     try {
+      const undoBefore = await captureUndoScopes([
+        { table: 'item_catalog', filters: { id: entry.id } },
+        { table: 'character_items', filters: { campaign_id: activeId } },
+        { table: 'npc_items', filters: { campaign_id: activeId } },
+        { table: 'animal_items', filters: { campaign_id: activeId } },
+        { table: 'bastion_items', filters: { campaign_id: activeId } },
+      ])
       await deleteCatalogItem(entry.id)
       await refreshCatalog()
-      flash(`Biblioteka — usunięto: ${entry.name}.`, 'library')
+      const undoPayload = await finalizeUndoScopes(undoBefore)
+      flash(`Biblioteka — usunięto: ${entry.name}.`, 'library', undoPayload)
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się usunąć pozycji.')
     }
@@ -5431,6 +5584,159 @@ function App() {
     link.click()
     URL.revokeObjectURL(url)
   }
+  type UndoScopeSpec = {
+    table: string
+    filters: Record<string, string | number | boolean | null>
+    keyColumns?: string[]
+  }
+
+  type UndoDbScope = {
+    table: string
+    filters: Record<string, string | number | boolean | null>
+    keyColumns: string[]
+    beforeRows: Record<string, unknown>[]
+    afterRows: Record<string, unknown>[]
+  }
+
+  async function readUndoScopeRows(
+    spec: UndoScopeSpec
+  ): Promise<Record<string, unknown>[]> {
+    if (!supabase) return []
+
+    let query: any = (supabase as any).from(spec.table).select('*')
+    for (const [column, value] of Object.entries(spec.filters)) {
+      query = value === null ? query.is(column, null) : query.eq(column, value)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+    return (data ?? []) as Record<string, unknown>[]
+  }
+
+  async function captureUndoScopes(
+    specs: UndoScopeSpec[]
+  ): Promise<UndoDbScope[]> {
+    return Promise.all(
+      specs.map(async spec => ({
+        table: spec.table,
+        filters: spec.filters,
+        keyColumns: spec.keyColumns ?? ['id'],
+        beforeRows: await readUndoScopeRows(spec),
+        afterRows: [],
+      }))
+    )
+  }
+
+  async function finalizeUndoScopes(
+    scopes: UndoDbScope[]
+  ): Promise<HistoryUndoPayload> {
+    return {
+      kind: 'db_restore',
+      scopes: await Promise.all(
+        scopes.map(async scope => ({
+          ...scope,
+          afterRows: await readUndoScopeRows({
+            table: scope.table,
+            filters: scope.filters,
+            keyColumns: scope.keyColumns,
+          }),
+        }))
+      ),
+    }
+  }
+
+  function normalizedUndoRows(
+    rows: Record<string, unknown>[],
+    keyColumns: string[]
+  ) {
+    const keyFor = (row: Record<string, unknown>) =>
+      keyColumns.map(column => String(row[column] ?? '')).join('::')
+
+    return [...rows].sort((a, b) =>
+      keyFor(a).localeCompare(keyFor(b), 'en')
+    )
+  }
+
+  async function restoreUndoDbScopes(scopes: UndoDbScope[]) {
+    if (!supabase) {
+      throw new Error('Supabase nie jest skonfigurowany.')
+    }
+
+    for (const scope of scopes) {
+      const current = await readUndoScopeRows({
+        table: scope.table,
+        filters: scope.filters,
+        keyColumns: scope.keyColumns,
+      })
+
+      if (
+        JSON.stringify(normalizedUndoRows(current, scope.keyColumns)) !==
+        JSON.stringify(normalizedUndoRows(scope.afterRows, scope.keyColumns))
+      ) {
+        throw new Error(
+          `Nie można bezpiecznie cofnąć zmiany: dane w ${scope.table} zostały później zmodyfikowane.`
+        )
+      }
+    }
+
+    for (const scope of scopes) {
+      const beforeKeys = new Set(
+        scope.beforeRows.map(row =>
+          scope.keyColumns
+            .map(column => String(row[column] ?? ''))
+            .join('::')
+        )
+      )
+
+      const currentRows = await readUndoScopeRows({
+        table: scope.table,
+        filters: scope.filters,
+        keyColumns: scope.keyColumns,
+      })
+
+      for (const row of currentRows) {
+        const key = scope.keyColumns
+          .map(column => String(row[column] ?? ''))
+          .join('::')
+
+        if (beforeKeys.has(key)) continue
+
+        let deleteQuery: any = (supabase as any).from(scope.table).delete()
+        for (const column of scope.keyColumns) {
+          deleteQuery = deleteQuery.eq(column, row[column])
+        }
+        const { error } = await deleteQuery
+        if (error) throw error
+      }
+
+      for (const row of scope.beforeRows) {
+        const { error } = await (supabase as any)
+          .from(scope.table)
+          .upsert(row, {
+            onConflict: scope.keyColumns.join(','),
+          })
+
+        if (error) throw error
+      }
+    }
+  }
+
+  function inventoryScopeSpec(
+    ownerType: InventoryOwnerType,
+    ownerId: string
+  ): UndoScopeSpec {
+    if (ownerType === 'character') {
+      return { table: 'character_items', filters: { character_id: ownerId } }
+    }
+    if (ownerType === 'npc') {
+      return { table: 'npc_items', filters: { npc_id: ownerId } }
+    }
+    if (ownerType === 'animal') {
+      return { table: 'animal_items', filters: { animal_id: ownerId } }
+    }
+    return { table: 'bastion_items', filters: { bastion_id: ownerId } }
+  }
+
   function valuesMatch(
     current: Record<string, unknown>,
     expected: Record<string, unknown>
@@ -5536,6 +5842,21 @@ function App() {
         }
 
         await refreshItems()
+      } else if (payload.kind === 'db_restore') {
+        await restoreUndoDbScopes(payload.scopes)
+        await Promise.all([
+          refreshCharacters(),
+          refreshItems(),
+          refreshNpcs(),
+          refreshNpcItems(),
+          refreshAnimals(),
+          refreshAnimalItems(),
+          refreshBastions(),
+          refreshBastionItems(),
+          refreshCatalog(),
+          refreshStoryCharacters(),
+          loadCampaignLight(activeId).then(setLightState),
+        ])
       } else if (payload.kind === 'catalog_restore') {
         const entryNow = catalog.find(
           candidate => candidate.id === payload.catalogItemId
@@ -5818,7 +6139,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AB.1 • poprawka realtime Historii</span>
+              Etap 3AC • rozszerzone cofanie + limit 100</span>
           </div>
 
         </aside>
