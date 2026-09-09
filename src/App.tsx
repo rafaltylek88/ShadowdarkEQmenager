@@ -221,6 +221,7 @@ function App() {
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
   const [showCharacter, setShowCharacter] = useState(false)
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
+  const [coinCalcDrafts, setCoinCalcDrafts] = useState<Record<string, string>>({})
   const [characterName, setCharacterName] = useState('')
   const [characterStrength, setCharacterStrength] = useState(10)
   const [characterDexterity, setCharacterDexterity] = useState(10)
@@ -4300,6 +4301,107 @@ function App() {
     }
   }
 
+
+  function coinCalculatorControl(character: Character) {
+    const draft = coinCalcDrafts[character.id] ?? ''
+    const normalizedDraft = draft.replace(',', '.').trim()
+    const amount = Number(normalizedDraft)
+    const valid =
+      normalizedDraft !== '' &&
+      Number.isFinite(amount) &&
+      amount > 0
+
+    async function applyCoinDelta(sign: 1 | -1) {
+      if (!valid) return
+
+      const nextGold = Math.max(
+        0,
+        Math.round((character.gold + sign * amount) * 100) / 100
+      )
+
+      await changeCharacterCoins(character, nextGold)
+
+      setCoinCalcDrafts(current => ({
+        ...current,
+        [character.id]: '',
+      }))
+    }
+
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          marginLeft: 8,
+          flexWrap: 'wrap',
+        }}
+      >
+        <input
+          type="text"
+          inputMode="decimal"
+          value={draft}
+          onChange={event => {
+            const raw = event.target.value
+              .replace(',', '.')
+              .replace(/[^0-9.]/g, '')
+              .replace(/(\..*)\./g, '$1')
+
+            setCoinCalcDrafts(current => ({
+              ...current,
+              [character.id]: raw,
+            }))
+          }}
+          placeholder="kwota"
+          title="Wpisz kwotę w GP, np. 10 albo 2.5"
+          style={{
+            width: 66,
+            minWidth: 66,
+            padding: '5px 7px',
+            borderRadius: 6,
+            border: '1px solid rgba(138, 101, 48, 0.72)',
+            background: 'rgba(18, 16, 13, 0.96)',
+            color: '#e6cf9c',
+            boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.55)',
+            outline: 'none',
+            fontWeight: 700,
+            textAlign: 'center',
+          }}
+        />
+
+        <button
+          type="button"
+          className="secondary"
+          disabled={!valid}
+          onClick={() => void applyCoinDelta(1)}
+          title={valid ? `Dodaj ${amount} GP` : 'Najpierw wpisz kwotę'}
+          style={{
+            minWidth: 34,
+            padding: '5px 8px',
+            fontWeight: 900,
+          }}
+        >
+          +
+        </button>
+
+        <button
+          type="button"
+          className="secondary"
+          disabled={!valid}
+          onClick={() => void applyCoinDelta(-1)}
+          title={valid ? `Odejmij ${amount} GP` : 'Najpierw wpisz kwotę'}
+          style={{
+            minWidth: 34,
+            padding: '5px 8px',
+            fontWeight: 900,
+          }}
+        >
+          −
+        </button>
+      </span>
+    )
+  }
+
   async function changeInventoryQuantity(
     ownerType: InventoryOwnerType,
     itemId: string,
@@ -6230,7 +6332,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AE • AC pancerzy w ekwipunku</span>
+              Etap 3AF • minikalkulator Coins</span>
           </div>
 
         </aside>
@@ -8350,13 +8452,16 @@ function App() {
                                         <strong>{item.name}</strong>
                                         {' • ilość: '}
                                         {isCoinInventoryItem(item) ? (
-                                          <InventoryQuantityInput
-                                            value={character.gold}
-                                            decimals
-                                            onCommit={value =>
-                                              changeCharacterCoins(character, value)
-                                            }
-                                          />
+                                          <>
+                                            <InventoryQuantityInput
+                                              value={character.gold}
+                                              decimals
+                                              onCommit={value =>
+                                                changeCharacterCoins(character, value)
+                                              }
+                                            />
+                                            {coinCalculatorControl(character)}
+                                          </>
                                         ) : (
                                           <InventoryQuantityInput
                                             value={item.quantity}
