@@ -15,6 +15,7 @@ export type Character = {
   currentHp: number
   maxHp: number
   temporaryHp: number
+  bonusSlots: number
   ancestry: string
   className: string
   level: number
@@ -49,6 +50,7 @@ function mapCharacter(row: any): Character {
     currentHp: Math.max(0, Number(row.current_hp ?? 1)),
     maxHp: Math.max(1, Number(row.max_hp ?? 1)),
     temporaryHp: Math.max(0, Number(row.temporary_hp ?? 0)),
+    bonusSlots: Math.max(0, Number(row.bonus_slots ?? 0)),
     ancestry: row.ancestry ?? '',
     className: row.class_name ?? '',
     level: Math.max(1, Number(row.level ?? 1)),
@@ -91,6 +93,7 @@ export async function createCharacter(
     currentHp?: number
     maxHp?: number
     temporaryHp?: number
+    bonusSlots?: number
     ancestry?: string
     className?: string
     level?: number
@@ -121,6 +124,7 @@ export async function createCharacter(
     gold,
     max_hp: Math.max(1, Math.floor(stats?.maxHp ?? 1)),
     temporary_hp: Math.max(0, Math.floor(stats?.temporaryHp ?? 0)),
+    bonus_slots: Math.max(0, Math.floor(stats?.bonusSlots ?? 0)),
     current_hp: Math.min(
       Math.max(0, Math.floor(stats?.currentHp ?? stats?.maxHp ?? 1)),
       Math.max(1, Math.floor(stats?.maxHp ?? 1)) +
@@ -160,6 +164,7 @@ export async function updateCharacter(
     currentHp: number
     maxHp: number
     temporaryHp: number
+    bonusSlots: number
     ancestry: string
     className: string
     level: number
@@ -187,6 +192,7 @@ export async function updateCharacter(
     gold: changes.gold,
     max_hp: Math.max(1, Math.floor(changes.maxHp)),
     temporary_hp: Math.max(0, Math.floor(changes.temporaryHp)),
+    bonus_slots: Math.max(0, Math.floor(changes.bonusSlots)),
     current_hp: Math.min(
       Math.max(0, Math.floor(changes.currentHp)),
       Math.max(1, Math.floor(changes.maxHp)) +
