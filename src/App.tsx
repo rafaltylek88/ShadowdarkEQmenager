@@ -227,6 +227,7 @@ function App() {
   const [showCharacter, setShowCharacter] = useState(false)
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
   const [coinCalcDrafts, setCoinCalcDrafts] = useState<Record<string, string>>({})
+  const [hpCalcDrafts, setHpCalcDrafts] = useState<Record<string, string>>({})
   const [characterName, setCharacterName] = useState('')
   const [characterStrength, setCharacterStrength] = useState(10)
   const [characterDexterity, setCharacterDexterity] = useState(10)
@@ -238,6 +239,7 @@ function App() {
   const [characterCurrentHp, setCharacterCurrentHp] = useState(1)
   const [characterMaxHp, setCharacterMaxHp] = useState(1)
   const [characterTemporaryHp, setCharacterTemporaryHp] = useState(0)
+  const [characterBonusSlots, setCharacterBonusSlots] = useState(0)
   const [characterAncestry, setCharacterAncestry] = useState('')
   const [characterClassName, setCharacterClassName] = useState('')
   const [characterLevel, setCharacterLevel] = useState(1)
@@ -1219,7 +1221,7 @@ function App() {
 
   const characterSlots = useMemo(() => {
     const max = characters.reduce(
-      (sum, character) => sum + Math.max(10, character.strength),
+      (sum, character) => sum + Math.max(10, character.strength) + Math.max(0, character.bonusSlots),
       0
     )
 
@@ -1673,12 +1675,21 @@ function App() {
   }
 
   function sortInventoryForDisplay<
-    T extends { name: string; catalogItemId: string | null }
+    T extends {
+      name: string
+      catalogItemId: string | null
+      isEquipped?: boolean
+    }
   >(inventory: T[]): T[] {
     return [...inventory].sort((a, b) => {
+      const equippedOrder = Number(Boolean(b.isEquipped)) - Number(Boolean(a.isEquipped))
+      if (equippedOrder !== 0) return equippedOrder
+
       const aCoin = isCoinInventoryItem(a) ? 1 : 0
       const bCoin = isCoinInventoryItem(b) ? 1 : 0
-      return aCoin - bCoin
+      if (aCoin !== bCoin) return aCoin - bCoin
+
+      return a.name.localeCompare(b.name, 'pl')
     })
   }
 
@@ -3123,6 +3134,7 @@ function App() {
     setCharacterMaxHp(1)
     setCharacterCurrentHp(1)
     setCharacterTemporaryHp(0)
+    setCharacterBonusSlots(0)
     setCharacterAncestry('')
     setCharacterClassName('')
     setCharacterLevel(1)
@@ -3151,6 +3163,7 @@ function App() {
     setCharacterMaxHp(character.maxHp)
     setCharacterCurrentHp(character.currentHp)
     setCharacterTemporaryHp(character.temporaryHp)
+    setCharacterBonusSlots(character.bonusSlots)
     setCharacterAncestry(character.ancestry)
     setCharacterClassName(character.className)
     setCharacterLevel(character.level)
@@ -3179,6 +3192,7 @@ function App() {
       setCharacterCurrentHp(editingCharacter.currentHp)
       setCharacterMaxHp(editingCharacter.maxHp)
       setCharacterTemporaryHp(editingCharacter.temporaryHp)
+      setCharacterBonusSlots(editingCharacter.bonusSlots)
       setCharacterAncestry(editingCharacter.ancestry)
       setCharacterClassName(editingCharacter.className)
       setCharacterLevel(editingCharacter.level)
@@ -3205,6 +3219,7 @@ function App() {
     setCharacterCurrentHp(1)
     setCharacterMaxHp(1)
     setCharacterTemporaryHp(0)
+    setCharacterBonusSlots(0)
     setCharacterAncestry('')
     setCharacterClassName('')
     setCharacterLevel(1)
@@ -3232,6 +3247,7 @@ function App() {
       currentHp: character.currentHp,
       maxHp: character.maxHp,
       temporaryHp: character.temporaryHp,
+      bonusSlots: character.bonusSlots,
       ancestry: character.ancestry,
       className: character.className,
       level: character.level,
@@ -3302,6 +3318,7 @@ function App() {
           ),
           maxHp: characterMaxHp,
           temporaryHp: characterTemporaryHp,
+          bonusSlots: characterBonusSlots,
           ancestry: characterAncestry,
           className: characterClassName,
           level: characterLevel,
@@ -3338,6 +3355,7 @@ function App() {
               ),
               maxHp: characterMaxHp,
               temporaryHp: characterTemporaryHp,
+              bonusSlots: characterBonusSlots,
               ancestry: characterAncestry,
               className: characterClassName,
               level: characterLevel,
@@ -3367,6 +3385,7 @@ function App() {
           ),
           maxHp: characterMaxHp,
           temporaryHp: characterTemporaryHp,
+          bonusSlots: characterBonusSlots,
           ancestry: characterAncestry,
           className: characterClassName,
           level: characterLevel,
@@ -3399,6 +3418,7 @@ function App() {
       currentHp: number
       maxHp: number
       temporaryHp: number
+      bonusSlots: number
       xp: number
       xpNext: number
       portraitUrl: string
@@ -3417,6 +3437,7 @@ function App() {
       currentHp: overrides.currentHp ?? character.currentHp,
       maxHp: overrides.maxHp ?? character.maxHp,
       temporaryHp: overrides.temporaryHp ?? character.temporaryHp,
+      bonusSlots: overrides.bonusSlots ?? character.bonusSlots,
       ancestry: character.ancestry,
       className: character.className,
       level: character.level,
@@ -3531,6 +3552,78 @@ function App() {
           'Nie udało się zmienić tymczasowego HP.'
       )
     }
+  }
+
+  async function setCharacterBonusSlotsValue(
+    character: Character,
+    value: number
+  ) {
+    const nextBonusSlots = Math.max(0, Math.floor(value))
+    if (nextBonusSlots === character.bonusSlots) return
+
+    try {
+      await updateCharacter(
+        character.id,
+        fullCharacterChanges(character, { bonusSlots: nextBonusSlots })
+      )
+      await refreshCharacters()
+      flash(
+        `${character.name}: bonusowe sloty ${character.bonusSlots} → ${nextBonusSlots}.`,
+        'character',
+        {
+          kind: 'character_patch',
+          characterId: character.id,
+          before: { bonusSlots: character.bonusSlots },
+          after: { bonusSlots: nextBonusSlots },
+        }
+      )
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zmienić bonusowych slotów.')
+    }
+  }
+
+  function hpCalculatorControl(character: Character) {
+    const draft = hpCalcDrafts[character.id] ?? ''
+    const amount = Math.floor(Number(draft))
+    const valid = draft.trim() !== '' && Number.isFinite(amount) && amount > 0
+
+    async function applyHpDelta(sign: 1 | -1) {
+      if (!valid) return
+      await adjustCharacterHp(character, sign * amount)
+      setHpCalcDrafts(current => ({ ...current, [character.id]: '' }))
+    }
+
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={draft}
+          onChange={event =>
+            setHpCalcDrafts(current => ({
+              ...current,
+              [character.id]: event.target.value.replace(/[^0-9]/g, ''),
+            }))
+          }
+          placeholder="wartość"
+          title="Wpisz liczbę HP"
+          style={{
+            width: 66,
+            minWidth: 66,
+            padding: '5px 7px',
+            borderRadius: 6,
+            border: '1px solid rgba(138, 101, 48, 0.72)',
+            background: 'rgba(18, 16, 13, 0.96)',
+            color: '#e6cf9c',
+            fontWeight: 700,
+            textAlign: 'center',
+          }}
+        />
+        <button type="button" className="secondary" disabled={!valid} onClick={() => void applyHpDelta(1)} style={{ minWidth: 34, padding: '5px 8px', fontWeight: 900 }}>+</button>
+        <button type="button" className="secondary" disabled={!valid} onClick={() => void applyHpDelta(-1)} style={{ minWidth: 34, padding: '5px 8px', fontWeight: 900 }}>−</button>
+        <span title="Zmiana zostanie zapisana po użyciu + lub −" style={{ color: valid ? '#78b879' : '#6f695e', fontWeight: 900 }}>✓</span>
+      </span>
+    )
   }
 
   async function uploadCharacterPortrait(
@@ -6862,7 +6955,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AJ • docelowa logika pojemników</span>
+              Etap 3AK • bonusowe sloty, HP i sortowanie</span>
           </div>
 
         </aside>
@@ -7597,7 +7690,7 @@ function App() {
               ) : (
                 <div className="entity-grid">
                   {characters.map(character => {
-                    const maxSlots = Math.max(10, character.strength)
+                    const maxSlots = Math.max(10, character.strength) + Math.max(0, character.bonusSlots)
                     const usedSlots = usedSlotsForCharacter(character.id)
                     const displayedUsedSlots = Number(usedSlots.toFixed(2))
 
@@ -7818,7 +7911,7 @@ function App() {
                     <div style={{ display: 'grid', gap: 16 }}>
                       {selectedCharacter && (() => {
                       const character = selectedCharacter
-                      const maxSlots = Math.max(10, character.strength)
+                      const maxSlots = Math.max(10, character.strength) + Math.max(0, character.bonusSlots)
                       const usedSlots = usedSlotsForCharacter(character.id)
                       const characterItems = itemsForCharacter(character.id)
                       const weapon = equippedWeaponForCharacter(character.id)
@@ -8135,25 +8228,8 @@ function App() {
                                   {character.currentHp}/{effectiveMaxHp(character)}
                                 </strong>
 
-                                <div
-                                  className="button-row"
-                                  style={{ marginTop: 10, flexWrap: 'wrap' }}
-                                >
-                                  {[-10, -1, 1, 10].map(delta => (
-                                    <button
-                                      key={`hp-${delta}`}
-                                      className="secondary"
-                                      onClick={() => void adjustCharacterHp(character, delta)}
-                                      disabled={
-                                        (delta < 0 && character.currentHp <= 0) ||
-                                        (delta > 0 &&
-                                          character.currentHp >= effectiveMaxHp(character))
-                                      }
-                                      style={{ minWidth: 42, padding: '5px 7px' }}
-                                    >
-                                      {delta > 0 ? `+${delta}` : delta}
-                                    </button>
-                                  ))}
+                                <div style={{ marginTop: 10 }}>
+                                  {hpCalculatorControl(character)}
                                 </div>
 
                                 <div
@@ -8247,6 +8323,26 @@ function App() {
                                 <div className="slot-line">
                                   <span>Sloty</span>
                                   <b>{Number(usedSlots.toFixed(2))}/{maxSlots}</b>
+                                </div>
+                                <div
+                                  style={{
+                                    marginTop: 6,
+                                    paddingTop: 8,
+                                    borderTop: '1px solid rgba(180, 135, 60, 0.24)',
+                                  }}
+                                >
+                                  <span className="muted" style={{ display: 'block', marginBottom: 5 }}>
+                                    Bonusowe sloty
+                                  </span>
+                                  <InventoryQuantityInput
+                                    value={character.bonusSlots}
+                                    onCommit={value =>
+                                      setCharacterBonusSlotsValue(character, value)
+                                    }
+                                  />
+                                  <span className="muted" style={{ display: 'block', marginTop: 5, fontSize: 11 }}>
+                                    Fighter: możesz wpisać tutaj modyfikator CON ({formatModifier(statModifier(character.constitution))}).
+                                  </span>
                                 </div>
                                 <div className="progress small">
                                   <i
@@ -8678,7 +8774,7 @@ function App() {
                     })()}
 
                     {(selectedCharacterId ? [] : visibleCharacters).map(character => {
-                        const maxSlots = Math.max(10, character.strength)
+                        const maxSlots = Math.max(10, character.strength) + Math.max(0, character.bonusSlots)
                         const usedSlots = usedSlotsForCharacter(character.id)
                         const characterItems = itemsForCharacter(character.id)
 
