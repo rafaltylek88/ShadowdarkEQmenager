@@ -4820,6 +4820,7 @@ function App() {
         currentHp: character.currentHp,
         maxHp: character.maxHp,
         temporaryHp: character.temporaryHp,
+        bonusSlots: character.bonusSlots,
         ancestry: character.ancestry,
         className: character.className,
         level: character.level,
