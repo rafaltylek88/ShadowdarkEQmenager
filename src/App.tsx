@@ -228,6 +228,7 @@ function App() {
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
   const [coinCalcDrafts, setCoinCalcDrafts] = useState<Record<string, string>>({})
   const [hpCalcDrafts, setHpCalcDrafts] = useState<Record<string, string>>({})
+  const [xpCalcDrafts, setXpCalcDrafts] = useState<Record<string, string>>({})
   const [characterName, setCharacterName] = useState('')
   const [characterStrength, setCharacterStrength] = useState(10)
   const [characterDexterity, setCharacterDexterity] = useState(10)
@@ -3580,6 +3581,71 @@ function App() {
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić bonusowych slotów.')
     }
+  }
+
+  function xpCalculatorControl(character: Character) {
+    const draft = xpCalcDrafts[character.id] ?? ''
+    const amount = Math.floor(Number(draft))
+    const valid = draft.trim() !== '' && Number.isFinite(amount) && amount > 0
+
+    async function applyXpDelta(sign: 1 | -1) {
+      if (!valid) return
+      await adjustCharacterXp(character, sign * amount)
+      setXpCalcDrafts(current => ({ ...current, [character.id]: '' }))
+    }
+
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={draft}
+          onChange={event =>
+            setXpCalcDrafts(current => ({
+              ...current,
+              [character.id]: event.target.value.replace(/[^0-9]/g, ''),
+            }))
+          }
+          placeholder="wartość"
+          title="Wpisz liczbę XP"
+          style={{
+            width: 66,
+            minWidth: 66,
+            padding: '5px 7px',
+            borderRadius: 6,
+            border: '1px solid rgba(75, 118, 153, 0.72)',
+            background: 'rgba(18, 16, 13, 0.96)',
+            color: '#d5e5f1',
+            fontWeight: 700,
+            textAlign: 'center',
+          }}
+        />
+        <button
+          type="button"
+          className="secondary"
+          disabled={!valid}
+          onClick={() => void applyXpDelta(1)}
+          style={{ minWidth: 34, padding: '5px 8px', fontWeight: 900 }}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={!valid || character.xp === 0}
+          onClick={() => void applyXpDelta(-1)}
+          style={{ minWidth: 34, padding: '5px 8px', fontWeight: 900 }}
+        >
+          −
+        </button>
+        <span
+          title="Zmiana zostanie zapisana po użyciu + lub −"
+          style={{ color: valid ? '#78b879' : '#6f695e', fontWeight: 900 }}
+        >
+          ✓
+        </span>
+      </span>
+    )
   }
 
   function hpCalculatorControl(character: Character) {
@@ -6956,7 +7022,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AK • bonusowe sloty, HP i sortowanie</span>
+              Etap 3AL.1 • kalkulator XP</span>
           </div>
 
         </aside>
@@ -8281,21 +8347,8 @@ function App() {
                                     {character.xp} / {character.xpNext}
                                   </strong>
                                 </div>
-                                <div
-                                  className="button-row"
-                                  style={{ marginTop: 10, flexWrap: 'wrap' }}
-                                >
-                                  {[-10, -1, 1, 10].map(delta => (
-                                    <button
-                                      key={`xp-${delta}`}
-                                      className="secondary"
-                                      onClick={() => void adjustCharacterXp(character, delta)}
-                                      disabled={delta < 0 && character.xp === 0}
-                                      style={{ minWidth: 42 }}
-                                    >
-                                      {delta > 0 ? `+${delta}` : delta}
-                                    </button>
-                                  ))}
+                                <div style={{ marginTop: 10 }}>
+                                  {xpCalculatorControl(character)}
                                 </div>
                               </div>
 
