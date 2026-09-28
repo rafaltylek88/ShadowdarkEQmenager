@@ -207,8 +207,11 @@ function App() {
 
   const [mobileNav, setMobileNav] = useState(false)
   const [activeView, setActiveView] = useState<(typeof nav)[number][0]>('Dashboard')
-  const [mapShowGrid, setMapShowGrid] = useState(true)
-  const [mapShowIds, setMapShowIds] = useState(true)
+  const [mapDiagnosticMode, setMapDiagnosticMode] = useState(false)
+  const [mapGmMode, setMapGmMode] = useState(true)
+  const [mapRevealedHexes, setMapRevealedHexes] = useState<Set<string>>(
+    () => new Set()
+  )
   const [selectedHexId, setSelectedHexId] = useState<string | null>(null)
 
   const [message, setMessage] = useState<string | null>(null)
@@ -10227,12 +10230,12 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">MAPA KAMPANII • MAP-1.7</p>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-2</p>
                   <h1>The Gloaming</h1>
                   <p>
-                    Warstwa diagnostyczna siatki heksowej. Kliknij heks, aby
-                    sprawdzić jego kod i położenie. Na tym etapie nic nie jest
-                    jeszcze zapisywane w Supabase.
+                    Fog of War działa lokalnie. Wszystkie heksy są domyślnie
+                    zakryte. W trybie GM kliknij heks, aby go odkryć albo
+                    ponownie ukryć. MAP-3 zapisze ten stan w Supabase.
                   </p>
                 </div>
               </section>
@@ -10248,23 +10251,55 @@ function App() {
                   }}
                 >
                   <button
-                    className={mapShowGrid ? 'primary' : 'secondary'}
-                    onClick={() => setMapShowGrid(value => !value)}
+                    className={mapGmMode ? 'primary' : 'secondary'}
+                    onClick={() => setMapGmMode(value => !value)}
                   >
-                    {mapShowGrid ? 'Siatka: WŁ.' : 'Siatka: WYŁ.'}
+                    {mapGmMode ? 'Tryb GM: WŁ.' : 'Podgląd gracza'}
                   </button>
                   <button
-                    className={mapShowIds ? 'primary' : 'secondary'}
-                    onClick={() => setMapShowIds(value => !value)}
+                    className={mapDiagnosticMode ? 'primary' : 'secondary'}
+                    onClick={() => setMapDiagnosticMode(value => !value)}
                   >
-                    {mapShowIds ? 'ID heksów: WŁ.' : 'ID heksów: WYŁ.'}
+                    {mapDiagnosticMode
+                      ? 'Diagnostyka: WŁ.'
+                      : 'Diagnostyka: WYŁ.'}
                   </button>
+                  {mapGmMode && (
+                    <>
+                      <button
+                        className="secondary"
+                        onClick={() => {
+                          const allHexes = new Set<string>()
+                          for (let column = 1; column <= 17; column += 1) {
+                            const rowCount = column % 2 === 0 ? 11 : 10
+                            for (let row = 1; row <= rowCount; row += 1) {
+                              allHexes.add(
+                                `H${String(column).padStart(2, '0')}${String(row).padStart(2, '0')}`
+                              )
+                            }
+                          }
+                          setMapRevealedHexes(allHexes)
+                        }}
+                      >
+                        Odkryj wszystkie
+                      </button>
+                      <button
+                        className="secondary"
+                        onClick={() => {
+                          setMapRevealedHexes(new Set())
+                          setSelectedHexId(null)
+                        }}
+                      >
+                        Ukryj wszystkie
+                      </button>
+                    </>
+                  )}
                   <span className="muted">
-                    17 kolumn • 178 heksów • kod HKKWW
+                    Odkryte: {mapRevealedHexes.size}/178 • kod HKKWW
                   </span>
                 </div>
 
-                {selectedHexId && (
+                {mapGmMode && selectedHexId && (
                   <div
                     style={{
                       marginBottom: 12,
@@ -10274,7 +10309,10 @@ function App() {
                       background: 'rgba(94, 66, 25, 0.18)',
                     }}
                   >
-                    Wybrany heks: <strong>{selectedHexId}</strong>
+                    Heks: <strong>{selectedHexId}</strong> •{' '}
+                    {mapRevealedHexes.has(selectedHexId)
+                      ? 'ODKRYTY'
+                      : 'UKRYTY'}
                   </div>
                 )}
 
@@ -10321,9 +10359,6 @@ function App() {
                         const column = columnIndex + 1
                         const evenColumn = column % 2 === 0
                         const rowCount = evenColumn ? 11 : 10
-                        // MAP-1.7: współrzędne są kotwiczone od środka mapy
-                        // i zapisane jawnie, zamiast wyliczać każdą pozycję
-                        // przez wielokrotne dodawanie jednego kroku.
                         const mapColumnCenters = [
                           132, 243, 354, 465, 576, 687, 799, 910, 1022,
                           1133, 1244, 1355, 1467, 1578, 1690, 1801, 1913,
@@ -10357,27 +10392,57 @@ function App() {
                             `${centerX - quarterWidth},${centerY + halfHeight}`,
                             `${centerX - halfWidth},${centerY}`,
                           ].join(' ')
+                          const revealed = mapRevealedHexes.has(id)
 
                           return (
                             <g key={id}>
                               <polygon
                                 points={points}
-                                fill={selectedHexId === id ? 'rgba(207, 161, 72, 0.24)' : 'transparent'}
-                                stroke={mapShowGrid ? 'rgba(184, 126, 31, 0.9)' : 'transparent'}
-                                strokeWidth={mapShowGrid ? 3 : 0}
+                                fill={
+                                  revealed
+                                    ? selectedHexId === id && mapGmMode
+                                      ? 'rgba(207, 161, 72, 0.18)'
+                                      : 'transparent'
+                                    : mapGmMode
+                                      ? 'rgba(17, 16, 13, 0.88)'
+                                      : '#11100d'
+                                }
+                                stroke={
+                                  mapDiagnosticMode
+                                    ? 'rgba(184, 126, 31, 0.95)'
+                                    : mapGmMode && !revealed
+                                      ? 'rgba(128, 101, 55, 0.48)'
+                                      : 'transparent'
+                                }
+                                strokeWidth={mapDiagnosticMode ? 3 : 1.5}
                                 vectorEffect="non-scaling-stroke"
-                                onClick={() => setSelectedHexId(id)}
-                                style={{ cursor: 'pointer' }}
+                                onClick={() => {
+                                  if (!mapGmMode) return
+                                  setSelectedHexId(id)
+                                  setMapRevealedHexes(current => {
+                                    const next = new Set(current)
+                                    if (next.has(id)) next.delete(id)
+                                    else next.add(id)
+                                    return next
+                                  })
+                                }}
+                                style={{
+                                  cursor: mapGmMode ? 'pointer' : 'default',
+                                }}
                               />
-                              {mapShowIds && (
+                              {mapDiagnosticMode && (
                                 <text
                                   x={centerX}
                                   y={centerY + 5}
                                   textAnchor="middle"
                                   fontSize="19"
                                   fontWeight="700"
-                                  fill="#6b3f00"
-                                  stroke="rgba(255, 244, 211, 0.96)"
+                                  fill={revealed ? '#6b3f00' : '#e8c477'}
+                                  stroke={
+                                    revealed
+                                      ? 'rgba(255, 244, 211, 0.96)'
+                                      : 'rgba(17, 16, 13, 0.96)'
+                                  }
                                   strokeWidth="4"
                                   paintOrder="stroke"
                                   pointerEvents="none"
@@ -10394,8 +10459,9 @@ function App() {
                 </div>
 
                 <p className="muted" style={{ marginTop: 10 }}>
-                  MAP-1.7 • kalibracja kotwiczona od środka mapy. Sprawdź szczególnie heksy
-                  przy lewej i prawej krawędzi oraz w górnych i dolnych rzędach.
+                  MAP-2 • stan odkrycia jest na razie lokalny i resetuje się
+                  po odświeżeniu strony. Tryb diagnostyczny pokazuje granice
+                  oraz kody heksów. Podgląd gracza nie pozwala zmieniać mapy.
                 </p>
               </section>
             </>
