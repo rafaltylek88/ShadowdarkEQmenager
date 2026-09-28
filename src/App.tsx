@@ -10456,7 +10456,7 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">MAPA KAMPANII • MAP-6.2</p>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-6.3</p>
                   <h1>The Gloaming</h1>
                   <p>
                     Fog of War jest zapisany w Supabase i synchronizowany
@@ -10545,7 +10545,7 @@ function App() {
                 <div
                   style={{
                     position: 'relative',
-                    padding: '92px 34px 34px 150px',
+                    padding: '122px 48px 52px 178px',
                     borderRadius: 14,
                     border: '1px solid rgba(180, 135, 60, 0.42)',
                     backgroundImage: `linear-gradient(rgba(18,10,5,.08), rgba(18,10,5,.08)), url(${import.meta.env.BASE_URL}map-tabletop.jpg)`,
@@ -10558,8 +10558,8 @@ function App() {
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'minmax(720px, 1fr) minmax(220px, 300px)',
-                      gap: 18,
+                      gridTemplateColumns: 'minmax(680px, 0.92fr) minmax(210px, 270px)',
+                      gap: 28,
                       alignItems: 'start',
                       overflowX: 'auto',
                       paddingTop: 18,
@@ -10762,12 +10762,13 @@ function App() {
 
                     <aside
                       style={{
-                        minWidth: 220,
+                        minWidth: 210,
+                        marginTop: 52,
                         background: 'rgba(17,16,13,.94)',
                         border: '1px solid rgba(190,145,65,.55)',
                         borderRadius: 10,
                         padding: 14,
-                        boxShadow: '0 10px 24px rgba(0,0,0,.45)',
+                        boxShadow: '0 12px 26px rgba(0,0,0,.58)',
                       }}
                     >
                       <div className="panel-title" style={{ marginBottom: 12 }}>
@@ -10855,7 +10856,7 @@ function App() {
                 </div>
 
                 <p className="muted" style={{ marginTop: 10 }}>
-                  MAP-6.2 • markery są wspólne i można je stawiać również na
+                  MAP-6.3 • markery są wspólne i można je stawiać również na
                   zakrytych heksach. Marker nie odkrywa mapy. MG może przy zapisie
                   markera pozostawić heks bez zmian, odkryć go albo zakryć.
                 </p>
