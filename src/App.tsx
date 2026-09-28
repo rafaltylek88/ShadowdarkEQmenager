@@ -10541,7 +10541,6 @@ function App() {
 
           {showMapGmCode && (
             <Modal
-              title="Odblokuj tryb MG"
               onClose={() => {
                 setShowMapGmCode(false)
                 setMapGmCode('')
@@ -10549,6 +10548,10 @@ function App() {
               }}
             >
               <div style={{ display: 'grid', gap: 12 }}>
+                <div>
+                  <p className="eyebrow" style={{ marginBottom: 4 }}>NARZĘDZIA PROWADZĄCEGO</p>
+                  <h2 style={{ margin: 0 }}>Odblokuj tryb MG</h2>
+                </div>
                 <label>
                   Kod MG
                   <input
