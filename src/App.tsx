@@ -237,6 +237,7 @@ function App() {
   const [mapMarkerName, setMapMarkerName] = useState('')
   const [mapMarkerNote, setMapMarkerNote] = useState('')
   const [mapMarkerHexAction, setMapMarkerHexAction] = useState<'keep' | 'reveal' | 'hide'>('keep')
+  const [selectedLegendMarker, setSelectedLegendMarker] = useState<CampaignMapMarker | null>(null)
   const [selectedHexId, setSelectedHexId] = useState<string | null>(null)
 
   const [message, setMessage] = useState<string | null>(null)
@@ -10455,7 +10456,7 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">MAPA KAMPANII • MAP-5</p>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-6</p>
                   <h1>The Gloaming</h1>
                   <p>
                     Fog of War jest zapisany w Supabase i synchronizowany
@@ -10543,21 +10544,66 @@ function App() {
 
                 <div
                   style={{
-                    width: '100%',
-                    overflow: 'auto',
-                    borderRadius: 10,
+                    position: 'relative',
+                    padding: '34px 34px 30px',
+                    borderRadius: 14,
                     border: '1px solid rgba(180, 135, 60, 0.42)',
-                    background: '#11100d',
+                    background:
+                      'linear-gradient(90deg, rgba(55,34,18,.35) 1px, transparent 1px), linear-gradient(0deg, rgba(30,18,10,.28) 1px, transparent 1px), linear-gradient(135deg, #4b2e18, #2d1a0f 48%, #432815)',
+                    backgroundSize: '96px 100%, 100% 54px, 100% 100%',
+                    boxShadow: 'inset 0 0 45px rgba(0,0,0,.58)',
                   }}
                 >
                   <div
+                    aria-hidden="true"
                     style={{
-                      position: 'relative',
-                      width: '100%',
-                      minWidth: 720,
-                      aspectRatio: '2048 / 1523',
+                      position: 'absolute',
+                      right: 18,
+                      top: 14,
+                      width: 86,
+                      height: 86,
+                      borderRadius: '50%',
+                      border: '4px double rgba(213,170,91,.9)',
+                      background:
+                        'radial-gradient(circle, #d8bd82 0 46%, #8a642b 47% 55%, #24180d 56% 100%)',
+                      boxShadow: '0 8px 18px rgba(0,0,0,.55)',
+                      display: 'grid',
+                      placeItems: 'center',
+                      color: '#33200d',
+                      fontFamily: 'serif',
+                      fontWeight: 900,
+                      fontSize: 16,
+                      zIndex: 3,
+                      transform: 'rotate(-8deg)',
                     }}
                   >
+                    <div style={{ textAlign: 'center', lineHeight: 1 }}>
+                      <div>N</div>
+                      <div style={{ fontSize: 34 }}>✦</div>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(720px, 1fr) minmax(220px, 300px)',
+                      gap: 18,
+                      alignItems: 'start',
+                      overflowX: 'auto',
+                      paddingTop: 44,
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: 'relative',
+                        width: '100%',
+                        minWidth: 720,
+                        aspectRatio: '2048 / 1523',
+                        border: '8px solid rgba(77,48,23,.78)',
+                        boxShadow: '0 12px 28px rgba(0,0,0,.55)',
+                        background: '#11100d',
+                      }}
+                    >
                     <img
                       src={`${import.meta.env.BASE_URL}gloaming-hex-map.png`}
                       alt="Mapa The Gloaming"
@@ -10724,16 +10770,142 @@ function App() {
                         })
                       })}
                     </svg>
+                    </div>
+
+                    <aside
+                      style={{
+                        minWidth: 220,
+                        background: 'rgba(17,16,13,.94)',
+                        border: '1px solid rgba(190,145,65,.55)',
+                        borderRadius: 10,
+                        padding: 14,
+                        boxShadow: '0 10px 24px rgba(0,0,0,.45)',
+                      }}
+                    >
+                      <div className="panel-title" style={{ marginBottom: 12 }}>
+                        📍 Lista markerów
+                        <span style={{ marginLeft: 'auto' }}>{mapMarkers.length}</span>
+                      </div>
+
+                      <div style={{ display: 'grid', gap: 12 }}>
+                        {(Object.entries(mapMarkerDefinitions) as [MapMarkerType, { icon: string; label: string }][]).map(
+                          ([type, definition]) => {
+                            const markers = mapMarkers
+                              .filter(marker => marker.markerType === type)
+                              .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+
+                            if (markers.length === 0) return null
+
+                            return (
+                              <div key={type}>
+                                <div
+                                  className="muted"
+                                  style={{
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '.06em',
+                                    marginBottom: 5,
+                                  }}
+                                >
+                                  {definition.icon} {definition.label}
+                                </div>
+                                <div style={{ display: 'grid', gap: 4 }}>
+                                  {markers.map(marker => (
+                                    <button
+                                      key={marker.id}
+                                      className="secondary"
+                                      onClick={() => {
+                                        setSelectedHexId(marker.hexId)
+                                        setSelectedLegendMarker(marker)
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        justifyContent: 'flex-start',
+                                        textAlign: 'left',
+                                        padding: '7px 9px',
+                                      }}
+                                      title={marker.name}
+                                    >
+                                      <span>{definition.icon}</span>
+                                      <span
+                                        style={{
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        {marker.name}
+                                      </span>
+                                      {marker.isGm && (
+                                        <strong
+                                          style={{
+                                            marginLeft: 'auto',
+                                            color: '#f0bd55',
+                                            fontSize: 11,
+                                          }}
+                                        >
+                                          MG
+                                        </strong>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          }
+                        )}
+
+                        {mapMarkers.length === 0 && (
+                          <p className="muted" style={{ margin: 0 }}>
+                            Brak markerów na mapie.
+                          </p>
+                        )}
+                      </div>
+                    </aside>
                   </div>
                 </div>
 
                 <p className="muted" style={{ marginTop: 10 }}>
-                  MAP-5 • markery są wspólne i można je stawiać również na
+                  MAP-6 • markery są wspólne i można je stawiać również na
                   zakrytych heksach. Marker nie odkrywa mapy. MG może przy zapisie
                   markera pozostawić heks bez zmian, odkryć go albo zakryć.
                 </p>
               </section>
             </>
+          )}
+
+          {selectedLegendMarker && (
+            <Modal onClose={() => setSelectedLegendMarker(null)}>
+              <div style={{ display: 'grid', gap: 12 }}>
+                <div>
+                  <p className="eyebrow" style={{ marginBottom: 4 }}>
+                    {mapMarkerDefinitions[selectedLegendMarker.markerType].icon}{' '}
+                    {mapMarkerDefinitions[selectedLegendMarker.markerType].label}
+                    {' • '}
+                    {selectedLegendMarker.hexId}
+                  </p>
+                  <h2 style={{ margin: 0 }}>{selectedLegendMarker.name}</h2>
+                  {selectedLegendMarker.isGm && (
+                    <p style={{ margin: '6px 0 0', color: '#f0bd55', fontWeight: 800 }}>
+                      Marker MG
+                    </p>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 8,
+                    border: '1px solid rgba(190,145,65,.4)',
+                    background: 'rgba(94,66,25,.15)',
+                    whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {selectedLegendMarker.note?.trim() || 'Brak dodatkowego opisu.'}
+                </div>
+              </div>
+            </Modal>
           )}
 
           {showMapMarker && (
