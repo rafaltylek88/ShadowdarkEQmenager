@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260" viewBox="0 0 260 260">
+<defs>
+ <radialGradient id="metal"><stop offset="0" stop-color="#f4dc99"/><stop offset=".52" stop-color="#bd8733"/><stop offset=".78" stop-color="#6c451b"/><stop offset="1" stop-color="#24150b"/></radialGradient>
+ <filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="8" flood-opacity=".6"/></filter>
+</defs>
+<g filter="url(#shadow)">
+<circle cx="130" cy="130" r="119" fill="url(#metal)" stroke="#d7ad58" stroke-width="5"/>
+<circle cx="130" cy="130" r="98" fill="#d8bd82" stroke="#3c2713" stroke-width="5"/>
+<circle cx="130" cy="130" r="82" fill="none" stroke="#76501f" stroke-width="2"/>
+<g fill="#3b2511" font-family="Georgia,serif" font-size="22" font-weight="bold" text-anchor="middle">
+<text x="130" y="48">N</text><text x="130" y="228">S</text><text x="218" y="137">E</text><text x="42" y="137">W</text>
+</g>
+<g transform="translate(130 130)">
+<path d="M0,-74 L15,-14 L0,0 L-15,-14 Z" fill="#25150a" stroke="#8d5d20" stroke-width="2"/>
+<path d="M0,74 L15,14 L0,0 L-15,14 Z" fill="#7a4d1a" stroke="#25150a" stroke-width="2"/>
+<path d="M74,0 L14,15 L0,0 L14,-15 Z" fill="#4b2c10"/>
+<path d="M-74,0 L-14,15 L0,0 L-14,-15 Z" fill="#4b2c10"/>
+<circle r="12" fill="#b67b27" stroke="#25150a" stroke-width="4"/>
+</g></g></svg>
