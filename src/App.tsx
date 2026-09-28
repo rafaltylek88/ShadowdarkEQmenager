@@ -11234,7 +11234,7 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">KRONIKA KAMPANII • ETAP 1</p>
+                  <p className="eyebrow">KRONIKA KAMPANII • ETAP 1.1</p>
                   <h1>Kronika {active?.name ?? ''}</h1>
                   <p>
                     Dziennik wydarzeń świata gry uporządkowany według dni,
@@ -11291,6 +11291,7 @@ function App() {
                       {chronicleEntries.map((entry, index) => {
                         const previous = chronicleEntries[index - 1]
                         const showSeason = !previous || previous.season !== entry.season
+                        const showSession = !previous || previous.sessionNumber !== entry.sessionNumber
                         const selected = selectedChronicle?.id === entry.id
 
                         return (
@@ -11308,6 +11309,33 @@ function App() {
                                 }}
                               >
                                 {entry.season}
+                              </div>
+                            )}
+                            {showSession && (
+                              <div
+                                style={{
+                                  position: 'relative',
+                                  margin: '8px 0 6px 55px',
+                                  color: '#b98a42',
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  letterSpacing: '.08em',
+                                  textTransform: 'uppercase',
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    position: 'absolute',
+                                    left: -34,
+                                    top: '50%',
+                                    width: 10,
+                                    height: 10,
+                                    transform: 'translate(-50%, -50%) rotate(45deg)',
+                                    background: '#b98a42',
+                                    border: '2px solid #17130e',
+                                  }}
+                                />
+                                Sesja {entry.sessionNumber}
                               </div>
                             )}
                             <button
@@ -11338,8 +11366,16 @@ function App() {
                               />
                               <span style={{ display: 'grid', gap: 2 }}>
                                 <strong>Dzień {entry.worldDay}</strong>
-                                <span style={{ fontSize: 11, opacity: .78 }}>
-                                  Sesja {entry.sessionNumber}
+                                <span
+                                  style={{
+                                    fontSize: 11,
+                                    opacity: .72,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {entry.title}
                                 </span>
                               </span>
                             </button>
@@ -11360,24 +11396,37 @@ function App() {
                       minHeight: 650,
                       padding: '42px clamp(28px, 5vw, 72px)',
                       color: '#352414',
-                      backgroundImage: `linear-gradient(rgba(220,190,128,.12), rgba(124,78,30,.12)), url(${import.meta.env.BASE_URL}map-parchment.jpg)`,
-                      backgroundSize: 'cover',
+                      position: 'relative',
+                      backgroundImage: `url(${import.meta.env.BASE_URL}chronicle-book.jpg)`,
+                      backgroundSize: '100% 100%',
                       backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat',
                       border: '1px solid rgba(101,63,25,.65)',
                       borderRadius: 5,
-                      boxShadow:
-                        '0 15px 32px rgba(0,0,0,.48), inset 0 0 28px rgba(89,51,17,.18)',
+                      boxShadow: '0 15px 32px rgba(0,0,0,.48)',
                       fontFamily: 'Georgia, "Times New Roman", serif',
+                      overflow: 'hidden',
                     }}
                   >
                     {selectedChronicle ? (
-                      <>
+                      <div
+                        style={{
+                          width: '43%',
+                          marginLeft: '53%',
+                          marginTop: 8,
+                          marginBottom: 8,
+                          padding: '8px 8px 20px',
+                          minHeight: 520,
+                          position: 'relative',
+                          zIndex: 1,
+                        }}
+                      >
                         <div
                           style={{
                             textAlign: 'center',
                             borderBottom: '1px solid rgba(83,52,25,.35)',
-                            paddingBottom: 20,
-                            marginBottom: 28,
+                            paddingBottom: 16,
+                            marginBottom: 22,
                           }}
                         >
                           <div
@@ -11400,6 +11449,20 @@ function App() {
                           >
                             {selectedChronicle.title}
                           </h2>
+                          <button
+                            className="secondary"
+                            onClick={() => openEditChronicleEntry(selectedChronicle)}
+                            style={{
+                              position: 'absolute',
+                              right: 8,
+                              top: 8,
+                              padding: '6px 8px',
+                              fontSize: 11,
+                            }}
+                            title="Edytuj wpis"
+                          >
+                            <Pencil size={13} />
+                          </button>
                         </div>
 
                         <div
@@ -11413,32 +11476,17 @@ function App() {
                           {selectedChronicle.content}
                         </div>
 
-                        <div
-                          style={{
-                            display: 'flex',
-                            gap: 10,
-                            justifyContent: 'flex-end',
-                            marginTop: 34,
-                            paddingTop: 18,
-                            borderTop: '1px solid rgba(83,52,25,.25)',
-                          }}
-                        >
-                          <button
-                            className="secondary"
-                            onClick={() => openEditChronicleEntry(selectedChronicle)}
-                          >
-                            <Pencil size={15} />
-                            Edytuj wpis
-                          </button>
-                        </div>
-                      </>
+                      </div>
                     ) : (
                       <div
                         style={{
                           minHeight: 520,
+                          width: '43%',
+                          marginLeft: '53%',
                           display: 'grid',
                           placeItems: 'center',
                           textAlign: 'center',
+                          color: '#352414',
                         }}
                       >
                         <div>
