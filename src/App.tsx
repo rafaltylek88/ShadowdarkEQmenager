@@ -32,10 +32,15 @@ import {
 
 import { supabase, supabaseEnabled } from './lib/supabase'
 import {
+  createMapMarker,
+  deleteMapMarker,
   hideCampaignHex,
+  loadMapMarkers,
   loadRevealedCampaignHexes,
   revealCampaignHex,
+  updateMapMarker,
 } from './lib/mapState'
+import type { CampaignMapMarker, MapMarkerType } from './lib/mapState'
 import {
   createRemoteCampaign,
   joinCampaign,
@@ -222,6 +227,16 @@ function App() {
     () => new Set()
   )
   const [mapLoading, setMapLoading] = useState(false)
+  const [mapMarkers, setMapMarkers] = useState<CampaignMapMarker[]>([])
+  const [mapMarkersLoading, setMapMarkersLoading] = useState(false)
+  const [mapTool, setMapTool] = useState<'fog' | 'markers'>('markers')
+  const [showMapMarker, setShowMapMarker] = useState(false)
+  const [editingMapMarker, setEditingMapMarker] = useState<CampaignMapMarker | null>(null)
+  const [mapMarkerHexId, setMapMarkerHexId] = useState('')
+  const [mapMarkerType, setMapMarkerType] = useState<MapMarkerType>('location')
+  const [mapMarkerName, setMapMarkerName] = useState('')
+  const [mapMarkerNote, setMapMarkerNote] = useState('')
+  const [mapMarkerHexAction, setMapMarkerHexAction] = useState<'keep' | 'reveal' | 'hide'>('keep')
   const [selectedHexId, setSelectedHexId] = useState<string | null>(null)
 
   const [message, setMessage] = useState<string | null>(null)
@@ -486,6 +501,23 @@ function App() {
       setCampaignsLoading(false)
     }
   }, [isCloudMode])
+
+  const refreshMapMarkers = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setMapMarkers([])
+      return
+    }
+
+    setMapMarkersLoading(true)
+    try {
+      setMapMarkers(await loadMapMarkers(activeId))
+    } catch (e: any) {
+      console.error('LOAD MAP MARKERS ERROR:', e)
+      setError(e?.message || e?.details || 'Nie udało się pobrać markerów mapy.')
+    } finally {
+      setMapMarkersLoading(false)
+    }
+  }, [activeId, isCloudMode])
 
   const refreshMapHexes = useCallback(async () => {
     if (!activeId || !isCloudMode) {
@@ -892,6 +924,10 @@ function App() {
   }, [refreshMapHexes])
 
   useEffect(() => {
+    refreshMapMarkers()
+  }, [refreshMapMarkers])
+
+  useEffect(() => {
     refreshCharacters()
   }, [refreshCharacters])
 
@@ -1248,6 +1284,29 @@ function App() {
     }
   }, [session, activeId, refreshMapHexes])
 
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+
+    const sb = supabase
+    const channel = sb
+      .channel(`campaign-map-markers-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'campaign_map_markers',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        refreshMapMarkers
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshMapMarkers])
+
   const active =
     campaigns.find(c => c.id === activeId) ??
     campaigns[0]
@@ -1284,6 +1343,82 @@ function App() {
           e?.details ||
           'Nie udało się zapisać zmiany heksa.'
       )
+    }
+  }
+
+  const mapMarkerDefinitions: Record<MapMarkerType, { icon: string; label: string }> = {
+    location: { icon: '📍', label: 'Lokacja' },
+    settlement: { icon: '🏘️', label: 'Osada' },
+    danger: { icon: '⚔️', label: 'Niebezpieczeństwo' },
+    treasure: { icon: '💰', label: 'Skarb' },
+    quest: { icon: '❗', label: 'Zadanie' },
+  }
+
+  function openNewMapMarker(hexId: string) {
+    setEditingMapMarker(null)
+    setMapMarkerHexId(hexId)
+    setMapMarkerType('location')
+    setMapMarkerName('')
+    setMapMarkerNote('')
+    setMapMarkerHexAction('keep')
+    setShowMapMarker(true)
+  }
+
+  function openEditMapMarker(marker: CampaignMapMarker) {
+    setEditingMapMarker(marker)
+    setMapMarkerHexId(marker.hexId)
+    setMapMarkerType(marker.markerType)
+    setMapMarkerName(marker.name)
+    setMapMarkerNote(marker.note ?? '')
+    setMapMarkerHexAction('keep')
+    setShowMapMarker(true)
+  }
+
+  async function saveMapMarker() {
+    if (!activeId || !mapMarkerName.trim()) return
+    try {
+      if (editingMapMarker) {
+        await updateMapMarker(editingMapMarker.id, {
+          markerType: mapMarkerType,
+          name: mapMarkerName.trim(),
+          note: mapMarkerNote.trim(),
+        })
+      } else {
+        await createMapMarker(activeId, {
+          hexId: mapMarkerHexId,
+          markerType: mapMarkerType,
+          name: mapMarkerName.trim(),
+          note: mapMarkerNote.trim(),
+          isGm: mapGmUnlocked && mapGmMode,
+        })
+      }
+
+      if (mapGmUnlocked && mapGmMode) {
+        if (mapMarkerHexAction === 'reveal') {
+          await revealCampaignHex(activeId, mapMarkerHexId)
+        } else if (mapMarkerHexAction === 'hide') {
+          await hideCampaignHex(activeId, mapMarkerHexId)
+        }
+      }
+
+      await Promise.all([refreshMapMarkers(), refreshMapHexes()])
+      setShowMapMarker(false)
+      setEditingMapMarker(null)
+      setError(null)
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zapisać markera.')
+    }
+  }
+
+  async function removeMapMarker(marker: CampaignMapMarker) {
+    try {
+      await deleteMapMarker(marker.id)
+      await refreshMapMarkers()
+      setShowMapMarker(false)
+      setEditingMapMarker(null)
+      setError(null)
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się usunąć markera.')
     }
   }
 
@@ -10320,12 +10455,12 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">MAPA KAMPANII • MAP-4</p>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-5</p>
                   <h1>The Gloaming</h1>
                   <p>
                     Fog of War jest zapisany w Supabase i synchronizowany
-                    między użytkownikami kampanii. Narzędzia MG odblokowuje
-                    stały kod dostępu, a gracze widzą zmiany bez odświeżania strony.
+                    między użytkownikami kampanii. Każdy może stawiać markery
+                    również na zakrytych heksach. Markery MG są wyraźnie oznaczone.
                   </p>
                 </div>
               </section>
@@ -10369,8 +10504,23 @@ function App() {
                   {mapLoading && (
                     <span className="muted">Synchronizacja mapy…</span>
                   )}
+                  <button
+                    className={mapTool === 'markers' ? 'primary' : 'secondary'}
+                    onClick={() => setMapTool('markers')}
+                  >
+                    📍 Markery
+                  </button>
+                  {mapGmUnlocked && mapGmMode && (
+                    <button
+                      className={mapTool === 'fog' ? 'primary' : 'secondary'}
+                      onClick={() => setMapTool('fog')}
+                    >
+                      🌫 Mgła wojny
+                    </button>
+                  )}
                   <span className="muted">
-                    Odkryte: {mapRevealedHexes.size}/178 • kod HKKWW
+                    Odkryte: {mapRevealedHexes.size}/178 • Markery: {mapMarkers.length}
+                    {mapMarkersLoading ? ' • synchronizacja…' : ''} • kod HKKWW
                   </span>
                 </div>
 
@@ -10492,16 +10642,63 @@ function App() {
                                 strokeWidth={mapDiagnosticMode ? 3 : 1.5}
                                 vectorEffect="non-scaling-stroke"
                                 onClick={() => {
+                                  setSelectedHexId(id)
+                                  if (mapTool === 'markers') {
+                                    openNewMapMarker(id)
+                                    return
+                                  }
                                   if (!canManageMap || !mapGmMode) return
                                   void toggleCampaignHex(id)
                                 }}
-                                style={{
-                                  cursor:
-                                    canManageMap && mapGmMode
-                                      ? 'pointer'
-                                      : 'default',
-                                }}
+                                style={{ cursor: 'pointer' }}
                               />
+                              {mapMarkers
+                                .filter(marker => marker.hexId === id)
+                                .slice(0, 3)
+                                .map((marker, markerIndex) => (
+                                  <g
+                                    key={marker.id}
+                                    transform={`translate(${centerX + (markerIndex - 1) * 34} ${centerY})`}
+                                    onClick={event => {
+                                      event.stopPropagation()
+                                      openEditMapMarker(marker)
+                                    }}
+                                    style={{ cursor: 'pointer' }}
+                                  >
+                                    <circle
+                                      r="23"
+                                      fill={marker.isGm ? '#5f4014' : '#171512'}
+                                      stroke={marker.isGm ? '#f0bd55' : '#c59b55'}
+                                      strokeWidth={marker.isGm ? 4 : 2}
+                                      vectorEffect="non-scaling-stroke"
+                                    />
+                                    <text
+                                      x="0"
+                                      y="7"
+                                      textAnchor="middle"
+                                      fontSize="25"
+                                      pointerEvents="none"
+                                    >
+                                      {mapMarkerDefinitions[marker.markerType].icon}
+                                    </text>
+                                    {marker.isGm && (
+                                      <text
+                                        x="0"
+                                        y="-29"
+                                        textAnchor="middle"
+                                        fontSize="13"
+                                        fontWeight="900"
+                                        fill="#f0bd55"
+                                        stroke="#11100d"
+                                        strokeWidth="3"
+                                        paintOrder="stroke"
+                                        pointerEvents="none"
+                                      >
+                                        MG
+                                      </text>
+                                    )}
+                                  </g>
+                                ))}
                               {mapDiagnosticMode && (
                                 <text
                                   x={centerX}
@@ -10531,12 +10728,113 @@ function App() {
                 </div>
 
                 <p className="muted" style={{ marginTop: 10 }}>
-                  MAP-4 • odkryte heksy są zapisywane w Supabase i
-                  synchronizowane realtime. Narzędzia MG wymagają kodu dostępu.
-                  Tryb diagnostyczny pokazuje granice oraz kody heksów.
+                  MAP-5 • markery są wspólne i można je stawiać również na
+                  zakrytych heksach. Marker nie odkrywa mapy. MG może przy zapisie
+                  markera pozostawić heks bez zmian, odkryć go albo zakryć.
                 </p>
               </section>
             </>
+          )}
+
+          {showMapMarker && (
+            <Modal
+              onClose={() => {
+                setShowMapMarker(false)
+                setEditingMapMarker(null)
+              }}
+            >
+              <div style={{ display: 'grid', gap: 12 }}>
+                <div>
+                  <p className="eyebrow" style={{ marginBottom: 4 }}>
+                    MARKER • {mapMarkerHexId}
+                  </p>
+                  <h2 style={{ margin: 0 }}>
+                    {editingMapMarker ? 'Edytuj marker' : 'Dodaj marker'}
+                  </h2>
+                  {editingMapMarker?.isGm && (
+                    <p style={{ margin: '6px 0 0', color: '#f0bd55', fontWeight: 800 }}>
+                      Marker MG
+                    </p>
+                  )}
+                </div>
+
+                <label>
+                  Typ
+                  <select
+                    value={mapMarkerType}
+                    onChange={e => setMapMarkerType(e.target.value as MapMarkerType)}
+                    style={themedSelectStyle}
+                  >
+                    {(Object.entries(mapMarkerDefinitions) as [MapMarkerType, { icon: string; label: string }][]).map(
+                      ([value, definition]) => (
+                        <option key={value} value={value}>
+                          {definition.icon} {definition.label}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </label>
+
+                <label>
+                  Nazwa
+                  <input
+                    value={mapMarkerName}
+                    onChange={e => setMapMarkerName(e.target.value)}
+                    placeholder="Np. Stara wieża"
+                    maxLength={80}
+                  />
+                </label>
+
+                <label>
+                  Notatka
+                  <textarea
+                    value={mapMarkerNote}
+                    onChange={e => setMapMarkerNote(e.target.value)}
+                    placeholder="Krótka informacja o miejscu..."
+                    rows={4}
+                    maxLength={500}
+                  />
+                </label>
+
+                {mapGmUnlocked && mapGmMode && (
+                  <label>
+                    Stan heksa po zapisaniu
+                    <select
+                      value={mapMarkerHexAction}
+                      onChange={e =>
+                        setMapMarkerHexAction(
+                          e.target.value as 'keep' | 'reveal' | 'hide'
+                        )
+                      }
+                      style={themedSelectStyle}
+                    >
+                      <option value="keep">Pozostaw bez zmian</option>
+                      <option value="reveal">Odkryj heks</option>
+                      <option value="hide">Zakryj heks</option>
+                    </select>
+                  </label>
+                )}
+
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    className="primary"
+                    onClick={() => void saveMapMarker()}
+                    disabled={!mapMarkerName.trim()}
+                  >
+                    {editingMapMarker ? 'Zapisz marker' : 'Dodaj marker'}
+                  </button>
+
+                  {editingMapMarker && (
+                    <button
+                      className="secondary"
+                      onClick={() => void removeMapMarker(editingMapMarker)}
+                    >
+                      Usuń marker
+                    </button>
+                  )}
+                </div>
+              </div>
+            </Modal>
           )}
 
           {showMapGmCode && (
