@@ -11232,9 +11232,31 @@ function App() {
 
           {activeView === 'Kronika' && (
             <>
+              <style>{`
+                .chronicle-scroll {
+                  scrollbar-width: auto;
+                  scrollbar-color: #9b672d rgba(78, 46, 19, .18);
+                }
+                .chronicle-scroll::-webkit-scrollbar {
+                  width: 12px;
+                }
+                .chronicle-scroll::-webkit-scrollbar-track {
+                  background: rgba(78, 46, 19, .16);
+                  border: 1px solid rgba(74, 43, 17, .24);
+                  border-radius: 8px;
+                }
+                .chronicle-scroll::-webkit-scrollbar-thumb {
+                  background: linear-gradient(#b9873d, #765020);
+                  border: 2px solid rgba(65, 38, 16, .55);
+                  border-radius: 8px;
+                }
+                .chronicle-scroll::-webkit-scrollbar-thumb:hover {
+                  background: linear-gradient(#c99a4d, #875d27);
+                }
+              `}</style>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">KRONIKA KAMPANII • ETAP 1.2</p>
+                  <p className="eyebrow">KRONIKA KAMPANII • ETAP 1.3</p>
                   <h1>Kronika {active?.name ?? ''}</h1>
                   <p>
                     Dziennik wydarzeń świata gry uporządkowany według dni,
@@ -11397,7 +11419,7 @@ function App() {
                       padding: '42px clamp(28px, 5vw, 72px)',
                       color: '#352414',
                       position: 'relative',
-                      backgroundImage: `url(${import.meta.env.BASE_URL}chronicle-book.jpg)`,
+                      backgroundImage: `url(${import.meta.env.BASE_URL}chronicle-book-clean.jpg)`,
                       backgroundSize: '100% 100%',
                       backgroundPosition: 'center',
                       backgroundRepeat: 'no-repeat',
@@ -11475,9 +11497,8 @@ function App() {
                             fontSize: 18,
                             lineHeight: 1.85,
                             letterSpacing: '.01em',
-                            scrollbarWidth: 'thin',
-                            scrollbarColor: '#8b5a2b transparent',
                           }}
+                          className="chronicle-scroll"
                         >
                           {selectedChronicle.content}
                         </div>
