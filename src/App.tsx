@@ -1947,7 +1947,9 @@ function App() {
 
     for (const character of characters) {
       const used = usedSlotsForCharacter(character.id)
-      const max = Math.max(10, character.strength)
+      const max =
+        Math.max(10, character.strength) +
+        Math.max(0, character.bonusSlots)
       const rations = characterRationCounts.get(character.id) ?? 0
       const qpCount = items.filter(item => item.characterId === character.id && item.isQuickpull).length
       const qpLimit = Math.max(0, statModifier(character.dexterity))
@@ -10225,7 +10227,7 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">MAPA KAMPANII • MAP-1</p>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-1.2</p>
                   <h1>The Gloaming</h1>
                   <p>
                     Warstwa diagnostyczna siatki heksowej. Kliknij heks, aby
@@ -10319,8 +10321,8 @@ function App() {
                         const column = columnIndex + 1
                         const evenColumn = column % 2 === 0
                         const rowCount = evenColumn ? 11 : 10
-                        const centerX = 108 + columnIndex * 114
-                        const firstCenterY = evenColumn ? 60 : 126
+                        const centerX = 128 + columnIndex * 114
+                        const firstCenterY = evenColumn ? 116 : 182
 
                         return Array.from({ length: rowCount }, (_, rowIndex) => {
                           const row = rowIndex + 1
@@ -10374,7 +10376,7 @@ function App() {
                 </div>
 
                 <p className="muted" style={{ marginTop: 10 }}>
-                  MAP-1 służy wyłącznie do kalibracji. Sprawdź szczególnie heksy
+                  MAP-1.2 służy wyłącznie do kalibracji. Sprawdź szczególnie heksy
                   przy lewej i prawej krawędzi oraz w górnych i dolnych rzędach.
                 </p>
               </section>
