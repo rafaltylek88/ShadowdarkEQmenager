@@ -10227,7 +10227,7 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">MAPA KAMPANII • MAP-1.6</p>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-1.7</p>
                   <h1>The Gloaming</h1>
                   <p>
                     Warstwa diagnostyczna siatki heksowej. Kliknij heks, aby
@@ -10321,16 +10321,34 @@ function App() {
                         const column = columnIndex + 1
                         const evenColumn = column % 2 === 0
                         const rowCount = evenColumn ? 11 : 10
-                        const centerX = 130.8 + columnIndex * 111.38
-                        const firstCenterY = evenColumn ? 114.5 : 179
+                        // MAP-1.7: współrzędne są kotwiczone od środka mapy
+                        // i zapisane jawnie, zamiast wyliczać każdą pozycję
+                        // przez wielokrotne dodawanie jednego kroku.
+                        const mapColumnCenters = [
+                          132, 243, 354, 465, 576, 687, 799, 910, 1022,
+                          1133, 1244, 1355, 1467, 1578, 1690, 1801, 1913,
+                        ]
+                        const oddColumnRowCenters = [
+                          182, 311, 440, 569, 698,
+                          827, 956, 1085, 1214, 1343,
+                        ]
+                        const evenColumnRowCenters = [
+                          117, 246, 375, 504, 633, 762,
+                          891, 1020, 1149, 1278, 1407,
+                        ]
+                        const centerX = mapColumnCenters[columnIndex]
 
                         return Array.from({ length: rowCount }, (_, rowIndex) => {
                           const row = rowIndex + 1
-                          const centerY = firstCenterY + rowIndex * 129
+                          const centerY = (
+                            evenColumn
+                              ? evenColumnRowCenters
+                              : oddColumnRowCenters
+                          )[rowIndex]
                           const id = `H${String(column).padStart(2, '0')}${String(row).padStart(2, '0')}`
-                          const halfWidth = 80
+                          const halfWidth = 77
                           const halfHeight = 64.5
-                          const quarterWidth = 39
+                          const quarterWidth = 38.5
                           const points = [
                             `${centerX - quarterWidth},${centerY - halfHeight}`,
                             `${centerX + quarterWidth},${centerY - halfHeight}`,
@@ -10376,7 +10394,7 @@ function App() {
                 </div>
 
                 <p className="muted" style={{ marginTop: 10 }}>
-                  MAP-1.6 służy wyłącznie do kalibracji. Sprawdź szczególnie heksy
+                  MAP-1.7 • kalibracja kotwiczona od środka mapy. Sprawdź szczególnie heksy
                   przy lewej i prawej krawędzi oraz w górnych i dolnych rzędach.
                 </p>
               </section>
