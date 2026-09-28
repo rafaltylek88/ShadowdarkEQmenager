@@ -8658,7 +8658,30 @@ function App() {
                             }}
                           >
                             <section style={{ ...sheetPanel, padding: 12 }}>
-                              <div className="panel-title">
+                              <div
+                        aria-hidden="true"
+                        style={{
+                          position: 'absolute',
+                          right: 54,
+                          top: 32,
+                          width: 72,
+                          height: 72,
+                          borderRadius: '50%',
+                          border: '4px double #b98535',
+                          background: 'radial-gradient(circle, #dbc07d 0 46%, #8b6026 47% 58%, #2b190c 59%)',
+                          boxShadow: '0 7px 15px rgba(0,0,0,.65)',
+                          display: 'grid',
+                          placeItems: 'center',
+                          color: '#3a220d',
+                          fontFamily: 'Georgia, serif',
+                          fontWeight: 900,
+                          fontSize: 27,
+                          zIndex: 2,
+                        }}
+                      >
+                        ✦
+                      </div>
+                      <div className="panel-title">
                                 TALENTY / ZAKLĘCIA / JĘZYKI / BIEGŁOŚCI
                               </div>
                               <div
@@ -10456,7 +10479,7 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">MAPA KAMPANII • MAP-6.3</p>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-6.4</p>
                   <h1>The Gloaming</h1>
                   <p>
                     Fog of War jest zapisany w Supabase i synchronizowany
@@ -10545,24 +10568,21 @@ function App() {
                 <div
                   style={{
                     position: 'relative',
-                    padding: '122px 48px 52px 178px',
+                    padding: '14px',
                     borderRadius: 14,
                     border: '1px solid rgba(180, 135, 60, 0.42)',
-                    backgroundImage: `linear-gradient(rgba(18,10,5,.08), rgba(18,10,5,.08)), url(${import.meta.env.BASE_URL}map-tabletop.jpg)`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                    backgroundRepeat: 'no-repeat',
-                    boxShadow: 'inset 0 0 52px rgba(0,0,0,.5)',
+                    background: '#17120d',
+                    boxShadow: 'inset 0 0 30px rgba(0,0,0,.45)',
                   }}
                 >
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'minmax(680px, 0.92fr) minmax(210px, 270px)',
-                      gap: 28,
+                      gridTemplateColumns: 'minmax(820px, 1fr) 255px',
+                      gap: 12,
                       alignItems: 'start',
                       overflowX: 'auto',
-                      paddingTop: 18,
+                      paddingTop: 0,
                     }}
                   >
                     <div
@@ -10574,7 +10594,7 @@ function App() {
                         border: '1px solid rgba(77,45,18,.7)',
                         borderRadius: 3,
                         boxShadow:
-                          '0 18px 34px rgba(0,0,0,.68), 0 0 0 3px rgba(61,34,13,.18)',
+                          '0 10px 22px rgba(0,0,0,.58)',
                         backgroundImage: `url(${import.meta.env.BASE_URL}map-parchment.jpg)`,
                         backgroundSize: 'cover',
                         overflow: 'hidden',
@@ -10762,12 +10782,18 @@ function App() {
 
                     <aside
                       style={{
-                        minWidth: 210,
-                        marginTop: 52,
-                        background: 'rgba(17,16,13,.94)',
+                        position: 'relative',
+                        minWidth: 230,
+                        minHeight: '100%',
+                        marginTop: 0,
+                        paddingTop: 132,
+                        backgroundImage: `linear-gradient(rgba(20,10,5,.12), rgba(20,10,5,.12)), url(${import.meta.env.BASE_URL}map-table-right.jpg)`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center top',
+                        backgroundRepeat: 'no-repeat',
                         border: '1px solid rgba(190,145,65,.55)',
                         borderRadius: 10,
-                        padding: 14,
+                        padding: '132px 14px 14px',
                         boxShadow: '0 12px 26px rgba(0,0,0,.58)',
                       }}
                     >
@@ -10856,7 +10882,7 @@ function App() {
                 </div>
 
                 <p className="muted" style={{ marginTop: 10 }}>
-                  MAP-6.3 • markery są wspólne i można je stawiać również na
+                  MAP-6.4 • markery są wspólne i można je stawiać również na
                   zakrytych heksach. Marker nie odkrywa mapy. MG może przy zapisie
                   markera pozostawić heks bez zmian, odkryć go albo zakryć.
                 </p>
