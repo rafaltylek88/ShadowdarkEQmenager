@@ -36,9 +36,9 @@ export async function loadChronicleEntries(campaignId: string): Promise<Chronicl
     .from('campaign_chronicle')
     .select('*')
     .eq('campaign_id', campaignId)
-    .order('world_day', { ascending: false })
-    .order('session_number', { ascending: false })
-    .order('created_at', { ascending: false })
+    .order('world_day', { ascending: true })
+    .order('session_number', { ascending: true })
+    .order('created_at', { ascending: true })
   if (error) throw error
   return (data ?? []).map(fromRow)
 }
