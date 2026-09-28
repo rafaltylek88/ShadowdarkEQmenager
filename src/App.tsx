@@ -537,7 +537,7 @@ function App() {
       setSelectedChronicleId(current =>
         current && entries.some(entry => entry.id === current)
           ? current
-          : entries[0]?.id ?? null
+          : entries[entries.length - 1]?.id ?? null
       )
     } catch (e: any) {
       console.error('LOAD CHRONICLE ERROR:', e)
@@ -548,7 +548,7 @@ function App() {
   }, [activeId, isCloudMode])
 
   function openNewChronicleEntry() {
-    const latest = chronicleEntries[0]
+    const latest = chronicleEntries[chronicleEntries.length - 1]
     setEditingChronicle(null)
     setChronicleTitle('')
     setChronicleSession(latest?.sessionNumber ?? 1)
@@ -1559,7 +1559,7 @@ function App() {
 
   const selectedChronicle =
     chronicleEntries.find(entry => entry.id === selectedChronicleId) ??
-    chronicleEntries[0] ??
+    chronicleEntries[chronicleEntries.length - 1] ??
     null
 
   const chronicleSeasons: ChronicleSeason[] = ['Wiosna', 'Lato', 'Jesień', 'Zima']
@@ -11234,7 +11234,7 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">KRONIKA KAMPANII • ETAP 1.1</p>
+                  <p className="eyebrow">KRONIKA KAMPANII • ETAP 1.2</p>
                   <h1>Kronika {active?.name ?? ''}</h1>
                   <p>
                     Dziennik wydarzeń świata gry uporządkowany według dni,
@@ -11417,6 +11417,7 @@ function App() {
                           marginBottom: 8,
                           padding: '8px 8px 20px',
                           minHeight: 520,
+                          maxHeight: 650,
                           position: 'relative',
                           zIndex: 1,
                         }}
@@ -11467,10 +11468,15 @@ function App() {
 
                         <div
                           style={{
+                            maxHeight: 500,
+                            overflowY: 'auto',
+                            paddingRight: 12,
                             whiteSpace: 'pre-wrap',
                             fontSize: 18,
                             lineHeight: 1.85,
                             letterSpacing: '.01em',
+                            scrollbarWidth: 'thin',
+                            scrollbarColor: '#8b5a2b transparent',
                           }}
                         >
                           {selectedChronicle.content}
