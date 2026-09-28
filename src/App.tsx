@@ -258,6 +258,12 @@ function App() {
   const [chronicleDay, setChronicleDay] = useState(1)
   const [chronicleSeason, setChronicleSeason] = useState<ChronicleSeason>('Wiosna')
   const [chronicleContent, setChronicleContent] = useState('')
+  const [chronicleMentionQuery, setChronicleMentionQuery] = useState<string | null>(null)
+  const [chronicleMentionStart, setChronicleMentionStart] = useState<number | null>(null)
+  const [chronicleMentionCursor, setChronicleMentionCursor] = useState(0)
+  const [chronicleLinkedStoryCharacter, setChronicleLinkedStoryCharacter] = useState<StoryCharacter | null>(null)
+  const [chronicleLinkedMarker, setChronicleLinkedMarker] = useState<CampaignMapMarker | null>(null)
+
 
 
   const [message, setMessage] = useState<string | null>(null)
@@ -522,6 +528,96 @@ function App() {
       setCampaignsLoading(false)
     }
   }, [isCloudMode])
+
+  function updateChronicleMention(value: string, cursor: number) {
+    setChronicleContent(value)
+    const before = value.slice(0, cursor)
+    const match = before.match(/(?:^|\s)@([^@\n]*)$/)
+    if (!match) {
+      setChronicleMentionQuery(null)
+      setChronicleMentionStart(null)
+      return
+    }
+    const query = match[1]
+    const start = cursor - query.length - 1
+    setChronicleMentionQuery(query)
+    setChronicleMentionStart(start)
+    setChronicleMentionCursor(cursor)
+  }
+
+  function insertChronicleMention(name: string) {
+    if (chronicleMentionStart === null) return
+    const before = chronicleContent.slice(0, chronicleMentionStart)
+    const after = chronicleContent.slice(chronicleMentionCursor)
+    setChronicleContent(`${before}@${name} ${after}`)
+    setChronicleMentionQuery(null)
+    setChronicleMentionStart(null)
+  }
+
+  function renderChronicleText(text: string) {
+    const names = [
+      ...storyCharacters.map(character => ({
+        kind: 'character' as const,
+        name: character.name,
+        value: character,
+      })),
+      ...mapMarkers.map(marker => ({
+        kind: 'marker' as const,
+        name: marker.name,
+        value: marker,
+      })),
+    ].sort((a, b) => b.name.length - a.name.length)
+
+    if (names.length === 0) return text
+
+    const escaped = names.map(item =>
+      item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    )
+    const regex = new RegExp(`@(${escaped.join('|')})(?=\\s|[.,!?;:)]|$)`, 'g')
+    const parts: React.ReactNode[] = []
+    let last = 0
+    let match: RegExpExecArray | null
+
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > last) parts.push(text.slice(last, match.index))
+      const found = names.find(item => item.name === match![1])
+      if (found) {
+        parts.push(
+          <button
+            key={`${found.kind}-${found.name}-${match.index}`}
+            type="button"
+            onClick={() => {
+              if (found.kind === 'character') {
+                setChronicleLinkedStoryCharacter(found.value as StoryCharacter)
+              } else {
+                setChronicleLinkedMarker(found.value as CampaignMapMarker)
+              }
+            }}
+            style={{
+              display: 'inline',
+              padding: 0,
+              border: 0,
+              background: 'transparent',
+              color: '#713f12',
+              font: 'inherit',
+              fontWeight: 800,
+              textDecoration: 'underline',
+              textDecorationStyle: 'dotted',
+              textUnderlineOffset: 3,
+              cursor: 'pointer',
+            }}
+          >
+            @{found.name}
+          </button>
+        )
+      } else {
+        parts.push(match[0])
+      }
+      last = regex.lastIndex
+    }
+    if (last < text.length) parts.push(text.slice(last))
+    return parts
+  }
 
   const refreshChronicle = useCallback(async () => {
     if (!activeId || !isCloudMode) {
@@ -1556,6 +1652,27 @@ function App() {
       setError(e?.message || e?.details || 'Nie udało się usunąć markera.')
     }
   }
+
+  const chronicleMentionSuggestions = useMemo(() => {
+    if (chronicleMentionQuery === null) return []
+    const q = chronicleMentionQuery.trim().toLocaleLowerCase('pl')
+    const suggestions = [
+      ...storyCharacters.map(character => ({
+        kind: 'character' as const,
+        name: character.name,
+        subtitle: character.location || 'Postać Fabularna',
+      })),
+      ...mapMarkers.map(marker => ({
+        kind: 'marker' as const,
+        name: marker.name,
+        subtitle: `${marker.hexId} • miejsce`,
+      })),
+    ]
+      .filter(item => !q || item.name.toLocaleLowerCase('pl').includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+      .slice(0, 8)
+    return suggestions
+  }, [chronicleMentionQuery, storyCharacters, mapMarkers])
 
   const selectedChronicle =
     chronicleEntries.find(entry => entry.id === selectedChronicleId) ??
@@ -11256,7 +11373,7 @@ function App() {
               `}</style>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">KRONIKA KAMPANII • ETAP 1.3</p>
+                  <p className="eyebrow">KRONIKA KAMPANII • ETAP 2</p>
                   <h1>Kronika {active?.name ?? ''}</h1>
                   <p>
                     Dziennik wydarzeń świata gry uporządkowany według dni,
@@ -11500,7 +11617,7 @@ function App() {
                           }}
                           className="chronicle-scroll"
                         >
-                          {selectedChronicle.content}
+                          {renderChronicleText(selectedChronicle.content)}
                         </div>
 
                       </div>
@@ -11527,6 +11644,60 @@ function App() {
                 </div>
               </section>
             </>
+          )}
+
+          {chronicleLinkedStoryCharacter && (
+            <Modal onClose={() => setChronicleLinkedStoryCharacter(null)}>
+              <div style={{ display: 'grid', gap: 12 }}>
+                <p className="eyebrow" style={{ margin: 0 }}>POSTAĆ FABULARNA</p>
+                <h2 style={{ margin: 0 }}>{chronicleLinkedStoryCharacter.name}</h2>
+                {chronicleLinkedStoryCharacter.location && (
+                  <p style={{ margin: 0 }}>
+                    <strong>Miejsce:</strong> {chronicleLinkedStoryCharacter.location}
+                  </p>
+                )}
+                <button
+                  className="primary"
+                  onClick={() => {
+                    setChronicleLinkedStoryCharacter(null)
+                    setActiveView('Postacie Fabularne')
+                  }}
+                >
+                  Otwórz Postacie Fabularne
+                </button>
+              </div>
+            </Modal>
+          )}
+
+          {chronicleLinkedMarker && (
+            <Modal onClose={() => setChronicleLinkedMarker(null)}>
+              <div style={{ display: 'grid', gap: 12 }}>
+                <p className="eyebrow" style={{ margin: 0 }}>
+                  📍 MIEJSCE • {chronicleLinkedMarker.hexId}
+                </p>
+                <h2 style={{ margin: 0 }}>{chronicleLinkedMarker.name}</h2>
+                <div
+                  style={{
+                    whiteSpace: 'pre-wrap',
+                    padding: 12,
+                    border: '1px solid rgba(190,145,65,.4)',
+                    borderRadius: 8,
+                  }}
+                >
+                  {chronicleLinkedMarker.note?.trim() || 'Brak dodatkowego opisu.'}
+                </div>
+                <button
+                  className="primary"
+                  onClick={() => {
+                    setSelectedHexId(chronicleLinkedMarker.hexId)
+                    setChronicleLinkedMarker(null)
+                    setActiveView('Mapa')
+                  }}
+                >
+                  Pokaż na mapie
+                </button>
+              </div>
+            </Modal>
           )}
 
           {showChronicleEditor && (
@@ -11597,15 +11768,72 @@ function App() {
                   Treść kroniki
                   <textarea
                     value={chronicleContent}
-                    onChange={e => setChronicleContent(e.target.value)}
-                    placeholder="Opisz wydarzenia sesji..."
+                    onChange={e =>
+                      updateChronicleMention(
+                        e.target.value,
+                        e.target.selectionStart ?? e.target.value.length
+                      )
+                    }
+                    onClick={e => {
+                      const target = e.currentTarget
+                      updateChronicleMention(
+                        target.value,
+                        target.selectionStart ?? target.value.length
+                      )
+                    }}
+                    placeholder="Opisz wydarzenia sesji... Wpisz @, aby dodać odnośnik."
                     rows={14}
                     maxLength={12000}
                   />
                 </label>
 
+                {chronicleMentionQuery !== null && (
+                  <div
+                    style={{
+                      maxHeight: 260,
+                      overflowY: 'auto',
+                      border: '1px solid rgba(190,145,65,.55)',
+                      borderRadius: 8,
+                      background: '#15110d',
+                      padding: 6,
+                      display: 'grid',
+                      gap: 4,
+                    }}
+                  >
+                    {chronicleMentionSuggestions.map(item => (
+                      <button
+                        key={`${item.kind}-${item.name}`}
+                        type="button"
+                        className="secondary"
+                        onClick={() => insertChronicleMention(item.name)}
+                        style={{
+                          width: '100%',
+                          justifyContent: 'flex-start',
+                          textAlign: 'left',
+                          padding: '8px 10px',
+                        }}
+                      >
+                        <span style={{ width: 24 }}>
+                          {item.kind === 'character' ? '👤' : '📍'}
+                        </span>
+                        <span style={{ display: 'grid', gap: 1 }}>
+                          <strong>{item.name}</strong>
+                          <span className="muted" style={{ fontSize: 11 }}>
+                            {item.subtitle}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                    {chronicleMentionSuggestions.length === 0 && (
+                      <div className="muted" style={{ padding: 8 }}>
+                        Brak pasujących Postaci Fabularnych lub markerów miejsc.
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="muted">
-                  Odnośniki @Postać i @Miejsce dodamy w KRONIKA-2.
+                  Wpisz @ i wybierz Postać Fabularną albo marker miejsca.
                 </div>
 
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
