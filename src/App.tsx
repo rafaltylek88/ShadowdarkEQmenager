@@ -10456,7 +10456,7 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">MAPA KAMPANII • MAP-6</p>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-6.1</p>
                   <h1>The Gloaming</h1>
                   <p>
                     Fog of War jest zapisany w Supabase i synchronizowany
@@ -10549,39 +10549,27 @@ function App() {
                     borderRadius: 14,
                     border: '1px solid rgba(180, 135, 60, 0.42)',
                     background:
-                      'linear-gradient(90deg, rgba(55,34,18,.35) 1px, transparent 1px), linear-gradient(0deg, rgba(30,18,10,.28) 1px, transparent 1px), linear-gradient(135deg, #4b2e18, #2d1a0f 48%, #432815)',
-                    backgroundSize: '96px 100%, 100% 54px, 100% 100%',
+                      'repeating-linear-gradient(0deg, rgba(18,9,4,.18) 0 2px, transparent 2px 48px), repeating-linear-gradient(90deg, rgba(115,73,34,.12) 0 1px, transparent 1px 140px), linear-gradient(100deg, #26140a, #543018 42%, #351c0e 72%, #211108)',
+                    backgroundSize: '100% 100%',
                     boxShadow: 'inset 0 0 45px rgba(0,0,0,.58)',
                   }}
                 >
-                  <div
+                  <img
+                    src={`${import.meta.env.BASE_URL}map-compass.svg`}
+                    alt=""
                     aria-hidden="true"
                     style={{
                       position: 'absolute',
-                      right: 18,
-                      top: 14,
-                      width: 86,
-                      height: 86,
-                      borderRadius: '50%',
-                      border: '4px double rgba(213,170,91,.9)',
-                      background:
-                        'radial-gradient(circle, #d8bd82 0 46%, #8a642b 47% 55%, #24180d 56% 100%)',
-                      boxShadow: '0 8px 18px rgba(0,0,0,.55)',
-                      display: 'grid',
-                      placeItems: 'center',
-                      color: '#33200d',
-                      fontFamily: 'serif',
-                      fontWeight: 900,
-                      fontSize: 16,
-                      zIndex: 3,
-                      transform: 'rotate(-8deg)',
+                      right: 14,
+                      top: 8,
+                      width: 112,
+                      height: 112,
+                      zIndex: 5,
+                      transform: 'rotate(-7deg)',
+                      pointerEvents: 'none',
+                      filter: 'drop-shadow(0 10px 10px rgba(0,0,0,.55))',
                     }}
-                  >
-                    <div style={{ textAlign: 'center', lineHeight: 1 }}>
-                      <div>N</div>
-                      <div style={{ fontSize: 34 }}>✦</div>
-                    </div>
-                  </div>
+                  />
 
                   <div
                     style={{
@@ -10599,11 +10587,25 @@ function App() {
                         width: '100%',
                         minWidth: 720,
                         aspectRatio: '2048 / 1523',
-                        border: '8px solid rgba(77,48,23,.78)',
-                        boxShadow: '0 12px 28px rgba(0,0,0,.55)',
-                        background: '#11100d',
+                        border: '1px solid rgba(89,54,24,.8)',
+                        borderRadius: 4,
+                        boxShadow:
+                          '0 16px 30px rgba(0,0,0,.62), 0 0 0 8px rgba(70,40,18,.28)',
+                        backgroundImage: `url(${import.meta.env.BASE_URL}map-parchment.svg)`,
+                        backgroundSize: 'cover',
+                        overflow: 'hidden',
                       }}
                     >
+                    <div
+                      aria-hidden="true"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        backgroundImage: `url(${import.meta.env.BASE_URL}map-parchment.svg)`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      }}
+                    />
                     <img
                       src={`${import.meta.env.BASE_URL}gloaming-hex-map.png`}
                       alt="Mapa The Gloaming"
@@ -10614,6 +10616,7 @@ function App() {
                         height: '100%',
                         objectFit: 'fill',
                         display: 'block',
+                        mixBlendMode: 'multiply',
                       }}
                     />
                     <svg
@@ -10867,7 +10870,7 @@ function App() {
                 </div>
 
                 <p className="muted" style={{ marginTop: 10 }}>
-                  MAP-6 • markery są wspólne i można je stawiać również na
+                  MAP-6.1 • markery są wspólne i można je stawiać również na
                   zakrytych heksach. Marker nie odkrywa mapy. MG może przy zapisie
                   markera pozostawić heks bez zmian, odkryć go albo zakryć.
                 </p>
