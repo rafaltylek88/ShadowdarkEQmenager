@@ -22,6 +22,7 @@ import {
   Pencil,
   Plus,
   Shield,
+  ScrollText,
   Trash2,
   Truck,
   Utensils,
@@ -41,6 +42,13 @@ import {
   updateMapMarker,
 } from './lib/mapState'
 import type { CampaignMapMarker, MapMarkerType } from './lib/mapState'
+import {
+  createChronicleEntry,
+  deleteChronicleEntry,
+  loadChronicleEntries,
+  updateChronicleEntry,
+} from './lib/chronicle'
+import type { ChronicleEntry, ChronicleSeason } from './lib/chronicle'
 import {
   createRemoteCampaign,
   joinCampaign,
@@ -164,6 +172,7 @@ const nav = [
   ['Bastiony', Castle],
   ['Mapa', MapIcon],
   ['Biblioteka', Package],
+  ['Kronika', ScrollText],
   ['Historia', ArrowRightLeft],
   ['Podsumowanie', Coins],
 ] as const
@@ -239,6 +248,17 @@ function App() {
   const [mapMarkerHexAction, setMapMarkerHexAction] = useState<'keep' | 'reveal' | 'hide'>('keep')
   const [selectedLegendMarker, setSelectedLegendMarker] = useState<CampaignMapMarker | null>(null)
   const [selectedHexId, setSelectedHexId] = useState<string | null>(null)
+  const [chronicleEntries, setChronicleEntries] = useState<ChronicleEntry[]>([])
+  const [chronicleLoading, setChronicleLoading] = useState(false)
+  const [selectedChronicleId, setSelectedChronicleId] = useState<string | null>(null)
+  const [showChronicleEditor, setShowChronicleEditor] = useState(false)
+  const [editingChronicle, setEditingChronicle] = useState<ChronicleEntry | null>(null)
+  const [chronicleTitle, setChronicleTitle] = useState('')
+  const [chronicleSession, setChronicleSession] = useState(1)
+  const [chronicleDay, setChronicleDay] = useState(1)
+  const [chronicleSeason, setChronicleSeason] = useState<ChronicleSeason>('Wiosna')
+  const [chronicleContent, setChronicleContent] = useState('')
+
 
   const [message, setMessage] = useState<string | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
@@ -502,6 +522,94 @@ function App() {
       setCampaignsLoading(false)
     }
   }, [isCloudMode])
+
+  const refreshChronicle = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setChronicleEntries([])
+      setSelectedChronicleId(null)
+      return
+    }
+
+    setChronicleLoading(true)
+    try {
+      const entries = await loadChronicleEntries(activeId)
+      setChronicleEntries(entries)
+      setSelectedChronicleId(current =>
+        current && entries.some(entry => entry.id === current)
+          ? current
+          : entries[0]?.id ?? null
+      )
+    } catch (e: any) {
+      console.error('LOAD CHRONICLE ERROR:', e)
+      setError(e?.message || e?.details || 'Nie udało się pobrać Kroniki.')
+    } finally {
+      setChronicleLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
+  function openNewChronicleEntry() {
+    const latest = chronicleEntries[0]
+    setEditingChronicle(null)
+    setChronicleTitle('')
+    setChronicleSession(latest?.sessionNumber ?? 1)
+    setChronicleDay(latest ? latest.worldDay + 1 : 1)
+    setChronicleSeason(latest?.season ?? 'Wiosna')
+    setChronicleContent('')
+    setShowChronicleEditor(true)
+  }
+
+  function openEditChronicleEntry(entry: ChronicleEntry) {
+    setEditingChronicle(entry)
+    setChronicleTitle(entry.title)
+    setChronicleSession(entry.sessionNumber)
+    setChronicleDay(entry.worldDay)
+    setChronicleSeason(entry.season)
+    setChronicleContent(entry.content)
+    setShowChronicleEditor(true)
+  }
+
+  async function saveChronicleEntry() {
+    if (!activeId || !chronicleTitle.trim() || !chronicleContent.trim()) return
+    try {
+      let saved: ChronicleEntry | null = null
+      if (editingChronicle) {
+        saved = await updateChronicleEntry(editingChronicle.id, {
+          title: chronicleTitle.trim(),
+          sessionNumber: Math.max(1, chronicleSession),
+          worldDay: Math.max(1, chronicleDay),
+          season: chronicleSeason,
+          content: chronicleContent.trim(),
+        })
+      } else {
+        saved = await createChronicleEntry(activeId, {
+          title: chronicleTitle.trim(),
+          sessionNumber: Math.max(1, chronicleSession),
+          worldDay: Math.max(1, chronicleDay),
+          season: chronicleSeason,
+          content: chronicleContent.trim(),
+        })
+      }
+      await refreshChronicle()
+      if (saved) setSelectedChronicleId(saved.id)
+      setShowChronicleEditor(false)
+      setEditingChronicle(null)
+      setError(null)
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się zapisać wpisu Kroniki.')
+    }
+  }
+
+  async function removeChronicleEntry(entry: ChronicleEntry) {
+    try {
+      await deleteChronicleEntry(entry.id)
+      await refreshChronicle()
+      setShowChronicleEditor(false)
+      setEditingChronicle(null)
+      setError(null)
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się usunąć wpisu Kroniki.')
+    }
+  }
 
   const refreshMapMarkers = useCallback(async () => {
     if (!activeId || !isCloudMode) {
@@ -919,6 +1027,32 @@ function App() {
       sb.removeChannel(channel)
     }
   }, [session, refreshCampaigns])
+
+  useEffect(() => {
+    refreshChronicle()
+  }, [refreshChronicle])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+    const channel = sb
+      .channel(`campaign-chronicle-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'campaign_chronicle',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        refreshChronicle
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshChronicle])
 
   useEffect(() => {
     refreshMapHexes()
@@ -1422,6 +1556,13 @@ function App() {
       setError(e?.message || e?.details || 'Nie udało się usunąć markera.')
     }
   }
+
+  const selectedChronicle =
+    chronicleEntries.find(entry => entry.id === selectedChronicleId) ??
+    chronicleEntries[0] ??
+    null
+
+  const chronicleSeasons: ChronicleSeason[] = ['Wiosna', 'Lato', 'Jesień', 'Zima']
 
   const characterById = useMemo(
     () => new Map(characters.map(character => [character.id, character])),
@@ -11085,6 +11226,331 @@ function App() {
                 >
                   Odblokuj tryb MG
                 </button>
+              </div>
+            </Modal>
+          )}
+
+          {activeView === 'Kronika' && (
+            <>
+              <section className="hero parchment-panel">
+                <div>
+                  <p className="eyebrow">KRONIKA KAMPANII • ETAP 1</p>
+                  <h1>Kronika {active?.name ?? ''}</h1>
+                  <p>
+                    Dziennik wydarzeń świata gry uporządkowany według dni,
+                    pór roku i numerów sesji.
+                  </p>
+                </div>
+                <button
+                  className="primary"
+                  onClick={openNewChronicleEntry}
+                  disabled={!activeId || chronicleLoading}
+                >
+                  <Plus size={16} />
+                  Nowy wpis
+                </button>
+              </section>
+
+              <section className="panel">
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(210px, 270px) minmax(0, 1fr)',
+                    gap: 22,
+                    alignItems: 'stretch',
+                  }}
+                >
+                  <aside
+                    style={{
+                      position: 'relative',
+                      minHeight: 650,
+                      padding: '18px 10px 18px 6px',
+                      borderRight: '1px solid rgba(184,139,64,.32)',
+                    }}
+                  >
+                    <div className="panel-title" style={{ marginBottom: 18 }}>
+                      <ScrollText size={17} />
+                      Oś czasu
+                    </div>
+
+                    <div
+                      aria-hidden="true"
+                      style={{
+                        position: 'absolute',
+                        left: 38,
+                        top: 64,
+                        bottom: 24,
+                        width: 2,
+                        background:
+                          'linear-gradient(#6e4a1c, #d0a252 45%, #6e4a1c)',
+                        opacity: .72,
+                      }}
+                    />
+
+                    <div style={{ display: 'grid', gap: 8, position: 'relative' }}>
+                      {chronicleEntries.map((entry, index) => {
+                        const previous = chronicleEntries[index - 1]
+                        const showSeason = !previous || previous.season !== entry.season
+                        const selected = selectedChronicle?.id === entry.id
+
+                        return (
+                          <div key={entry.id}>
+                            {showSeason && (
+                              <div
+                                style={{
+                                  margin: '10px 0 8px 55px',
+                                  color: '#d2ad68',
+                                  fontFamily: 'Georgia, serif',
+                                  fontWeight: 800,
+                                  letterSpacing: '.08em',
+                                  textTransform: 'uppercase',
+                                  fontSize: 12,
+                                }}
+                              >
+                                {entry.season}
+                              </div>
+                            )}
+                            <button
+                              className={selected ? 'primary' : 'secondary'}
+                              onClick={() => setSelectedChronicleId(entry.id)}
+                              style={{
+                                position: 'relative',
+                                width: '100%',
+                                minHeight: 54,
+                                padding: '8px 8px 8px 58px',
+                                textAlign: 'left',
+                                justifyContent: 'flex-start',
+                              }}
+                            >
+                              <span
+                                style={{
+                                  position: 'absolute',
+                                  left: 25,
+                                  top: '50%',
+                                  width: selected ? 16 : 12,
+                                  height: selected ? 16 : 12,
+                                  borderRadius: '50%',
+                                  transform: 'translate(-50%, -50%)',
+                                  background: selected ? '#d6a64e' : '#17130e',
+                                  border: '2px solid #c49443',
+                                  boxShadow: '0 0 0 3px rgba(20,15,9,.9)',
+                                }}
+                              />
+                              <span style={{ display: 'grid', gap: 2 }}>
+                                <strong>Dzień {entry.worldDay}</strong>
+                                <span style={{ fontSize: 11, opacity: .78 }}>
+                                  Sesja {entry.sessionNumber}
+                                </span>
+                              </span>
+                            </button>
+                          </div>
+                        )
+                      })}
+
+                      {!chronicleLoading && chronicleEntries.length === 0 && (
+                        <div className="muted" style={{ padding: '20px 12px 20px 56px' }}>
+                          Kronika jest jeszcze pusta.
+                        </div>
+                      )}
+                    </div>
+                  </aside>
+
+                  <article
+                    style={{
+                      minHeight: 650,
+                      padding: '42px clamp(28px, 5vw, 72px)',
+                      color: '#352414',
+                      backgroundImage: `linear-gradient(rgba(220,190,128,.12), rgba(124,78,30,.12)), url(${import.meta.env.BASE_URL}map-parchment.jpg)`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      border: '1px solid rgba(101,63,25,.65)',
+                      borderRadius: 5,
+                      boxShadow:
+                        '0 15px 32px rgba(0,0,0,.48), inset 0 0 28px rgba(89,51,17,.18)',
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                    }}
+                  >
+                    {selectedChronicle ? (
+                      <>
+                        <div
+                          style={{
+                            textAlign: 'center',
+                            borderBottom: '1px solid rgba(83,52,25,.35)',
+                            paddingBottom: 20,
+                            marginBottom: 28,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 800,
+                              letterSpacing: '.14em',
+                              textTransform: 'uppercase',
+                              opacity: .72,
+                            }}
+                          >
+                            {selectedChronicle.season} • Dzień {selectedChronicle.worldDay} • Sesja {selectedChronicle.sessionNumber}
+                          </div>
+                          <h2
+                            style={{
+                              margin: '10px 0 0',
+                              fontSize: 'clamp(26px, 3vw, 38px)',
+                              color: '#3b2612',
+                            }}
+                          >
+                            {selectedChronicle.title}
+                          </h2>
+                        </div>
+
+                        <div
+                          style={{
+                            whiteSpace: 'pre-wrap',
+                            fontSize: 18,
+                            lineHeight: 1.85,
+                            letterSpacing: '.01em',
+                          }}
+                        >
+                          {selectedChronicle.content}
+                        </div>
+
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: 10,
+                            justifyContent: 'flex-end',
+                            marginTop: 34,
+                            paddingTop: 18,
+                            borderTop: '1px solid rgba(83,52,25,.25)',
+                          }}
+                        >
+                          <button
+                            className="secondary"
+                            onClick={() => openEditChronicleEntry(selectedChronicle)}
+                          >
+                            <Pencil size={15} />
+                            Edytuj wpis
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div
+                        style={{
+                          minHeight: 520,
+                          display: 'grid',
+                          placeItems: 'center',
+                          textAlign: 'center',
+                        }}
+                      >
+                        <div>
+                          <ScrollText size={46} style={{ opacity: .55 }} />
+                          <h2>Kronika czeka na pierwszy zapis</h2>
+                          <p>Dodaj pierwszy dzień przygody.</p>
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                </div>
+              </section>
+            </>
+          )}
+
+          {showChronicleEditor && (
+            <Modal
+              onClose={() => {
+                setShowChronicleEditor(false)
+                setEditingChronicle(null)
+              }}
+            >
+              <div style={{ display: 'grid', gap: 14 }}>
+                <div>
+                  <p className="eyebrow" style={{ marginBottom: 4 }}>KRONIKA</p>
+                  <h2 style={{ margin: 0 }}>
+                    {editingChronicle ? 'Edytuj wpis' : 'Nowy wpis'}
+                  </h2>
+                </div>
+
+                <label>
+                  Tytuł
+                  <input
+                    value={chronicleTitle}
+                    onChange={e => setChronicleTitle(e.target.value)}
+                    placeholder="Np. W cieniu Wardenwood"
+                    maxLength={120}
+                  />
+                </label>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                    gap: 10,
+                  }}
+                >
+                  <label>
+                    Dzień
+                    <input
+                      type="number"
+                      min={1}
+                      value={chronicleDay}
+                      onChange={e => setChronicleDay(Number(e.target.value) || 1)}
+                    />
+                  </label>
+                  <label>
+                    Sesja
+                    <input
+                      type="number"
+                      min={1}
+                      value={chronicleSession}
+                      onChange={e => setChronicleSession(Number(e.target.value) || 1)}
+                    />
+                  </label>
+                  <label>
+                    Pora roku
+                    <select
+                      value={chronicleSeason}
+                      onChange={e => setChronicleSeason(e.target.value as ChronicleSeason)}
+                      style={themedSelectStyle}
+                    >
+                      {chronicleSeasons.map(season => (
+                        <option key={season} value={season}>{season}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <label>
+                  Treść kroniki
+                  <textarea
+                    value={chronicleContent}
+                    onChange={e => setChronicleContent(e.target.value)}
+                    placeholder="Opisz wydarzenia sesji..."
+                    rows={14}
+                    maxLength={12000}
+                  />
+                </label>
+
+                <div className="muted">
+                  Odnośniki @Postać i @Miejsce dodamy w KRONIKA-2.
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    className="primary"
+                    onClick={() => void saveChronicleEntry()}
+                    disabled={!chronicleTitle.trim() || !chronicleContent.trim()}
+                  >
+                    {editingChronicle ? 'Zapisz zmiany' : 'Dodaj do Kroniki'}
+                  </button>
+                  {editingChronicle && (
+                    <button
+                      className="secondary"
+                      onClick={() => void removeChronicleEntry(editingChronicle)}
+                    >
+                      <Trash2 size={15} />
+                      Usuń wpis
+                    </button>
+                  )}
+                </div>
               </div>
             </Modal>
           )}
