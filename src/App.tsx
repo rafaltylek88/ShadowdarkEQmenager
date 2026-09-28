@@ -10227,7 +10227,7 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">MAPA KAMPANII • MAP-1.3</p>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-1.4</p>
                   <h1>The Gloaming</h1>
                   <p>
                     Warstwa diagnostyczna siatki heksowej. Kliknij heks, aby
@@ -10321,16 +10321,16 @@ function App() {
                         const column = columnIndex + 1
                         const evenColumn = column % 2 === 0
                         const rowCount = evenColumn ? 11 : 10
-                        const centerX = 125 + columnIndex * 114
+                        const centerX = 125 + columnIndex * 112
                         const firstCenterY = evenColumn ? 109 : 175
 
                         return Array.from({ length: rowCount }, (_, rowIndex) => {
                           const row = rowIndex + 1
                           const centerY = firstCenterY + rowIndex * 132
                           const id = `H${String(column).padStart(2, '0')}${String(row).padStart(2, '0')}`
-                          const halfWidth = 76
+                          const halfWidth = 75
                           const halfHeight = 66
-                          const quarterWidth = 38
+                          const quarterWidth = 37.5
                           const points = [
                             `${centerX - quarterWidth},${centerY - halfHeight}`,
                             `${centerX + quarterWidth},${centerY - halfHeight}`,
@@ -10376,7 +10376,7 @@ function App() {
                 </div>
 
                 <p className="muted" style={{ marginTop: 10 }}>
-                  MAP-1.3 służy wyłącznie do kalibracji. Sprawdź szczególnie heksy
+                  MAP-1.4 służy wyłącznie do kalibracji. Sprawdź szczególnie heksy
                   przy lewej i prawej krawędzi oraz w górnych i dolnych rzędach.
                 </p>
               </section>
