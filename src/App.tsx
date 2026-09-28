@@ -10456,7 +10456,7 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">MAPA KAMPANII • MAP-6.1</p>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-6.2</p>
                   <h1>The Gloaming</h1>
                   <p>
                     Fog of War jest zapisany w Supabase i synchronizowany
@@ -10545,32 +10545,16 @@ function App() {
                 <div
                   style={{
                     position: 'relative',
-                    padding: '34px 34px 30px',
+                    padding: '92px 34px 34px 150px',
                     borderRadius: 14,
                     border: '1px solid rgba(180, 135, 60, 0.42)',
-                    background:
-                      'repeating-linear-gradient(0deg, rgba(18,9,4,.18) 0 2px, transparent 2px 48px), repeating-linear-gradient(90deg, rgba(115,73,34,.12) 0 1px, transparent 1px 140px), linear-gradient(100deg, #26140a, #543018 42%, #351c0e 72%, #211108)',
-                    backgroundSize: '100% 100%',
-                    boxShadow: 'inset 0 0 45px rgba(0,0,0,.58)',
+                    backgroundImage: `linear-gradient(rgba(18,10,5,.08), rgba(18,10,5,.08)), url(${import.meta.env.BASE_URL}map-tabletop.jpg)`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
+                    boxShadow: 'inset 0 0 52px rgba(0,0,0,.5)',
                   }}
                 >
-                  <img
-                    src={`${import.meta.env.BASE_URL}map-compass.svg`}
-                    alt=""
-                    aria-hidden="true"
-                    style={{
-                      position: 'absolute',
-                      right: 14,
-                      top: 8,
-                      width: 112,
-                      height: 112,
-                      zIndex: 5,
-                      transform: 'rotate(-7deg)',
-                      pointerEvents: 'none',
-                      filter: 'drop-shadow(0 10px 10px rgba(0,0,0,.55))',
-                    }}
-                  />
-
                   <div
                     style={{
                       display: 'grid',
@@ -10578,7 +10562,7 @@ function App() {
                       gap: 18,
                       alignItems: 'start',
                       overflowX: 'auto',
-                      paddingTop: 44,
+                      paddingTop: 18,
                     }}
                   >
                     <div
@@ -10587,11 +10571,11 @@ function App() {
                         width: '100%',
                         minWidth: 720,
                         aspectRatio: '2048 / 1523',
-                        border: '1px solid rgba(89,54,24,.8)',
-                        borderRadius: 4,
+                        border: '1px solid rgba(77,45,18,.7)',
+                        borderRadius: 3,
                         boxShadow:
-                          '0 16px 30px rgba(0,0,0,.62), 0 0 0 8px rgba(70,40,18,.28)',
-                        backgroundImage: `url(${import.meta.env.BASE_URL}map-parchment.svg)`,
+                          '0 18px 34px rgba(0,0,0,.68), 0 0 0 3px rgba(61,34,13,.18)',
+                        backgroundImage: `url(${import.meta.env.BASE_URL}map-parchment.jpg)`,
                         backgroundSize: 'cover',
                         overflow: 'hidden',
                       }}
@@ -10601,7 +10585,7 @@ function App() {
                       style={{
                         position: 'absolute',
                         inset: 0,
-                        backgroundImage: `url(${import.meta.env.BASE_URL}map-parchment.svg)`,
+                        backgroundImage: `url(${import.meta.env.BASE_URL}map-parchment.jpg)`,
                         backgroundSize: 'cover',
                         backgroundPosition: 'center',
                       }}
@@ -10617,6 +10601,7 @@ function App() {
                         objectFit: 'fill',
                         display: 'block',
                         mixBlendMode: 'multiply',
+                        filter: 'sepia(.08) contrast(1.04)',
                       }}
                     />
                     <svg
@@ -10870,7 +10855,7 @@ function App() {
                 </div>
 
                 <p className="muted" style={{ marginTop: 10 }}>
-                  MAP-6.1 • markery są wspólne i można je stawiać również na
+                  MAP-6.2 • markery są wspólne i można je stawiać również na
                   zakrytych heksach. Marker nie odkrywa mapy. MG może przy zapisie
                   markera pozostawić heks bez zmian, odkryć go albo zakryć.
                 </p>
