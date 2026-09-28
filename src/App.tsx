@@ -17,6 +17,7 @@ import {
   Hand,
   KeyRound,
   Menu,
+  Map,
   Package,
   Pencil,
   Plus,
@@ -151,6 +152,7 @@ const nav = [
   ['Postacie Fabularne', UserPlus],
   ['Zwierzęta', Beef],
   ['Bastiony', Castle],
+  ['Mapa', Map],
   ['Biblioteka', Package],
   ['Historia', ArrowRightLeft],
   ['Podsumowanie', Coins],
@@ -205,6 +207,9 @@ function App() {
 
   const [mobileNav, setMobileNav] = useState(false)
   const [activeView, setActiveView] = useState<(typeof nav)[number][0]>('Dashboard')
+  const [mapShowGrid, setMapShowGrid] = useState(true)
+  const [mapShowIds, setMapShowIds] = useState(true)
+  const [selectedHexId, setSelectedHexId] = useState<string | null>(null)
 
   const [message, setMessage] = useState<string | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
@@ -7022,7 +7027,7 @@ function App() {
             <Home size={16} />
 
             <span>
-              Etap 3AL.1 • kalkulator XP</span>
+              Etap MAP-1 • kalibracja mapy</span>
           </div>
 
         </aside>
@@ -10212,6 +10217,166 @@ function App() {
                     </article>
                   ))}
                 </div>
+              </section>
+            </>
+          )}
+
+          {activeView === 'Mapa' && (
+            <>
+              <section className="hero parchment-panel">
+                <div>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-1</p>
+                  <h1>The Gloaming</h1>
+                  <p>
+                    Warstwa diagnostyczna siatki heksowej. Kliknij heks, aby
+                    sprawdzić jego kod i położenie. Na tym etapie nic nie jest
+                    jeszcze zapisywane w Supabase.
+                  </p>
+                </div>
+              </section>
+
+              <section className="panel" style={{ marginTop: 16 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 10,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    marginBottom: 12,
+                  }}
+                >
+                  <button
+                    className={mapShowGrid ? 'primary' : 'secondary'}
+                    onClick={() => setMapShowGrid(value => !value)}
+                  >
+                    {mapShowGrid ? 'Siatka: WŁ.' : 'Siatka: WYŁ.'}
+                  </button>
+                  <button
+                    className={mapShowIds ? 'primary' : 'secondary'}
+                    onClick={() => setMapShowIds(value => !value)}
+                  >
+                    {mapShowIds ? 'ID heksów: WŁ.' : 'ID heksów: WYŁ.'}
+                  </button>
+                  <span className="muted">
+                    17 kolumn • 178 heksów • kod HKKWW
+                  </span>
+                </div>
+
+                {selectedHexId && (
+                  <div
+                    style={{
+                      marginBottom: 12,
+                      padding: '10px 12px',
+                      border: '1px solid rgba(190, 145, 65, 0.55)',
+                      borderRadius: 8,
+                      background: 'rgba(94, 66, 25, 0.18)',
+                    }}
+                  >
+                    Wybrany heks: <strong>{selectedHexId}</strong>
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    width: '100%',
+                    overflow: 'auto',
+                    borderRadius: 10,
+                    border: '1px solid rgba(180, 135, 60, 0.42)',
+                    background: '#11100d',
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      minWidth: 720,
+                      aspectRatio: '2048 / 1523',
+                    }}
+                  >
+                    <img
+                      src={`${import.meta.env.BASE_URL}gloaming-hex-map.png`}
+                      alt="Mapa The Gloaming"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'fill',
+                        display: 'block',
+                      }}
+                    />
+                    <svg
+                      viewBox="0 0 2048 1523"
+                      preserveAspectRatio="none"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                      }}
+                    >
+                      {Array.from({ length: 17 }, (_, columnIndex) => {
+                        const column = columnIndex + 1
+                        const evenColumn = column % 2 === 0
+                        const rowCount = evenColumn ? 11 : 10
+                        const centerX = 108 + columnIndex * 114
+                        const firstCenterY = evenColumn ? 60 : 126
+
+                        return Array.from({ length: rowCount }, (_, rowIndex) => {
+                          const row = rowIndex + 1
+                          const centerY = firstCenterY + rowIndex * 132
+                          const id = `H${String(column).padStart(2, '0')}${String(row).padStart(2, '0')}`
+                          const halfWidth = 76
+                          const halfHeight = 66
+                          const quarterWidth = 38
+                          const points = [
+                            `${centerX - quarterWidth},${centerY - halfHeight}`,
+                            `${centerX + quarterWidth},${centerY - halfHeight}`,
+                            `${centerX + halfWidth},${centerY}`,
+                            `${centerX + quarterWidth},${centerY + halfHeight}`,
+                            `${centerX - quarterWidth},${centerY + halfHeight}`,
+                            `${centerX - halfWidth},${centerY}`,
+                          ].join(' ')
+
+                          return (
+                            <g key={id}>
+                              <polygon
+                                points={points}
+                                fill={selectedHexId === id ? 'rgba(207, 161, 72, 0.24)' : 'transparent'}
+                                stroke={mapShowGrid ? 'rgba(184, 126, 31, 0.9)' : 'transparent'}
+                                strokeWidth={mapShowGrid ? 3 : 0}
+                                vectorEffect="non-scaling-stroke"
+                                onClick={() => setSelectedHexId(id)}
+                                style={{ cursor: 'pointer' }}
+                              />
+                              {mapShowIds && (
+                                <text
+                                  x={centerX}
+                                  y={centerY + 5}
+                                  textAnchor="middle"
+                                  fontSize="19"
+                                  fontWeight="700"
+                                  fill="#6b3f00"
+                                  stroke="rgba(255, 244, 211, 0.96)"
+                                  strokeWidth="4"
+                                  paintOrder="stroke"
+                                  pointerEvents="none"
+                                >
+                                  {id}
+                                </text>
+                              )}
+                            </g>
+                          )
+                        })
+                      })}
+                    </svg>
+                  </div>
+                </div>
+
+                <p className="muted" style={{ marginTop: 10 }}>
+                  MAP-1 służy wyłącznie do kalibracji. Sprawdź szczególnie heksy
+                  przy lewej i prawej krawędzi oraz w górnych i dolnych rzędach.
+                </p>
               </section>
             </>
           )}
