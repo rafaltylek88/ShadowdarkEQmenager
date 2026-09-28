@@ -32,6 +32,11 @@ import {
 
 import { supabase, supabaseEnabled } from './lib/supabase'
 import {
+  hideCampaignHex,
+  loadRevealedCampaignHexes,
+  revealCampaignHex,
+} from './lib/mapState'
+import {
   createRemoteCampaign,
   joinCampaign,
   loadRemoteCampaigns,
@@ -212,6 +217,7 @@ function App() {
   const [mapRevealedHexes, setMapRevealedHexes] = useState<Set<string>>(
     () => new Set()
   )
+  const [mapLoading, setMapLoading] = useState(false)
   const [selectedHexId, setSelectedHexId] = useState<string | null>(null)
 
   const [message, setMessage] = useState<string | null>(null)
@@ -476,6 +482,24 @@ function App() {
       setCampaignsLoading(false)
     }
   }, [isCloudMode])
+
+  const refreshMapHexes = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setMapRevealedHexes(new Set())
+      return
+    }
+
+    setMapLoading(true)
+    try {
+      const ids = await loadRevealedCampaignHexes(activeId)
+      setMapRevealedHexes(new Set(ids))
+    } catch (e: any) {
+      console.error('LOAD MAP HEXES ERROR:', e)
+      setError(e?.message || e?.details || 'Nie udało się pobrać stanu mapy.')
+    } finally {
+      setMapLoading(false)
+    }
+  }, [activeId, isCloudMode])
 
   const refreshCharacters = useCallback(async () => {
     if (!activeId || !isCloudMode) {
@@ -860,6 +884,10 @@ function App() {
   }, [session, refreshCampaigns])
 
   useEffect(() => {
+    refreshMapHexes()
+  }, [refreshMapHexes])
+
+  useEffect(() => {
     refreshCharacters()
   }, [refreshCharacters])
 
@@ -1193,9 +1221,68 @@ function App() {
   }, [session, activeId, refreshLight])
 
 
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+
+    const sb = supabase
+    const channel = sb
+      .channel(`campaign-map-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'campaign_map_hexes',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        refreshMapHexes
+      )
+      .subscribe()
+
+    return () => {
+      sb.removeChannel(channel)
+    }
+  }, [session, activeId, refreshMapHexes])
+
   const active =
     campaigns.find(c => c.id === activeId) ??
     campaigns[0]
+
+  const canManageMap =
+    active?.role === 'owner' || active?.role === 'gm'
+
+  async function toggleCampaignHex(id: string) {
+    if (!activeId || !canManageMap || mapLoading) return
+
+    const wasRevealed = mapRevealedHexes.has(id)
+
+    setSelectedHexId(id)
+    setMapRevealedHexes(current => {
+      const next = new Set(current)
+      if (wasRevealed) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+    try {
+      if (wasRevealed) await hideCampaignHex(activeId, id)
+      else await revealCampaignHex(activeId, id)
+      setError(null)
+    } catch (e: any) {
+      // rollback optimistic UI
+      setMapRevealedHexes(current => {
+        const next = new Set(current)
+        if (wasRevealed) next.add(id)
+        else next.delete(id)
+        return next
+      })
+      setError(
+        e?.message ||
+          e?.details ||
+          'Nie udało się zapisać zmiany heksa.'
+      )
+    }
+  }
 
   const characterById = useMemo(
     () => new Map(characters.map(character => [character.id, character])),
@@ -10230,12 +10317,12 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">MAPA KAMPANII • MAP-2</p>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-3</p>
                   <h1>The Gloaming</h1>
                   <p>
-                    Fog of War działa lokalnie. Wszystkie heksy są domyślnie
-                    zakryte. W trybie GM kliknij heks, aby go odkryć albo
-                    ponownie ukryć. MAP-3 zapisze ten stan w Supabase.
+                    Fog of War jest zapisany w Supabase i synchronizowany
+                    między użytkownikami kampanii. GM lub właściciel odkrywa
+                    heksy, a gracze widzą zmianę bez odświeżania strony.
                   </p>
                 </div>
               </section>
@@ -10251,10 +10338,22 @@ function App() {
                   }}
                 >
                   <button
-                    className={mapGmMode ? 'primary' : 'secondary'}
-                    onClick={() => setMapGmMode(value => !value)}
+                    className={mapGmMode && canManageMap ? 'primary' : 'secondary'}
+                    onClick={() => {
+                      if (canManageMap) setMapGmMode(value => !value)
+                    }}
+                    disabled={!canManageMap}
+                    title={
+                      canManageMap
+                        ? 'Przełącz tryb edycji mapy'
+                        : 'Tylko GM lub właściciel kampanii może odkrywać heksy'
+                    }
                   >
-                    {mapGmMode ? 'Tryb GM: WŁ.' : 'Podgląd gracza'}
+                    {canManageMap
+                      ? mapGmMode
+                        ? 'Tryb GM: WŁ.'
+                        : 'Podgląd gracza'
+                      : 'Podgląd gracza'}
                   </button>
                   <button
                     className={mapDiagnosticMode ? 'primary' : 'secondary'}
@@ -10264,42 +10363,15 @@ function App() {
                       ? 'Diagnostyka: WŁ.'
                       : 'Diagnostyka: WYŁ.'}
                   </button>
-                  {mapGmMode && (
-                    <>
-                      <button
-                        className="secondary"
-                        onClick={() => {
-                          const allHexes = new Set<string>()
-                          for (let column = 1; column <= 17; column += 1) {
-                            const rowCount = column % 2 === 0 ? 11 : 10
-                            for (let row = 1; row <= rowCount; row += 1) {
-                              allHexes.add(
-                                `H${String(column).padStart(2, '0')}${String(row).padStart(2, '0')}`
-                              )
-                            }
-                          }
-                          setMapRevealedHexes(allHexes)
-                        }}
-                      >
-                        Odkryj wszystkie
-                      </button>
-                      <button
-                        className="secondary"
-                        onClick={() => {
-                          setMapRevealedHexes(new Set())
-                          setSelectedHexId(null)
-                        }}
-                      >
-                        Ukryj wszystkie
-                      </button>
-                    </>
+                  {mapLoading && (
+                    <span className="muted">Synchronizacja mapy…</span>
                   )}
                   <span className="muted">
                     Odkryte: {mapRevealedHexes.size}/178 • kod HKKWW
                   </span>
                 </div>
 
-                {mapGmMode && selectedHexId && (
+                {canManageMap && mapGmMode && selectedHexId && (
                   <div
                     style={{
                       marginBottom: 12,
@@ -10403,31 +10475,28 @@ function App() {
                                     ? selectedHexId === id && mapGmMode
                                       ? 'rgba(207, 161, 72, 0.18)'
                                       : 'transparent'
-                                    : mapGmMode
+                                    : canManageMap && mapGmMode
                                       ? 'rgba(17, 16, 13, 0.88)'
                                       : '#11100d'
                                 }
                                 stroke={
                                   mapDiagnosticMode
                                     ? 'rgba(184, 126, 31, 0.95)'
-                                    : mapGmMode && !revealed
+                                    : canManageMap && mapGmMode && !revealed
                                       ? 'rgba(128, 101, 55, 0.48)'
                                       : 'transparent'
                                 }
                                 strokeWidth={mapDiagnosticMode ? 3 : 1.5}
                                 vectorEffect="non-scaling-stroke"
                                 onClick={() => {
-                                  if (!mapGmMode) return
-                                  setSelectedHexId(id)
-                                  setMapRevealedHexes(current => {
-                                    const next = new Set(current)
-                                    if (next.has(id)) next.delete(id)
-                                    else next.add(id)
-                                    return next
-                                  })
+                                  if (!canManageMap || !mapGmMode) return
+                                  void toggleCampaignHex(id)
                                 }}
                                 style={{
-                                  cursor: mapGmMode ? 'pointer' : 'default',
+                                  cursor:
+                                    canManageMap && mapGmMode
+                                      ? 'pointer'
+                                      : 'default',
                                 }}
                               />
                               {mapDiagnosticMode && (
@@ -10459,9 +10528,9 @@ function App() {
                 </div>
 
                 <p className="muted" style={{ marginTop: 10 }}>
-                  MAP-2 • stan odkrycia jest na razie lokalny i resetuje się
-                  po odświeżeniu strony. Tryb diagnostyczny pokazuje granice
-                  oraz kody heksów. Podgląd gracza nie pozwala zmieniać mapy.
+                  MAP-3 • odkryte heksy są zapisywane w Supabase i
+                  synchronizowane realtime. Tryb diagnostyczny pokazuje granice
+                  oraz kody heksów. Gracze mają wyłącznie podgląd mapy.
                 </p>
               </section>
             </>
