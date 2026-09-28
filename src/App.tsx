@@ -213,7 +213,11 @@ function App() {
   const [mobileNav, setMobileNav] = useState(false)
   const [activeView, setActiveView] = useState<(typeof nav)[number][0]>('Dashboard')
   const [mapDiagnosticMode, setMapDiagnosticMode] = useState(false)
-  const [mapGmMode, setMapGmMode] = useState(true)
+  const [mapGmMode, setMapGmMode] = useState(false)
+  const [mapGmUnlocked, setMapGmUnlocked] = useState(false)
+  const [showMapGmCode, setShowMapGmCode] = useState(false)
+  const [mapGmCode, setMapGmCode] = useState('')
+  const [mapGmCodeError, setMapGmCodeError] = useState(false)
   const [mapRevealedHexes, setMapRevealedHexes] = useState<Set<string>>(
     () => new Set()
   )
@@ -1248,8 +1252,7 @@ function App() {
     campaigns.find(c => c.id === activeId) ??
     campaigns[0]
 
-  const canManageMap =
-    active?.role === 'owner' || active?.role === 'gm'
+  const canManageMap = mapGmUnlocked
 
   async function toggleCampaignHex(id: string) {
     if (!activeId || !canManageMap || mapLoading) return
@@ -10317,12 +10320,12 @@ function App() {
             <>
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">MAPA KAMPANII • MAP-3</p>
+                  <p className="eyebrow">MAPA KAMPANII • MAP-4</p>
                   <h1>The Gloaming</h1>
                   <p>
                     Fog of War jest zapisany w Supabase i synchronizowany
-                    między użytkownikami kampanii. GM lub właściciel odkrywa
-                    heksy, a gracze widzą zmianę bez odświeżania strony.
+                    między użytkownikami kampanii. Narzędzia MG odblokowuje
+                    stały kod dostępu, a gracze widzą zmiany bez odświeżania strony.
                   </p>
                 </div>
               </section>
@@ -10338,22 +10341,22 @@ function App() {
                   }}
                 >
                   <button
-                    className={mapGmMode && canManageMap ? 'primary' : 'secondary'}
+                    className={mapGmMode && mapGmUnlocked ? 'primary' : 'secondary'}
                     onClick={() => {
-                      if (canManageMap) setMapGmMode(value => !value)
+                      if (!mapGmUnlocked) {
+                        setMapGmCode('')
+                        setMapGmCodeError(false)
+                        setShowMapGmCode(true)
+                        return
+                      }
+                      setMapGmMode(value => !value)
                     }}
-                    disabled={!canManageMap}
-                    title={
-                      canManageMap
-                        ? 'Przełącz tryb edycji mapy'
-                        : 'Tylko GM lub właściciel kampanii może odkrywać heksy'
-                    }
                   >
-                    {canManageMap
+                    {mapGmUnlocked
                       ? mapGmMode
-                        ? 'Tryb GM: WŁ.'
+                        ? 'Tryb MG: WŁ.'
                         : 'Podgląd gracza'
-                      : 'Podgląd gracza'}
+                      : 'Tryb MG'}
                   </button>
                   <button
                     className={mapDiagnosticMode ? 'primary' : 'secondary'}
@@ -10528,12 +10531,74 @@ function App() {
                 </div>
 
                 <p className="muted" style={{ marginTop: 10 }}>
-                  MAP-3 • odkryte heksy są zapisywane w Supabase i
-                  synchronizowane realtime. Tryb diagnostyczny pokazuje granice
-                  oraz kody heksów. Gracze mają wyłącznie podgląd mapy.
+                  MAP-4 • odkryte heksy są zapisywane w Supabase i
+                  synchronizowane realtime. Narzędzia MG wymagają kodu dostępu.
+                  Tryb diagnostyczny pokazuje granice oraz kody heksów.
                 </p>
               </section>
             </>
+          )}
+
+          {showMapGmCode && (
+            <Modal
+              title="Odblokuj tryb MG"
+              onClose={() => {
+                setShowMapGmCode(false)
+                setMapGmCode('')
+                setMapGmCodeError(false)
+              }}
+            >
+              <div style={{ display: 'grid', gap: 12 }}>
+                <label>
+                  Kod MG
+                  <input
+                    type="password"
+                    value={mapGmCode}
+                    autoFocus
+                    onChange={e => {
+                      setMapGmCode(e.target.value)
+                      setMapGmCodeError(false)
+                    }}
+                    onKeyDown={e => {
+                      if (e.key !== 'Enter') return
+                      if (mapGmCode === 'MG2026Shadow') {
+                        setMapGmUnlocked(true)
+                        setMapGmMode(true)
+                        setShowMapGmCode(false)
+                        setMapGmCode('')
+                        setMapGmCodeError(false)
+                      } else {
+                        setMapGmCodeError(true)
+                      }
+                    }}
+                    placeholder="Wpisz kod MG"
+                  />
+                </label>
+
+                {mapGmCodeError && (
+                  <div style={{ color: '#d88f72', fontWeight: 700 }}>
+                    Nieprawidłowy kod MG.
+                  </div>
+                )}
+
+                <button
+                  className="primary"
+                  onClick={() => {
+                    if (mapGmCode === 'MG2026Shadow') {
+                      setMapGmUnlocked(true)
+                      setMapGmMode(true)
+                      setShowMapGmCode(false)
+                      setMapGmCode('')
+                      setMapGmCodeError(false)
+                    } else {
+                      setMapGmCodeError(true)
+                    }
+                  }}
+                >
+                  Odblokuj tryb MG
+                </button>
+              </div>
+            </Modal>
           )}
 
           {activeView === 'Historia' && (
