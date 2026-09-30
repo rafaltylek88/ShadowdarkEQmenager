@@ -2956,12 +2956,12 @@ function App() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `shadowdark-backup-${active.name.replace(/[^a-z0-9-_]+/gi, '-')}-${new Date().toISOString().slice(0,10)}.json`
+    a.download = `shadowdark-kopia-zapasowa-${active.name.replace(/[^a-z0-9-_]+/gi, '-')}-${new Date().toISOString().slice(0,10)}.json`
     document.body.appendChild(a)
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
-    flash('Utworzono pełny plik backupu kampanii.', 'other')
+    flash('Utworzono plik kopii zapasowej kampanii.', 'other')
   }
 
   type LightChoice = {
@@ -7707,6 +7707,15 @@ function App() {
             <UserPlus size={16} />
             Dołącz kodem
           </button>
+            <button
+              className="campaign-action"
+              onClick={downloadCampaignBackup}
+              disabled={!activeId}
+              title="Zapisz bieżący stan kampanii do pliku JSON"
+            >
+              <Save size={16} />
+              Kopia zapasowa
+            </button>
 
           <nav>
             {nav.map(([label, Icon]) => (
@@ -8693,6 +8702,7 @@ function App() {
             </div>
 
           </section>
+
           <section
             className="panel"
             style={{
@@ -11726,17 +11736,6 @@ function App() {
                     ))}
                   </div>
                 )}
-              </section>
-
-              <section className="panel">
-                <div className="panel-title"><Save size={18} /> Backup kampanii</div>
-                <p className="muted">
-                  Zapisz bieżący stan kampanii do pliku JSON. Backup obejmuje również Cmentarz,
-                  Kronikę, mapę i Skrzynię ze skarbami.
-                </p>
-                <button className="secondary" onClick={downloadCampaignBackup}>
-                  <Download size={16} /> Utwórz backup
-                </button>
               </section>
             </>
           )}
