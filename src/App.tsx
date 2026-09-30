@@ -299,6 +299,16 @@ function App() {
   const [deathSession, setDeathSession] = useState('')
   const [deathCause, setDeathCause] = useState('')
 
+  const deadCharacterIds = useMemo(
+    () => new Set(characterMemorials.map(memorial => memorial.characterId)),
+    [characterMemorials]
+  )
+
+  const activeCharacters = useMemo(
+    () => characters.filter(character => !deadCharacterIds.has(character.id)),
+    [characters, deadCharacterIds]
+  )
+
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
   const [showCharacter, setShowCharacter] = useState(false)
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
@@ -4299,16 +4309,6 @@ function App() {
       setError(e?.message || e?.details || 'Nie udało się przesłać portretu.')
     }
   }
-
-  const deadCharacterIds = useMemo(
-    () => new Set(characterMemorials.map(memorial => memorial.characterId)),
-    [characterMemorials]
-  )
-
-  const activeCharacters = useMemo(
-    () => characters.filter(character => !deadCharacterIds.has(character.id)),
-    [characters, deadCharacterIds]
-  )
 
   const cemeteryCharacters = useMemo(
     () =>
@@ -11523,7 +11523,7 @@ function App() {
                               <p className="eyebrow">† ARCHIWUM</p>
                               <h3 style={{ margin: 0 }}>† {character.name}</h3>
                               <p className="muted" style={{ margin: '5px 0 0' }}>
-                                {character.characterClass || 'Postać'} • Poziom {character.level}
+                                {character.className || 'Postać'} • Poziom {character.level}
                               </p>
                             </div>
                             <Skull size={28} style={{ opacity: .6 }} />
