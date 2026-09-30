@@ -7708,7 +7708,7 @@ function App() {
             Dołącz kodem
           </button>
             <button
-              className="campaign-action"
+              className="secondary full"
               onClick={downloadCampaignBackup}
               disabled={!activeId}
               title="Zapisz bieżący stan kampanii do pliku JSON"
@@ -8084,6 +8084,29 @@ function App() {
                 </div>
               )}
             </div>
+
+<section
+            className="panel"
+            style={{
+              marginTop: 18,
+              minHeight: 230,
+              position: 'relative',
+              overflow: 'hidden',
+              cursor: 'pointer',
+              background:
+                `linear-gradient(90deg, rgba(12,9,5,.96), rgba(12,9,5,.48)), url(${import.meta.env.BASE_URL}treasure-chest.jpg) center / cover no-repeat`,
+            }}
+            onClick={() => setActiveView('Skrzynia ze skarbami')}
+          >
+            <div style={{ position: 'relative', zIndex: 1, maxWidth: 520, padding: 20 }}>
+              <p className="eyebrow">NIEPODZIELONE ŁUPY</p>
+              <h2 style={{ marginTop: 4 }}>Skrzynia ze skarbami</h2>
+              <p>Przechowuj zdobyte skarby, zanim zostaną rozdzielone pomiędzy żywych członków drużyny.</p>
+              <strong>{treasureItems.reduce((sum, item) => sum + item.quantity, 0)} przedmiotów</strong>
+            </div>
+          </section>
+
+
 
 
             <div
@@ -8703,26 +8726,7 @@ function App() {
 
           </section>
 
-          <section
-            className="panel"
-            style={{
-              marginTop: 18,
-              minHeight: 230,
-              position: 'relative',
-              overflow: 'hidden',
-              cursor: 'pointer',
-              background:
-                `linear-gradient(90deg, rgba(12,9,5,.96), rgba(12,9,5,.48)), url(${import.meta.env.BASE_URL}treasure-chest.jpg) center / cover no-repeat`,
-            }}
-            onClick={() => setActiveView('Skrzynia ze skarbami')}
-          >
-            <div style={{ position: 'relative', zIndex: 1, maxWidth: 520, padding: 20 }}>
-              <p className="eyebrow">NIEPODZIELONE ŁUPY</p>
-              <h2 style={{ marginTop: 4 }}>Skrzynia ze skarbami</h2>
-              <p>Przechowuj zdobyte skarby, zanim zostaną rozdzielone pomiędzy żywych członków drużyny.</p>
-              <strong>{treasureItems.reduce((sum, item) => sum + item.quantity, 0)} przedmiotów</strong>
-            </div>
-          </section>
+          
 
             </>
           )}
