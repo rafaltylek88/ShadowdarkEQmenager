@@ -23,6 +23,7 @@ import {
   Plus,
   Shield,
   ScrollText,
+  Skull,
   Trash2,
   Truck,
   Utensils,
@@ -49,6 +50,12 @@ import {
   updateChronicleEntry,
 } from './lib/chronicle'
 import type { ChronicleEntry, ChronicleSeason } from './lib/chronicle'
+import {
+  loadCharacterMemorials,
+  markCharacterDead,
+  restoreCharacterFromCemetery,
+} from './lib/cemetery'
+import type { CharacterMemorial } from './lib/cemetery'
 import {
   createRemoteCampaign,
   joinCampaign,
@@ -173,6 +180,7 @@ const nav = [
   ['Mapa', MapIcon],
   ['Biblioteka', Package],
   ['Kronika', ScrollText],
+  ['Cmentarz', Skull],
   ['Historia', ArrowRightLeft],
   ['Podsumowanie', Coins],
 ] as const
@@ -283,6 +291,14 @@ function App() {
 
   const [characters, setCharacters] = useState<Character[]>([])
   const [charactersLoading, setCharactersLoading] = useState(false)
+  const [characterMemorials, setCharacterMemorials] = useState<CharacterMemorial[]>([])
+  const [cemeteryLoading, setCemeteryLoading] = useState(false)
+  const [showDeathModal, setShowDeathModal] = useState(false)
+  const [deathCharacter, setDeathCharacter] = useState<Character | null>(null)
+  const [deathDay, setDeathDay] = useState('')
+  const [deathSession, setDeathSession] = useState('')
+  const [deathCause, setDeathCause] = useState('')
+
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
   const [showCharacter, setShowCharacter] = useState(false)
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
@@ -742,6 +758,22 @@ function App() {
     }
   }, [activeId, isCloudMode])
 
+  const refreshCemetery = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setCharacterMemorials([])
+      return
+    }
+    setCemeteryLoading(true)
+    try {
+      setCharacterMemorials(await loadCharacterMemorials(activeId))
+    } catch (e: any) {
+      console.error('LOAD CEMETERY ERROR:', e)
+      setError(e?.message || e?.details || 'Nie udało się pobrać Cmentarza.')
+    } finally {
+      setCemeteryLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
   const refreshCharacters = useCallback(async () => {
     if (!activeId || !isCloudMode) {
       setCharacters([])
@@ -1157,6 +1189,29 @@ function App() {
   useEffect(() => {
     refreshMapMarkers()
   }, [refreshMapMarkers])
+
+  useEffect(() => {
+    refreshCemetery()
+  }, [refreshCemetery])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+    const channel = sb
+      .channel(`campaign-cemetery-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'character_memorials',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        refreshCemetery
+      )
+      .subscribe()
+    return () => { sb.removeChannel(channel) }
+  }, [session, activeId, refreshCemetery])
 
   useEffect(() => {
     refreshCharacters()
@@ -2528,7 +2583,7 @@ function App() {
 
   const expeditionMembers = useMemo<ExpeditionMember[]>(
     () => [
-      ...characters.map(character => ({
+      ...activeCharacters.map(character => ({
         key: `character:${character.id}`,
         type: 'character' as MemberType,
         id: character.id,
@@ -2548,7 +2603,7 @@ function App() {
       })),
     ],
     [
-      characters,
+      activeCharacters,
       npcs,
       characterRationCounts,
       npcRationCounts,
@@ -2924,7 +2979,7 @@ function App() {
 
   const expeditionCarrierOptions = useMemo(
     () => [
-      ...characters.map(character => ({
+      ...activeCharacters.map(character => ({
         key: `character:${character.id}`,
         type: 'character' as LightMemberType,
         id: character.id,
@@ -2937,7 +2992,7 @@ function App() {
         name: npc.name,
       })),
     ],
-    [characters, npcs]
+    [activeCharacters, npcs]
   )
 
   const activeLightCarrierKey =
@@ -4245,28 +4300,91 @@ function App() {
     }
   }
 
+  const deadCharacterIds = useMemo(
+    () => new Set(characterMemorials.map(memorial => memorial.characterId)),
+    [characterMemorials]
+  )
+
+  const activeCharacters = useMemo(
+    () => characters.filter(character => !deadCharacterIds.has(character.id)),
+    [characters, deadCharacterIds]
+  )
+
+  const cemeteryCharacters = useMemo(
+    () =>
+      characters
+        .filter(character => deadCharacterIds.has(character.id))
+        .sort((a, b) => a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' })),
+    [characters, deadCharacterIds]
+  )
+
+  function memorialForCharacter(characterId: string) {
+    return characterMemorials.find(memorial => memorial.characterId === characterId) ?? null
+  }
+
+  function openDeathCharacter(character: Character) {
+    const latestChronicle = chronicleEntries[chronicleEntries.length - 1]
+    setDeathCharacter(character)
+    setDeathDay(latestChronicle ? String(latestChronicle.worldDay) : '')
+    setDeathSession(latestChronicle ? String(latestChronicle.sessionNumber) : '')
+    setDeathCause('')
+    setShowDeathModal(true)
+  }
+
+  async function confirmCharacterDeath() {
+    if (!activeId || !deathCharacter) return
+    try {
+      await markCharacterDead(activeId, deathCharacter.id, {
+        deathDay: deathDay ? Math.max(1, Number(deathDay)) : null,
+        deathSession: deathSession ? Math.max(1, Number(deathSession)) : null,
+        deathCause: deathCause.trim() || null,
+      })
+      if (selectedCharacterId === deathCharacter.id) setSelectedCharacterId(null)
+      setShowDeathModal(false)
+      setDeathCharacter(null)
+      await refreshCemetery()
+      flash(`${deathCharacter.name} został przeniesiony na Cmentarz.`, 'character')
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się przenieść postaci na Cmentarz.')
+    }
+  }
+
+  async function restoreDeadCharacter(character: Character) {
+    const confirmed = window.confirm(
+      `Przywrócić postać „${character.name}” do aktywnej drużyny?`
+    )
+    if (!confirmed) return
+    try {
+      await restoreCharacterFromCemetery(character.id)
+      await refreshCemetery()
+      flash(`${character.name} wrócił do aktywnej drużyny.`, 'character')
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się przywrócić postaci.')
+    }
+  }
+
   const sortedCharacters = useMemo(
     () =>
-      [...characters].sort((a, b) =>
+      [...activeCharacters].sort((a, b) =>
         a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' })
       ),
-    [characters]
+    [activeCharacters]
   )
 
   const visibleCharacters = useMemo(
     () =>
       selectedCharacterId
-        ? characters.filter(character => character.id === selectedCharacterId)
-        : characters,
-    [characters, selectedCharacterId]
+        ? activeCharacters.filter(character => character.id === selectedCharacterId)
+        : activeCharacters,
+    [activeCharacters, selectedCharacterId]
   )
 
   const selectedCharacter = useMemo(
     () =>
       selectedCharacterId
-        ? characters.find(character => character.id === selectedCharacterId) ?? null
+        ? activeCharacters.find(character => character.id === selectedCharacterId) ?? null
         : null,
-    [characters, selectedCharacterId]
+    [activeCharacters, selectedCharacterId]
   )
 
   function openCharacterCard(characterId: string) {
@@ -5243,7 +5361,7 @@ function App() {
 
   const inventoryDestinations = useMemo(
     () => [
-      ...characters.map(character => ({
+      ...activeCharacters.map(character => ({
         key: `character:${character.id}`,
         type: 'character' as InventoryOwnerType,
         id: character.id,
@@ -5276,7 +5394,7 @@ function App() {
           label: `${bastion.name} • Vault`,
         })),
     ],
-    [characters, npcs, animals, bastions, bastionUpgrades]
+    [activeCharacters, npcs, animals, bastions, bastionUpgrades]
   )
 
   function openTransferItem(
@@ -8240,7 +8358,7 @@ function App() {
 
               {charactersLoading ? (
                 <p className="muted">Ładowanie postaci…</p>
-              ) : characters.length === 0 ? (
+              ) : activeCharacters.length === 0 ? (
                 <div className="empty-state">
                   <p>W tej kampanii nie ma jeszcze żadnych postaci.</p>
                   <button className="primary" onClick={openNewCharacter}>
@@ -8250,7 +8368,7 @@ function App() {
                 </div>
               ) : (
                 <div className="entity-grid">
-                  {characters.map(character => {
+                  {activeCharacters.map(character => {
                     const maxSlots = Math.max(10, character.strength) + Math.max(0, character.bonusSlots)
                     const usedSlots = usedSlotsForCharacter(character.id)
                     const displayedUsedSlots = Number(usedSlots.toFixed(2))
@@ -8460,7 +8578,7 @@ function App() {
 
                   {charactersLoading || itemsLoading ? (
                     <p className="muted">Ładowanie danych…</p>
-                  ) : characters.length === 0 ? (
+                  ) : activeCharacters.length === 0 ? (
                     <div className="empty-state">
                       <p>W tej kampanii nie ma jeszcze żadnych postaci.</p>
                       <button className="primary" onClick={openNewCharacter}>
@@ -8529,6 +8647,15 @@ function App() {
                               >
                                 <Pencil size={15} />
                                 Edytuj kartę
+                              </button>
+
+                              <button
+                                className="secondary"
+                                onClick={() => openDeathCharacter(character)}
+                                style={{ color: '#b9b2a5' }}
+                              >
+                                <Skull size={15} />
+                                Martwy
                               </button>
 
                               <button
@@ -11347,6 +11474,160 @@ function App() {
             </Modal>
           )}
 
+          {activeView === 'Cmentarz' && (
+            <>
+              <section className="hero parchment-panel">
+                <div>
+                  <p className="eyebrow">CMENTARZ</p>
+                  <h1>Poległe postacie</h1>
+                  <p>
+                    Archiwum bohaterów, którzy zginęli podczas kampanii. Ich
+                    ekwipunek pozostaje dostępny do przekazania żyjącym.
+                  </p>
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="panel-title">
+                  <Skull size={18} />
+                  Cmentarz
+                  <span style={{ marginLeft: 'auto' }}>{cemeteryCharacters.length}</span>
+                </div>
+
+                {cemeteryLoading || charactersLoading || itemsLoading ? (
+                  <p className="muted">Ładowanie Cmentarza…</p>
+                ) : cemeteryCharacters.length === 0 ? (
+                  <div className="empty-state">
+                    <Skull size={42} style={{ opacity: .45 }} />
+                    <p>Cmentarz jest pusty.</p>
+                  </div>
+                ) : (
+                  <div className="entity-grid">
+                    {cemeteryCharacters.map(character => {
+                      const memorial = memorialForCharacter(character.id)
+                      const deadItems = itemsForCharacter(character.id)
+                      return (
+                        <article
+                          className="entity-card"
+                          key={`cemetery-${character.id}`}
+                          style={{
+                            filter: 'grayscale(1)',
+                            opacity: .78,
+                            background:
+                              'linear-gradient(180deg, rgba(45,45,43,.72), rgba(15,15,15,.95))',
+                            borderColor: 'rgba(150,150,145,.35)',
+                          }}
+                        >
+                          <div className="entity-head">
+                            <div>
+                              <p className="eyebrow">† ARCHIWUM</p>
+                              <h3 style={{ margin: 0 }}>† {character.name}</h3>
+                              <p className="muted" style={{ margin: '5px 0 0' }}>
+                                {character.characterClass || 'Postać'} • Poziom {character.level}
+                              </p>
+                            </div>
+                            <Skull size={28} style={{ opacity: .6 }} />
+                          </div>
+
+                          {character.portraitUrl && (
+                            <div
+                              style={{
+                                marginTop: 10,
+                                aspectRatio: '16 / 8',
+                                overflow: 'hidden',
+                                borderRadius: 7,
+                                border: '1px solid rgba(150,150,145,.3)',
+                              }}
+                            >
+                              <img
+                                src={character.portraitUrl}
+                                alt={`Portret ${character.name}`}
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  objectFit: 'cover',
+                                  display: 'block',
+                                  filter: 'grayscale(1) contrast(.85)',
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          <div style={{ marginTop: 12, display: 'grid', gap: 5 }}>
+                            {(memorial?.deathDay || memorial?.deathSession) && (
+                              <div className="muted">
+                                †
+                                {memorial?.deathDay ? ` Dzień ${memorial.deathDay}` : ''}
+                                {memorial?.deathSession ? ` • Sesja ${memorial.deathSession}` : ''}
+                              </div>
+                            )}
+                            {memorial?.deathCause && (
+                              <div style={{ fontStyle: 'italic' }}>{memorial.deathCause}</div>
+                            )}
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: 14,
+                              paddingTop: 12,
+                              borderTop: '1px solid rgba(150,150,145,.25)',
+                            }}
+                          >
+                            <strong>Ekwipunek ({deadItems.length})</strong>
+                            {deadItems.length === 0 ? (
+                              <p className="muted">Brak ekwipunku.</p>
+                            ) : (
+                              <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                                {deadItems.map(item => (
+                                  <div
+                                    key={item.id}
+                                    style={{
+                                      display: 'flex',
+                                      gap: 8,
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '7px 8px',
+                                      border: '1px solid rgba(150,150,145,.22)',
+                                      borderRadius: 6,
+                                    }}
+                                  >
+                                    <span>
+                                      {item.name}
+                                      {item.quantity > 1 ? ` ×${item.quantity}` : ''}
+                                    </span>
+                                    <button
+                                      className="secondary"
+                                      onClick={() =>
+                                        openTransferItem('character', character.id, item)
+                                      }
+                                      disabled={activeCharacters.length === 0}
+                                    >
+                                      <ArrowRightLeft size={14} />
+                                      Daj
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="button-row" style={{ marginTop: 14 }}>
+                            <button
+                              className="secondary"
+                              onClick={() => void restoreDeadCharacter(character)}
+                            >
+                              Przywróć do drużyny
+                            </button>
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
           {activeView === 'Kronika' && (
             <>
               <style>{`
@@ -11644,6 +11925,71 @@ function App() {
                 </div>
               </section>
             </>
+          )}
+
+          {showDeathModal && deathCharacter && (
+            <Modal
+              onClose={() => {
+                setShowDeathModal(false)
+                setDeathCharacter(null)
+              }}
+            >
+              <div style={{ display: 'grid', gap: 14 }}>
+                <div>
+                  <p className="eyebrow" style={{ marginBottom: 4 }}>CMENTARZ</p>
+                  <h2 style={{ margin: 0 }}>† {deathCharacter.name}</h2>
+                  <p className="muted">
+                    Postać przestanie być członkiem aktywnej drużyny. Jej karta
+                    i cały ekwipunek zostaną zachowane na Cmentarzu.
+                  </p>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: 10,
+                  }}
+                >
+                  <label>
+                    Dzień śmierci
+                    <input
+                      type="number"
+                      min={1}
+                      value={deathDay}
+                      onChange={e => setDeathDay(e.target.value)}
+                      placeholder="opcjonalnie"
+                    />
+                  </label>
+                  <label>
+                    Numer sesji
+                    <input
+                      type="number"
+                      min={1}
+                      value={deathSession}
+                      onChange={e => setDeathSession(e.target.value)}
+                      placeholder="opcjonalnie"
+                    />
+                  </label>
+                </div>
+
+                <label>
+                  Przyczyna śmierci
+                  <textarea
+                    rows={4}
+                    maxLength={500}
+                    value={deathCause}
+                    onChange={e => setDeathCause(e.target.value)}
+                    placeholder="Np. poległ podczas walki z trollem..."
+                  />
+                </label>
+
+                <button className="danger full" onClick={() => void confirmCharacterDeath()}>
+                  <Skull size={16} />
+                  Przenieś na Cmentarz
+                </button>
+              </div>
+            </Modal>
           )}
 
           {chronicleLinkedStoryCharacter && (
@@ -12902,7 +13248,7 @@ function App() {
           <label>
             Właściciel
             <select value={bastionOwnerId} onChange={e => setBastionOwnerId(e.target.value)}>
-              {characters.map(character => (
+              {activeCharacters.map(character => (
                 <option key={character.id} value={character.id}>{character.name}</option>
               ))}
             </select>
