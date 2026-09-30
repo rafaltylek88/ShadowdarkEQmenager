@@ -236,6 +236,7 @@ function App() {
 
   const [showCreate, setShowCreate] = useState(false)
   const [showJoin, setShowJoin] = useState(false)
+  const [showBackupMenu, setShowBackupMenu] = useState(false)
 
   const [newCampaign, setNewCampaign] = useState('')
   const [joinCode, setJoinCode] = useState('')
@@ -7709,7 +7710,7 @@ function App() {
           </button>
             <button
               className="secondary full"
-              onClick={downloadCampaignBackup}
+              onClick={() => setShowBackupMenu(true)}
               disabled={!activeId}
               title="Zapisz bieżący stan kampanii do pliku JSON"
             >
@@ -8086,10 +8087,10 @@ function App() {
             </div>
 
 <section
-            className="panel"
+            className="panel wide"
             style={{
               marginTop: 18,
-              minHeight: 230,
+              minHeight: 150,
               position: 'relative',
               overflow: 'hidden',
               cursor: 'pointer',
@@ -8098,9 +8099,9 @@ function App() {
             }}
             onClick={() => setActiveView('Skrzynia ze skarbami')}
           >
-            <div style={{ position: 'relative', zIndex: 1, maxWidth: 520, padding: 20 }}>
+            <div style={{ position: 'relative', zIndex: 1, maxWidth: 620, padding: '8px 14px' }}>
               <p className="eyebrow">NIEPODZIELONE ŁUPY</p>
-              <h2 style={{ marginTop: 4 }}>Skrzynia ze skarbami</h2>
+              <h2 style={{ margin: '2px 0 6px' }}>Skrzynia ze skarbami</h2>
               <p>Przechowuj zdobyte skarby, zanim zostaną rozdzielone pomiędzy żywych członków drużyny.</p>
               <strong>{treasureItems.reduce((sum, item) => sum + item.quantity, 0)} przedmiotów</strong>
             </div>
@@ -12187,6 +12188,44 @@ function App() {
                 </div>
               </section>
             </>
+          )}
+
+          {showBackupMenu && (
+            <Modal onClose={() => setShowBackupMenu(false)}>
+              <div style={{ display: 'grid', gap: 14 }}>
+                <div>
+                  <p className="eyebrow">KAMPANIA</p>
+                  <h2 style={{ margin: 0 }}>Kopia zapasowa</h2>
+                  <p className="muted">
+                    Zapisz aktualny stan kampanii. Plik JSON służy jako kopia danych.
+                  </p>
+                </div>
+
+                <button
+                  className="secondary full"
+                  onClick={() => {
+                    downloadCampaignBackup()
+                    setShowBackupMenu(false)
+                  }}
+                >
+                  <Download size={16} />
+                  Utwórz kopię zapasową
+                </button>
+
+                <div className="setup-banner">
+                  <Save size={18} />
+                  <div>
+                    <strong>Wczytywanie kopii</strong>
+                    <span>
+                      Ta wersja aplikacji potrafi utworzyć plik kopii, ale nie ma jeszcze
+                      bezpiecznego mechanizmu przywracania wielu tabel Supabase. Nie będę
+                      udawał, że import istnieje — dodamy go jako osobny etap z kontrolą
+                      poprawności i potwierdzeniem nadpisania.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Modal>
           )}
 
           {showTreasureAdd && (
