@@ -2937,7 +2937,7 @@ function App() {
   async function downloadCampaignBackup() {
     if (!activeId || !active || !supabase) return
     try {
-      const { data, error } = await supabase.rpc('export_campaign_backup_v2', {
+      const { data, error } = await supabase.rpc('export_campaign_backup_v3', {
         p_campaign_id: activeId,
       })
       if (error) throw error
@@ -2966,7 +2966,7 @@ function App() {
       const parsed = JSON.parse(await file.text())
       if (
         parsed?.format !== 'shadowdark-manager-backup' ||
-        parsed?.version !== 2 ||
+        parsed?.version !== 3 ||
         !parsed?.campaign?.id
       ) {
         throw new Error('To nie jest prawidłowa kopia zapasowa Shadowdark Manager.')
@@ -2995,7 +2995,7 @@ function App() {
 
     setBackupRestoreBusy(true)
     try {
-      const { error } = await supabase.rpc('restore_campaign_backup_v2', {
+      const { error } = await supabase.rpc('restore_campaign_backup_v3', {
         p_campaign_id: activeId,
         p_backup: backupRestoreData,
       })
