@@ -2934,40 +2934,27 @@ function App() {
     }
   }
 
-  function downloadCampaignBackup() {
-    if (!activeId || !active) return
-    const backup = {
-      format: 'shadowdark-manager-backup',
-      version: 1,
-      createdAt: new Date().toISOString(),
-      campaign: active,
-      characters,
-      characterMemorials,
-      characterItems: items,
-      npcs,
-      npcItems,
-      storyCharacters,
-      animals,
-      animalItems,
-      bastions,
-      bastionUpgrades,
-      bastionItems,
-      catalog,
-      chronicleEntries,
-      mapMarkers,
-      revealedHexes: Array.from(mapRevealedHexes),
-      treasureItems,
+  async function downloadCampaignBackup() {
+    if (!activeId || !active || !supabase) return
+    try {
+      const { data, error } = await supabase.rpc('export_campaign_backup_v2', {
+        p_campaign_id: activeId,
+      })
+      if (error) throw error
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `shadowdark-kopia-zapasowa-${active.name.replace(/[^a-z0-9-_]+/gi, '-')}-${new Date().toISOString().slice(0,10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      flash('Utworzono kopię zapasową kampanii.', 'other')
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się utworzyć kopii zapasowej.')
     }
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `shadowdark-kopia-zapasowa-${active.name.replace(/[^a-z0-9-_]+/gi, '-')}-${new Date().toISOString().slice(0,10)}.json`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-    flash('Utworzono plik kopii zapasowej kampanii.', 'other')
   }
 
   async function selectBackupRestoreFile(file: File | null) {
@@ -2979,7 +2966,7 @@ function App() {
       const parsed = JSON.parse(await file.text())
       if (
         parsed?.format !== 'shadowdark-manager-backup' ||
-        parsed?.version !== 1 ||
+        parsed?.version !== 2 ||
         !parsed?.campaign?.id
       ) {
         throw new Error('To nie jest prawidłowa kopia zapasowa Shadowdark Manager.')
@@ -3008,7 +2995,7 @@ function App() {
 
     setBackupRestoreBusy(true)
     try {
-      const { error } = await supabase.rpc('restore_campaign_backup_v1', {
+      const { error } = await supabase.rpc('restore_campaign_backup_v2', {
         p_campaign_id: activeId,
         p_backup: backupRestoreData,
       })
@@ -12364,10 +12351,10 @@ function App() {
                           : 'brak daty'}
                       </span>
                       <span className="muted">
-                        Postacie: {backupRestoreData.characters?.length ?? 0} •
-                        Ekwipunek: {backupRestoreData.characterItems?.length ?? 0} •
-                        Kronika: {backupRestoreData.chronicleEntries?.length ?? 0} •
-                        Skarby: {backupRestoreData.treasureItems?.length ?? 0}
+                        Postacie: {backupRestoreData.data?.characters?.length ?? 0} •
+                        Ekwipunek: {backupRestoreData.data?.character_items?.length ?? 0} •
+                        Kronika: {backupRestoreData.data?.campaign_chronicle?.length ?? 0} •
+                        Skarby: {backupRestoreData.data?.campaign_treasure_items?.length ?? 0}
                       </span>
 
                       {backupRestoreData.campaign?.id !== activeId ? (
