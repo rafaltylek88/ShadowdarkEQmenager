@@ -19,6 +19,7 @@ import {
   Menu,
   Map as MapIcon,
   Package,
+  Save,
   Pencil,
   Plus,
   Shield,
@@ -56,6 +57,12 @@ import {
   restoreCharacterFromCemetery,
 } from './lib/cemetery'
 import type { CharacterMemorial } from './lib/cemetery'
+import {
+  createTreasureItem,
+  deleteTreasureItem,
+  loadTreasureItems,
+} from './lib/treasure'
+import type { TreasureItem } from './lib/treasure'
 import {
   createRemoteCampaign,
   joinCampaign,
@@ -181,6 +188,7 @@ const nav = [
   ['Biblioteka', Package],
   ['Kronika', ScrollText],
   ['Cmentarz', Skull],
+  ['Skrzynia ze skarbami', Coins],
   ['Historia', ArrowRightLeft],
   ['Podsumowanie', Coins],
 ] as const
@@ -294,6 +302,14 @@ function App() {
   const [characterMemorials, setCharacterMemorials] = useState<CharacterMemorial[]>([])
   const [cemeteryLoading, setCemeteryLoading] = useState(false)
   const [cemeterySelectedCharacterId, setCemeterySelectedCharacterId] = useState<string | null>(null)
+  const [treasureItems, setTreasureItems] = useState<TreasureItem[]>([])
+  const [treasureLoading, setTreasureLoading] = useState(false)
+  const [showTreasureAdd, setShowTreasureAdd] = useState(false)
+  const [treasureName, setTreasureName] = useState('')
+  const [treasureQuantity, setTreasureQuantity] = useState(1)
+  const [treasureCategory, setTreasureCategory] = useState<ItemCategory>('normal')
+  const [treasureRecipientId, setTreasureRecipientId] = useState('')
+  const [treasureTransferItem, setTreasureTransferItem] = useState<TreasureItem | null>(null)
   const [showDeathModal, setShowDeathModal] = useState(false)
   const [deathCharacter, setDeathCharacter] = useState<Character | null>(null)
   const [deathDay, setDeathDay] = useState('')
@@ -769,6 +785,21 @@ function App() {
     }
   }, [activeId, isCloudMode])
 
+  const refreshTreasure = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setTreasureItems([])
+      return
+    }
+    setTreasureLoading(true)
+    try {
+      setTreasureItems(await loadTreasureItems(activeId))
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się pobrać Skrzyni ze skarbami.')
+    } finally {
+      setTreasureLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
   const refreshCemetery = useCallback(async () => {
     if (!activeId || !isCloudMode) {
       setCharacterMemorials([])
@@ -1200,6 +1231,25 @@ function App() {
   useEffect(() => {
     refreshMapMarkers()
   }, [refreshMapMarkers])
+
+  useEffect(() => {
+    refreshTreasure()
+  }, [refreshTreasure])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+    const channel = sb
+      .channel(`campaign-treasure-${activeId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'campaign_treasure_items',
+        filter: `campaign_id=eq.${activeId}`,
+      }, refreshTreasure)
+      .subscribe()
+    return () => { sb.removeChannel(channel) }
+  }, [session, activeId, refreshTreasure])
 
   useEffect(() => {
     refreshCemetery()
@@ -1779,15 +1829,17 @@ function App() {
   )
 
   const characterSlots = useMemo(() => {
-    const max = characters.reduce(
+    const max = activeCharacters.reduce(
       (sum, character) => sum + Math.max(10, character.strength) + Math.max(0, character.bonusSlots),
       0
     )
 
-    const used = items.reduce((sum, item) => sum + slotUsageForItem(item), 0)
+    const used = items
+      .filter(item => !deadCharacterIds.has(item.characterId))
+      .reduce((sum, item) => sum + slotUsageForItem(item), 0)
 
     return { used, max }
-  }, [characters, items, slotUsageForItem])
+  }, [activeCharacters, deadCharacterIds, items, slotUsageForItem])
 
   const characterItemsByOwner = useMemo(() => {
     const grouped = new Map<string, CharacterItem[]>()
@@ -2405,11 +2457,13 @@ function App() {
       else group.owners.push({ key: ownerKey, owner, ownerType, quantity })
     }
 
-    items.forEach(item => {
-      const owner = characters.find(character => character.id === item.characterId)
-      add(item.name, item.quantity, item.category, item.catalogItemId,
-        owner?.name ?? 'Nieznana postać', 'Postać', `character:${item.characterId}`)
-    })
+    items
+      .filter(item => !deadCharacterIds.has(item.characterId))
+      .forEach(item => {
+        const owner = activeCharacters.find(character => character.id === item.characterId)
+        add(item.name, item.quantity, item.category, item.catalogItemId,
+          owner?.name ?? 'Nieznana postać', 'Postać', `character:${item.characterId}`)
+      })
 
     npcItems.forEach(item => {
       const owner = npcs.find(npc => npc.id === item.npcId)
@@ -2439,7 +2493,7 @@ function App() {
       .sort((a, b) =>
         a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' })
       )
-  }, [items, characters, npcItems, npcs, animalItems, animals, bastionItems, bastions])
+  }, [items, activeCharacters, deadCharacterIds, npcItems, npcs, animalItems, animals, bastionItems, bastions])
 
   const questItemSummary = useMemo(
     () =>
@@ -2769,8 +2823,15 @@ function App() {
       return
     }
 
-    if (!characters.length) {
-      setError('W kampanii nie ma postaci do nakarmienia.')
+    if (!activeCharacters.length && !npcs.length) {
+      setError('W kampanii nie ma żywych członków ekspedycji do nakarmienia.')
+      return
+    }
+
+    if (deadCharacterIds.size > 0) {
+      setError(
+        'Automatyczne karmienie całej ekspedycji jest zablokowane przy postaciach na Cmentarzu, aby nie zużyć ich racji. Racje żywych możesz przekazywać z panelu racji.'
+      )
       return
     }
 
@@ -2811,6 +2872,98 @@ function App() {
     }
   }
 
+  async function handleAddTreasure() {
+    if (!activeId || !treasureName.trim()) return
+    try {
+      await createTreasureItem({
+        campaignId: activeId,
+        name: treasureName.trim(),
+        quantity: Math.max(1, treasureQuantity),
+        category: treasureCategory,
+      })
+      setTreasureName('')
+      setTreasureQuantity(1)
+      setTreasureCategory('normal')
+      setShowTreasureAdd(false)
+      await refreshTreasure()
+      flash('Dodano łup do Skrzyni ze skarbami.', 'inventory')
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się dodać łupu.')
+    }
+  }
+
+  async function handleGiveTreasure() {
+    if (!activeId || !treasureTransferItem || !treasureRecipientId) return
+    const recipient = activeCharacters.find(c => c.id === treasureRecipientId)
+    if (!recipient) {
+      setError('Wybierz żywą postać.')
+      return
+    }
+    try {
+      await createItem({
+        campaignId: activeId,
+        characterId: recipient.id,
+        name: treasureTransferItem.name,
+        quantity: treasureTransferItem.quantity,
+        slotsPerUnit: 1,
+        slotGroupSize: 1,
+        freeQuantity: 0,
+        category: treasureTransferItem.category,
+        lightMinutes: treasureTransferItem.category === 'light' ? 60 : 0,
+        catalogItemId: null,
+        weaponDamage: null,
+        weaponRange: null,
+        weaponProperties: null,
+        armorClass: null,
+        armorProperties: null,
+        maxUses: 0,
+      })
+      await deleteTreasureItem(treasureTransferItem.id)
+      setTreasureTransferItem(null)
+      setTreasureRecipientId('')
+      await Promise.all([refreshTreasure(), refreshItems(), refreshCharacters()])
+      flash(`Skrzynia → ${recipient.name}: przekazano ${treasureTransferItem.name}.`, 'inventory')
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się przekazać skarbu.')
+    }
+  }
+
+  function downloadCampaignBackup() {
+    if (!activeId || !active) return
+    const backup = {
+      format: 'shadowdark-manager-backup',
+      version: 1,
+      createdAt: new Date().toISOString(),
+      campaign: active,
+      characters,
+      characterMemorials,
+      characterItems: items,
+      npcs,
+      npcItems,
+      storyCharacters,
+      animals,
+      animalItems,
+      bastions,
+      bastionUpgrades,
+      bastionItems,
+      catalog,
+      chronicleEntries,
+      mapMarkers,
+      revealedHexes: Array.from(mapRevealedHexes),
+      treasureItems,
+    }
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `shadowdark-backup-${active.name.replace(/[^a-z0-9-_]+/gi, '-')}-${new Date().toISOString().slice(0,10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    flash('Utworzono pełny plik backupu kampanii.', 'other')
+  }
+
   type LightChoice = {
     key: string
     memberType: LightMemberType
@@ -2828,6 +2981,7 @@ function App() {
       ...items
         .filter(
           item =>
+            !deadCharacterIds.has(item.characterId) &&
             item.category === 'light' &&
             !item.isActiveLight &&
             item.quantity > 0 &&
@@ -2838,7 +2992,7 @@ function App() {
           memberType: 'character' as LightMemberType,
           memberId: item.characterId,
           memberName:
-            characters.find(character => character.id === item.characterId)?.name ??
+            activeCharacters.find(character => character.id === item.characterId)?.name ??
             'Postać',
           itemId: item.id,
           itemName: item.name,
@@ -2866,7 +3020,7 @@ function App() {
           catalogItemId: item.catalogItemId,
         })),
     ],
-    [items, characters, npcItems, npcs]
+    [items, activeCharacters, deadCharacterIds, npcItems, npcs]
   )
 
   const lightCarrierChoices = useMemo(() => {
@@ -7771,7 +7925,7 @@ function App() {
             <Metric
               icon={<Users />}
               label="Postacie"
-              value={String(characters.length)}
+              value={String(activeCharacters.length)}
               sub="aktywne"
             />
 
@@ -8539,6 +8693,27 @@ function App() {
             </div>
 
           </section>
+          <section
+            className="panel"
+            style={{
+              marginTop: 18,
+              minHeight: 230,
+              position: 'relative',
+              overflow: 'hidden',
+              cursor: 'pointer',
+              background:
+                `linear-gradient(90deg, rgba(12,9,5,.96), rgba(12,9,5,.48)), url(${import.meta.env.BASE_URL}treasure-chest.jpg) center / cover no-repeat`,
+            }}
+            onClick={() => setActiveView('Skrzynia ze skarbami')}
+          >
+            <div style={{ position: 'relative', zIndex: 1, maxWidth: 520, padding: 20 }}>
+              <p className="eyebrow">NIEPODZIELONE ŁUPY</p>
+              <h2 style={{ marginTop: 4 }}>Skrzynia ze skarbami</h2>
+              <p>Przechowuj zdobyte skarby, zanim zostaną rozdzielone pomiędzy żywych członków drużyny.</p>
+              <strong>{treasureItems.reduce((sum, item) => sum + item.quantity, 0)} przedmiotów</strong>
+            </div>
+          </section>
+
             </>
           )}
 
@@ -11483,6 +11658,89 @@ function App() {
             </Modal>
           )}
 
+          {activeView === 'Skrzynia ze skarbami' && (
+            <>
+              <section
+                className="hero parchment-panel"
+                style={{
+                  background:
+                    `linear-gradient(90deg, rgba(17,11,5,.93), rgba(17,11,5,.48)), url(${import.meta.env.BASE_URL}treasure-chest.jpg) center / cover no-repeat`,
+                  minHeight: 220,
+                }}
+              >
+                <div>
+                  <p className="eyebrow">SKRZYNIA ZE SKARBAMI</p>
+                  <h1>Niepodzielone łupy drużyny</h1>
+                  <p>Przedmioty w skrzyni nie należą jeszcze do żadnej postaci i nie są aktywnym wyposażeniem ekspedycji.</p>
+                </div>
+                <div className="button-row">
+                  <button className="primary" onClick={() => setShowTreasureAdd(true)}>
+                    <Plus size={16} /> Dodaj skarb
+                  </button>
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="panel-title">
+                  <Coins size={18} />
+                  Zawartość skrzyni
+                  <span style={{ marginLeft: 'auto' }}>{treasureItems.length} pozycji</span>
+                </div>
+                {treasureLoading ? (
+                  <p className="muted">Ładowanie skrzyni…</p>
+                ) : treasureItems.length === 0 ? (
+                  <div className="empty-state"><p>Skrzynia jest pusta.</p></div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {treasureItems.map(item => (
+                      <article className="entity-card" key={item.id}>
+                        <div className="entity-head">
+                          <div>
+                            <strong>{item.name}</strong>
+                            <div className="muted">{item.category} • {item.quantity} szt.</div>
+                          </div>
+                          <div className="button-row">
+                            <button
+                              className="secondary"
+                              onClick={() => {
+                                setTreasureTransferItem(item)
+                                setTreasureRecipientId(activeCharacters[0]?.id ?? '')
+                              }}
+                              disabled={activeCharacters.length === 0}
+                            >
+                              <ArrowRightLeft size={14} /> Daj
+                            </button>
+                            <button
+                              className="danger"
+                              onClick={async () => {
+                                if (!window.confirm(`Usunąć „${item.name}” ze skrzyni?`)) return
+                                await deleteTreasureItem(item.id)
+                                await refreshTreasure()
+                              }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="panel">
+                <div className="panel-title"><Save size={18} /> Backup kampanii</div>
+                <p className="muted">
+                  Zapisz bieżący stan kampanii do pliku JSON. Backup obejmuje również Cmentarz,
+                  Kronikę, mapę i Skrzynię ze skarbami.
+                </p>
+                <button className="secondary" onClick={downloadCampaignBackup}>
+                  <Download size={16} /> Utwórz backup
+                </button>
+              </section>
+            </>
+          )}
+
           {activeView === 'Cmentarz' && (
             <>
               <style>{`
@@ -11926,6 +12184,49 @@ function App() {
                 </div>
               </section>
             </>
+          )}
+
+          {showTreasureAdd && (
+            <Modal onClose={() => setShowTreasureAdd(false)}>
+              <div style={{ display: 'grid', gap: 12 }}>
+                <p className="eyebrow">SKRZYNIA ZE SKARBAMI</p>
+                <h2 style={{ margin: 0 }}>Dodaj niepodzielony łup</h2>
+                <label>Nazwa<input value={treasureName} onChange={e => setTreasureName(e.target.value)} /></label>
+                <label>Ilość<input type="number" min={1} value={treasureQuantity} onChange={e => setTreasureQuantity(Math.max(1, Number(e.target.value)))} /></label>
+                <label>
+                  Kategoria
+                  <select value={treasureCategory} onChange={e => setTreasureCategory(e.target.value as ItemCategory)}>
+                    <option value="normal">Normalny</option>
+                    <option value="weapon">Broń</option>
+                    <option value="armor">Zbroja</option>
+                    <option value="food">Jedzenie</option>
+                    <option value="light">Źródło światła</option>
+                    <option value="container">Pojemnik</option>
+                  </select>
+                </label>
+                <button className="primary full" onClick={() => void handleAddTreasure()}>Dodaj do skrzyni</button>
+              </div>
+            </Modal>
+          )}
+
+          {treasureTransferItem && (
+            <Modal onClose={() => setTreasureTransferItem(null)}>
+              <div style={{ display: 'grid', gap: 12 }}>
+                <p className="eyebrow">PODZIAŁ ŁUPÓW</p>
+                <h2 style={{ margin: 0 }}>{treasureTransferItem.name}</h2>
+                <label>
+                  Przekaż żywej postaci
+                  <select value={treasureRecipientId} onChange={e => setTreasureRecipientId(e.target.value)}>
+                    {activeCharacters.map(character => (
+                      <option key={character.id} value={character.id}>{character.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <button className="primary full" onClick={() => void handleGiveTreasure()}>
+                  <ArrowRightLeft size={16} /> Przekaż cały stos
+                </button>
+              </div>
+            </Modal>
           )}
 
           {cemeterySelectedCharacter && (
