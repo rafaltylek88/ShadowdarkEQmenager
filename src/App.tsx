@@ -27,6 +27,7 @@ import {
   Skull,
   Trash2,
   Truck,
+  Upload,
   Utensils,
   UserPlus,
   Users,
@@ -237,6 +238,10 @@ function App() {
   const [showCreate, setShowCreate] = useState(false)
   const [showJoin, setShowJoin] = useState(false)
   const [showBackupMenu, setShowBackupMenu] = useState(false)
+  const [backupRestoreFile, setBackupRestoreFile] = useState<File | null>(null)
+  const [backupRestoreData, setBackupRestoreData] = useState<any | null>(null)
+  const [backupRestoreBusy, setBackupRestoreBusy] = useState(false)
+  const [backupRestoreConfirm, setBackupRestoreConfirm] = useState('')
 
   const [newCampaign, setNewCampaign] = useState('')
   const [joinCode, setJoinCode] = useState('')
@@ -2963,6 +2968,83 @@ function App() {
     a.remove()
     URL.revokeObjectURL(url)
     flash('Utworzono plik kopii zapasowej kampanii.', 'other')
+  }
+
+  async function selectBackupRestoreFile(file: File | null) {
+    setBackupRestoreFile(file)
+    setBackupRestoreData(null)
+    setBackupRestoreConfirm('')
+    if (!file) return
+    try {
+      const parsed = JSON.parse(await file.text())
+      if (
+        parsed?.format !== 'shadowdark-manager-backup' ||
+        parsed?.version !== 1 ||
+        !parsed?.campaign?.id
+      ) {
+        throw new Error('To nie jest prawidłowa kopia zapasowa Shadowdark Manager.')
+      }
+      setBackupRestoreData(parsed)
+      setError(null)
+    } catch (e: any) {
+      setBackupRestoreFile(null)
+      setError(e?.message || 'Nie udało się odczytać pliku kopii zapasowej.')
+    }
+  }
+
+  async function restoreCampaignBackup() {
+    if (!supabase || !activeId || !backupRestoreData) return
+    if (backupRestoreConfirm.trim().toUpperCase() !== 'PRZYWRÓĆ') {
+      setError('Wpisz PRZYWRÓĆ, aby potwierdzić odtworzenie kampanii.')
+      return
+    }
+    if (backupRestoreData.campaign.id !== activeId) {
+      setError(
+        `Ta kopia dotyczy kampanii „${backupRestoreData.campaign.name ?? backupRestoreData.campaign.id}”. ` +
+        'Można ją wczytać tylko do tej samej kampanii.'
+      )
+      return
+    }
+
+    setBackupRestoreBusy(true)
+    try {
+      const { error } = await supabase.rpc('restore_campaign_backup_v1', {
+        p_campaign_id: activeId,
+        p_backup: backupRestoreData,
+      })
+      if (error) throw error
+
+      await Promise.all([
+        refreshCampaigns(),
+        refreshCharacters(),
+        refreshItems(),
+        refreshNpcs(),
+        refreshNpcItems(),
+        refreshStoryCharacters(),
+        refreshAnimals(),
+        refreshAnimalItems(),
+        refreshBastions(),
+        refreshBastionItems(),
+        refreshCatalog(),
+        refreshChronicle(),
+        refreshMapMarkers(),
+        refreshMapHexes(),
+        refreshCemetery(),
+        refreshTreasure(),
+      ])
+
+      setBackupRestoreFile(null)
+      setBackupRestoreData(null)
+      setBackupRestoreConfirm('')
+      setShowBackupMenu(false)
+      setSelectedCharacterId(null)
+      flash('Kopia zapasowa została przywrócona.', 'other')
+    } catch (e: any) {
+      console.error('RESTORE BACKUP ERROR:', e)
+      setError(e?.message || e?.details || 'Nie udało się przywrócić kopii zapasowej.')
+    } finally {
+      setBackupRestoreBusy(false)
+    }
   }
 
   type LightChoice = {
@@ -12191,39 +12273,153 @@ function App() {
           )}
 
           {showBackupMenu && (
-            <Modal onClose={() => setShowBackupMenu(false)}>
-              <div style={{ display: 'grid', gap: 14 }}>
+            <Modal
+              onClose={() => {
+                if (backupRestoreBusy) return
+                setShowBackupMenu(false)
+                setBackupRestoreFile(null)
+                setBackupRestoreData(null)
+                setBackupRestoreConfirm('')
+              }}
+            >
+              <div style={{ display: 'grid', gap: 16 }}>
                 <div>
                   <p className="eyebrow">KAMPANIA</p>
                   <h2 style={{ margin: 0 }}>Kopia zapasowa</h2>
                   <p className="muted">
-                    Zapisz aktualny stan kampanii. Plik JSON służy jako kopia danych.
+                    Zapisz aktualny stan kampanii albo przywróć wcześniej utworzoną kopię.
                   </p>
                 </div>
 
-                <button
-                  className="secondary full"
-                  onClick={() => {
-                    downloadCampaignBackup()
-                    setShowBackupMenu(false)
+                <section
+                  style={{
+                    padding: 14,
+                    border: '1px solid rgba(190,145,65,.38)',
+                    borderRadius: 8,
+                    display: 'grid',
+                    gap: 10,
                   }}
                 >
-                  <Download size={16} />
-                  Utwórz kopię zapasową
-                </button>
+                  <strong>Utwórz kopię</strong>
+                  <span className="muted">
+                    Pobiera aktualny stan kampanii jako plik JSON.
+                  </span>
+                  <button
+                    className="secondary full"
+                    onClick={downloadCampaignBackup}
+                    disabled={backupRestoreBusy}
+                  >
+                    <Download size={16} />
+                    Utwórz kopię zapasową
+                  </button>
+                </section>
 
-                <div className="setup-banner">
-                  <Save size={18} />
-                  <div>
-                    <strong>Wczytywanie kopii</strong>
-                    <span>
-                      Ta wersja aplikacji potrafi utworzyć plik kopii, ale nie ma jeszcze
-                      bezpiecznego mechanizmu przywracania wielu tabel Supabase. Nie będę
-                      udawał, że import istnieje — dodamy go jako osobny etap z kontrolą
-                      poprawności i potwierdzeniem nadpisania.
-                    </span>
-                  </div>
-                </div>
+                <section
+                  style={{
+                    padding: 14,
+                    border: '1px solid rgba(190,145,65,.38)',
+                    borderRadius: 8,
+                    display: 'grid',
+                    gap: 10,
+                  }}
+                >
+                  <strong>Wczytaj kopię</strong>
+                  <label
+                    className="secondary full"
+                    style={{
+                      cursor: backupRestoreBusy ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <Upload size={16} />
+                    Wybierz plik kopii zapasowej
+                    <input
+                      type="file"
+                      accept=".json,application/json"
+                      disabled={backupRestoreBusy}
+                      onChange={e => void selectBackupRestoreFile(e.target.files?.[0] ?? null)}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+
+                  {backupRestoreData && (
+                    <div
+                      style={{
+                        padding: 12,
+                        border: '1px solid rgba(190,145,65,.28)',
+                        borderRadius: 7,
+                        background: 'rgba(0,0,0,.18)',
+                        display: 'grid',
+                        gap: 5,
+                      }}
+                    >
+                      <strong>{backupRestoreData.campaign?.name ?? 'Kampania'}</strong>
+                      <span className="muted">
+                        Utworzono:{' '}
+                        {backupRestoreData.createdAt
+                          ? new Date(backupRestoreData.createdAt).toLocaleString('pl-PL')
+                          : 'brak daty'}
+                      </span>
+                      <span className="muted">
+                        Postacie: {backupRestoreData.characters?.length ?? 0} •
+                        Ekwipunek: {backupRestoreData.characterItems?.length ?? 0} •
+                        Kronika: {backupRestoreData.chronicleEntries?.length ?? 0} •
+                        Skarby: {backupRestoreData.treasureItems?.length ?? 0}
+                      </span>
+
+                      {backupRestoreData.campaign?.id !== activeId ? (
+                        <div className="setup-banner">
+                          <Shield size={16} />
+                          <div>
+                            <strong>Inna kampania</strong>
+                            <span>
+                              Kopia ma inny identyfikator kampanii i nie może zostać
+                              wczytana do obecnej kampanii.
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="setup-banner">
+                            <Shield size={16} />
+                            <div>
+                              <strong>Uwaga</strong>
+                              <span>
+                                Przywrócenie zastąpi bieżący stan danych kampanii stanem
+                                zapisanym w tym pliku.
+                              </span>
+                            </div>
+                          </div>
+                          <label>
+                            Aby potwierdzić, wpisz <strong>PRZYWRÓĆ</strong>
+                            <input
+                              value={backupRestoreConfirm}
+                              onChange={e => setBackupRestoreConfirm(e.target.value)}
+                              disabled={backupRestoreBusy}
+                              autoComplete="off"
+                            />
+                          </label>
+                          <button
+                            className="danger full"
+                            disabled={
+                              backupRestoreBusy ||
+                              backupRestoreConfirm.trim().toUpperCase() !== 'PRZYWRÓĆ'
+                            }
+                            onClick={() => void restoreCampaignBackup()}
+                          >
+                            <Upload size={16} />
+                            {backupRestoreBusy
+                              ? 'Przywracanie…'
+                              : 'Przywróć kopię zapasową'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </section>
               </div>
             </Modal>
           )}
