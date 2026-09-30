@@ -11493,7 +11493,7 @@ function App() {
                   border: 1px solid rgba(178, 129, 52, .38);
                   background:
                     linear-gradient(rgba(7, 8, 8, .48), rgba(7, 8, 8, .82)),
-                    url(${import.meta.env.BASE_URL}cemetery-gravestone.jpg) center / cover no-repeat;
+                    url(${import.meta.env.BASE_URL}cemetery-background.jpg) center / cover no-repeat;
                   box-shadow: inset 0 0 80px rgba(0,0,0,.72);
                   min-height: 720px;
                 }
@@ -11518,20 +11518,20 @@ function App() {
                   overflow: hidden;
                   border: 1px solid rgba(170, 135, 77, .46);
                   border-radius: 15px 15px 9px 9px;
-                  padding: 112px 22px 24px;
+                  padding: 118px 34px 34px;
                   cursor: pointer;
                   color: #d7c5a4;
                   text-align: center;
                   background:
                     linear-gradient(180deg, rgba(14,14,13,.08), rgba(10,10,9,.34) 34%, rgba(8,8,7,.94) 100%),
-                    url(${import.meta.env.BASE_URL}cemetery-gravestone.jpg) 16% center / auto 100% no-repeat;
-                  filter: grayscale(.72) saturate(.58);
+                    url(${import.meta.env.BASE_URL}cemetery-tombstone.jpg) center / 100% 100% no-repeat;
+                  filter: grayscale(.42) saturate(.72);
                   box-shadow: inset 0 0 40px rgba(0,0,0,.62), 0 12px 28px rgba(0,0,0,.36);
                   transition: transform .18s ease, filter .18s ease, border-color .18s ease;
                 }
                 .grave-card:hover {
                   transform: translateY(-3px);
-                  filter: grayscale(.48) saturate(.75);
+                  filter: grayscale(.24) saturate(.88);
                   border-color: rgba(211, 158, 68, .8);
                 }
                 .grave-card h3 {
@@ -11543,7 +11543,7 @@ function App() {
                   text-shadow: 0 2px 5px #000;
                 }
                 .grave-date {
-                  margin-top: 48px;
+                  margin-top: 34px;
                   padding-top: 13px;
                   border-top: 1px solid rgba(191, 153, 89, .35);
                   font-family: Georgia, serif;
