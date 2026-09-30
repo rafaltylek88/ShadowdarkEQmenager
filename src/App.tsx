@@ -293,6 +293,7 @@ function App() {
   const [charactersLoading, setCharactersLoading] = useState(false)
   const [characterMemorials, setCharacterMemorials] = useState<CharacterMemorial[]>([])
   const [cemeteryLoading, setCemeteryLoading] = useState(false)
+  const [cemeterySelectedCharacterId, setCemeterySelectedCharacterId] = useState<string | null>(null)
   const [showDeathModal, setShowDeathModal] = useState(false)
   const [deathCharacter, setDeathCharacter] = useState<Character | null>(null)
   const [deathDay, setDeathDay] = useState('')
@@ -4316,6 +4317,14 @@ function App() {
         .filter(character => deadCharacterIds.has(character.id))
         .sort((a, b) => a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' })),
     [characters, deadCharacterIds]
+  )
+
+  const cemeterySelectedCharacter = useMemo(
+    () =>
+      cemeterySelectedCharacterId
+        ? characters.find(character => character.id === cemeterySelectedCharacterId) ?? null
+        : null,
+    [characters, cemeterySelectedCharacterId]
   )
 
   function memorialForCharacter(characterId: string) {
@@ -11476,150 +11485,142 @@ function App() {
 
           {activeView === 'Cmentarz' && (
             <>
+              <style>{`
+                .cemetery-scene {
+                  position: relative;
+                  overflow: hidden;
+                  border-radius: 14px;
+                  border: 1px solid rgba(178, 129, 52, .38);
+                  background:
+                    linear-gradient(rgba(7, 8, 8, .48), rgba(7, 8, 8, .82)),
+                    url(${import.meta.env.BASE_URL}cemetery-gravestone.jpg) center / cover no-repeat;
+                  box-shadow: inset 0 0 80px rgba(0,0,0,.72);
+                  min-height: 720px;
+                }
+                .cemetery-scene::before {
+                  content: '';
+                  position: absolute;
+                  inset: 0;
+                  pointer-events: none;
+                  background: radial-gradient(circle at 50% 28%, transparent 0 30%, rgba(0,0,0,.58) 100%);
+                }
+                .cemetery-grid {
+                  position: relative;
+                  z-index: 1;
+                  display: grid;
+                  grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+                  gap: 18px;
+                  padding: 24px;
+                }
+                .grave-card {
+                  position: relative;
+                  min-height: 430px;
+                  overflow: hidden;
+                  border: 1px solid rgba(170, 135, 77, .46);
+                  border-radius: 15px 15px 9px 9px;
+                  padding: 112px 22px 24px;
+                  cursor: pointer;
+                  color: #d7c5a4;
+                  text-align: center;
+                  background:
+                    linear-gradient(180deg, rgba(14,14,13,.08), rgba(10,10,9,.34) 34%, rgba(8,8,7,.94) 100%),
+                    url(${import.meta.env.BASE_URL}cemetery-gravestone.jpg) 16% center / auto 100% no-repeat;
+                  filter: grayscale(.72) saturate(.58);
+                  box-shadow: inset 0 0 40px rgba(0,0,0,.62), 0 12px 28px rgba(0,0,0,.36);
+                  transition: transform .18s ease, filter .18s ease, border-color .18s ease;
+                }
+                .grave-card:hover {
+                  transform: translateY(-3px);
+                  filter: grayscale(.48) saturate(.75);
+                  border-color: rgba(211, 158, 68, .8);
+                }
+                .grave-card h3 {
+                  margin: 0;
+                  font-family: Georgia, serif;
+                  font-size: 24px;
+                  letter-spacing: .04em;
+                  color: #d8c4a0;
+                  text-shadow: 0 2px 5px #000;
+                }
+                .grave-date {
+                  margin-top: 48px;
+                  padding-top: 13px;
+                  border-top: 1px solid rgba(191, 153, 89, .35);
+                  font-family: Georgia, serif;
+                  font-size: 16px;
+                }
+                .grave-cause {
+                  margin: 13px auto 0;
+                  max-width: 230px;
+                  min-height: 48px;
+                  font-family: Georgia, serif;
+                  font-style: italic;
+                  line-height: 1.5;
+                  color: #c7b28e;
+                }
+                .cemetery-modal-card {
+                  filter: grayscale(.86);
+                }
+                @media (max-width: 760px) {
+                  .cemetery-grid { grid-template-columns: 1fr; padding: 12px; }
+                  .grave-card { min-height: 390px; }
+                }
+              `}</style>
+
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">CMENTARZ</p>
+                  <p className="eyebrow">☠ CMENTARZ</p>
                   <h1>Poległe postacie</h1>
-                  <p>
-                    Archiwum bohaterów, którzy zginęli podczas kampanii. Ich
-                    ekwipunek pozostaje dostępny do przekazania żyjącym.
-                  </p>
+                  <p>Ci, którzy odeszli, ale wciąż są częścią historii kampanii.</p>
                 </div>
               </section>
 
-              <section className="panel">
-                <div className="panel-title">
-                  <Skull size={18} />
-                  Cmentarz
-                  <span style={{ marginLeft: 'auto' }}>{cemeteryCharacters.length}</span>
-                </div>
-
+              <section className="cemetery-scene">
                 {cemeteryLoading || charactersLoading || itemsLoading ? (
-                  <p className="muted">Ładowanie Cmentarza…</p>
+                  <p className="muted" style={{ position: 'relative', zIndex: 1, padding: 24 }}>
+                    Ładowanie Cmentarza…
+                  </p>
                 ) : cemeteryCharacters.length === 0 ? (
-                  <div className="empty-state">
-                    <Skull size={42} style={{ opacity: .45 }} />
+                  <div className="empty-state" style={{ position: 'relative', zIndex: 1, margin: 24 }}>
+                    <Skull size={42} style={{ opacity: .55 }} />
                     <p>Cmentarz jest pusty.</p>
                   </div>
                 ) : (
-                  <div className="entity-grid">
+                  <div className="cemetery-grid">
                     {cemeteryCharacters.map(character => {
                       const memorial = memorialForCharacter(character.id)
-                      const deadItems = itemsForCharacter(character.id)
                       return (
-                        <article
-                          className="entity-card"
-                          key={`cemetery-${character.id}`}
-                          style={{
-                            filter: 'grayscale(1)',
-                            opacity: .78,
-                            background:
-                              'linear-gradient(180deg, rgba(45,45,43,.72), rgba(15,15,15,.95))',
-                            borderColor: 'rgba(150,150,145,.35)',
-                          }}
+                        <button
+                          type="button"
+                          className="grave-card"
+                          key={`grave-${character.id}`}
+                          onClick={() => setCemeterySelectedCharacterId(character.id)}
                         >
-                          <div className="entity-head">
-                            <div>
-                              <p className="eyebrow">† ARCHIWUM</p>
-                              <h3 style={{ margin: 0 }}>† {character.name}</h3>
-                              <p className="muted" style={{ margin: '5px 0 0' }}>
-                                {character.className || 'Postać'} • Poziom {character.level}
-                              </p>
+                          <div style={{ position: 'relative', zIndex: 1 }}>
+                            <Skull size={23} style={{ marginBottom: 8, opacity: .7 }} />
+                            <h3>{character.name}</h3>
+                            <div className="muted" style={{ marginTop: 5 }}>
+                              {character.className || 'Postać'} • Poziom {character.level}
                             </div>
-                            <Skull size={28} style={{ opacity: .6 }} />
-                          </div>
 
-                          {character.portraitUrl && (
+                            <div className="grave-date">
+                              † Zmarł:
+                              {memorial?.deathDay ? ` Dzień ${memorial.deathDay}` : ' —'}
+                              {memorial?.deathSession ? ` • Sesja ${memorial.deathSession}` : ''}
+                            </div>
+
+                            <div className="grave-cause">
+                              {memorial?.deathCause || 'Przyczyna śmierci nie została zapisana.'}
+                            </div>
+
                             <div
-                              style={{
-                                marginTop: 10,
-                                aspectRatio: '16 / 8',
-                                overflow: 'hidden',
-                                borderRadius: 7,
-                                border: '1px solid rgba(150,150,145,.3)',
-                              }}
+                              className="muted"
+                              style={{ marginTop: 24, fontSize: 12, letterSpacing: '.08em' }}
                             >
-                              <img
-                                src={character.portraitUrl}
-                                alt={`Portret ${character.name}`}
-                                style={{
-                                  width: '100%',
-                                  height: '100%',
-                                  objectFit: 'cover',
-                                  display: 'block',
-                                  filter: 'grayscale(1) contrast(.85)',
-                                }}
-                              />
+                              KLIKNIJ, ABY OTWORZYĆ KARTĘ
                             </div>
-                          )}
-
-                          <div style={{ marginTop: 12, display: 'grid', gap: 5 }}>
-                            {(memorial?.deathDay || memorial?.deathSession) && (
-                              <div className="muted">
-                                †
-                                {memorial?.deathDay ? ` Dzień ${memorial.deathDay}` : ''}
-                                {memorial?.deathSession ? ` • Sesja ${memorial.deathSession}` : ''}
-                              </div>
-                            )}
-                            {memorial?.deathCause && (
-                              <div style={{ fontStyle: 'italic' }}>{memorial.deathCause}</div>
-                            )}
                           </div>
-
-                          <div
-                            style={{
-                              marginTop: 14,
-                              paddingTop: 12,
-                              borderTop: '1px solid rgba(150,150,145,.25)',
-                            }}
-                          >
-                            <strong>Ekwipunek ({deadItems.length})</strong>
-                            {deadItems.length === 0 ? (
-                              <p className="muted">Brak ekwipunku.</p>
-                            ) : (
-                              <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-                                {deadItems.map(item => (
-                                  <div
-                                    key={item.id}
-                                    style={{
-                                      display: 'flex',
-                                      gap: 8,
-                                      alignItems: 'center',
-                                      justifyContent: 'space-between',
-                                      padding: '7px 8px',
-                                      border: '1px solid rgba(150,150,145,.22)',
-                                      borderRadius: 6,
-                                    }}
-                                  >
-                                    <span>
-                                      {item.name}
-                                      {item.quantity > 1 ? ` ×${item.quantity}` : ''}
-                                    </span>
-                                    <button
-                                      className="secondary"
-                                      onClick={() =>
-                                        openTransferItem('character', character.id, item)
-                                      }
-                                      disabled={activeCharacters.length === 0}
-                                    >
-                                      <ArrowRightLeft size={14} />
-                                      Daj
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="button-row" style={{ marginTop: 14 }}>
-                            <button
-                              className="secondary"
-                              onClick={() => void restoreDeadCharacter(character)}
-                            >
-                              Przywróć do drużyny
-                            </button>
-                          </div>
-                        </article>
+                        </button>
                       )
                     })}
                   </div>
@@ -11925,6 +11926,128 @@ function App() {
                 </div>
               </section>
             </>
+          )}
+
+          {cemeterySelectedCharacter && (
+            <Modal onClose={() => setCemeterySelectedCharacterId(null)}>
+              {(() => {
+                const character = cemeterySelectedCharacter
+                const memorial = memorialForCharacter(character.id)
+                const deadItems = itemsForCharacter(character.id)
+                return (
+                  <div className="cemetery-modal-card" style={{ display: 'grid', gap: 16 }}>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: character.portraitUrl ? '170px 1fr' : '1fr',
+                        gap: 18,
+                        alignItems: 'start',
+                      }}
+                    >
+                      {character.portraitUrl && (
+                        <img
+                          src={character.portraitUrl}
+                          alt={`Portret ${character.name}`}
+                          style={{
+                            width: '100%',
+                            aspectRatio: '4 / 5',
+                            objectFit: 'cover',
+                            borderRadius: 8,
+                            filter: 'grayscale(1) contrast(.9)',
+                            border: '1px solid rgba(170,150,120,.35)',
+                          }}
+                        />
+                      )}
+                      <div>
+                        <p className="eyebrow" style={{ margin: 0 }}>☠ NIE ŻYJE</p>
+                        <h2 style={{ margin: '5px 0' }}>{character.name}</h2>
+                        <p className="muted">
+                          {character.className || 'Postać'} • Poziom {character.level}
+                        </p>
+                        <div
+                          style={{
+                            marginTop: 14,
+                            padding: 12,
+                            border: '1px solid rgba(150,150,145,.3)',
+                            borderRadius: 7,
+                          }}
+                        >
+                          <div>
+                            <strong>Zmarł:</strong>
+                            {memorial?.deathDay ? ` Dzień ${memorial.deathDay}` : ' —'}
+                            {memorial?.deathSession ? ` • Sesja ${memorial.deathSession}` : ''}
+                          </div>
+                          <div style={{ marginTop: 7 }}>
+                            <strong>Przyczyna:</strong>{' '}
+                            {memorial?.deathCause || 'Nie zapisana'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        paddingTop: 14,
+                        borderTop: '1px solid rgba(150,150,145,.28)',
+                      }}
+                    >
+                      <div className="panel-title">
+                        Ekwipunek
+                        <span style={{ marginLeft: 'auto' }}>{deadItems.length}</span>
+                      </div>
+
+                      {deadItems.length === 0 ? (
+                        <p className="muted">Brak ekwipunku.</p>
+                      ) : (
+                        <div style={{ display: 'grid', gap: 7 }}>
+                          {deadItems.map(item => (
+                            <div
+                              key={item.id}
+                              style={{
+                                display: 'flex',
+                                gap: 10,
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '9px 10px',
+                                border: '1px solid rgba(150,150,145,.24)',
+                                borderRadius: 7,
+                              }}
+                            >
+                              <span>
+                                <strong>{item.name}</strong>
+                                {item.quantity > 1 ? ` ×${item.quantity}` : ''}
+                              </span>
+                              <button
+                                className="secondary"
+                                onClick={() =>
+                                  openTransferItem('character', character.id, item)
+                                }
+                                disabled={activeCharacters.length === 0}
+                              >
+                                <ArrowRightLeft size={14} />
+                                Daj
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="button-row">
+                      <button
+                        className="secondary"
+                        onClick={() => {
+                          setCemeterySelectedCharacterId(null)
+                          void restoreDeadCharacter(character)
+                        }}
+                      >
+                        Przywróć do drużyny
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()}
+            </Modal>
           )}
 
           {showDeathModal && deathCharacter && (
