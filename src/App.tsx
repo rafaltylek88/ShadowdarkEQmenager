@@ -12760,7 +12760,7 @@ function App() {
                   </label>
                 </div>
 
-                <label>
+                <label style={{ display: 'block', width: '100%' }}>
                   Treść kroniki
                   <textarea
                     value={chronicleContent}
@@ -12781,7 +12781,10 @@ function App() {
                     rows={22}
                     maxLength={12000}
                     style={{
+                      width: '100%',
+                      minWidth: '100%',
                       minHeight: 460,
+                      boxSizing: 'border-box',
                       resize: 'vertical',
                       lineHeight: 1.55,
                     }}
