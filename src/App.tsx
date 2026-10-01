@@ -12697,6 +12697,7 @@ function App() {
 
           {showChronicleEditor && (
             <Modal
+              width="min(1180px, calc(100vw - 48px))"
               onClose={() => {
                 setShowChronicleEditor(false)
                 setEditingChronicle(null)
@@ -12777,8 +12778,13 @@ function App() {
                       )
                     }}
                     placeholder="Opisz wydarzenia sesji... Wpisz @, aby dodać odnośnik."
-                    rows={14}
+                    rows={22}
                     maxLength={12000}
+                    style={{
+                      minHeight: 460,
+                      resize: 'vertical',
+                      lineHeight: 1.55,
+                    }}
                   />
                 </label>
 
@@ -15539,9 +15545,11 @@ Coin;normal;1;;;;;;;100;100`}
 function Modal({
   children,
   onClose,
+  width,
 }: {
   children: ReactNode
   onClose: () => void
+  width?: string | number
 }) {
   return (
     <div
@@ -15555,6 +15563,7 @@ function Modal({
         }
         style={{
           maxHeight: 'calc(100vh - 48px)',
+          ...(width ? { width, maxWidth: 'calc(100vw - 48px)' } : {}),
           overflowY: 'auto',
           overflowX: 'hidden',
           overscrollBehavior: 'contain',
