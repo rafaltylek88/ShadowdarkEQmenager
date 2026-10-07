@@ -4178,6 +4178,10 @@ function App() {
           maxHp: characterMaxHp,
           temporaryHp: characterTemporaryHp,
           bonusSlots: characterBonusSlots,
+          bonusAc: 0,
+          bonusAttackRoll: 0,
+          bonusDamage: 0,
+          luckTokens: 0,
           ancestry: characterAncestry,
           className: characterClassName,
           level: characterLevel,
@@ -4215,6 +4219,10 @@ function App() {
               maxHp: characterMaxHp,
               temporaryHp: characterTemporaryHp,
               bonusSlots: characterBonusSlots,
+              bonusAc: editingCharacter.bonusAc,
+              bonusAttackRoll: editingCharacter.bonusAttackRoll,
+              bonusDamage: editingCharacter.bonusDamage,
+              luckTokens: editingCharacter.luckTokens,
               ancestry: characterAncestry,
               className: characterClassName,
               level: characterLevel,
@@ -4245,6 +4253,10 @@ function App() {
           maxHp: characterMaxHp,
           temporaryHp: characterTemporaryHp,
           bonusSlots: characterBonusSlots,
+          bonusAc: 0,
+          bonusAttackRoll: 0,
+          bonusDamage: 0,
+          luckTokens: 0,
           ancestry: characterAncestry,
           className: characterClassName,
           level: characterLevel,
@@ -4286,6 +4298,10 @@ function App() {
       maxHp: number
       temporaryHp: number
       bonusSlots: number
+      bonusAc: number
+      bonusAttackRoll: number
+      bonusDamage: number
+      luckTokens: number
       xp: number
       xpNext: number
       portraitUrl: string
@@ -4305,6 +4321,10 @@ function App() {
       maxHp: overrides.maxHp ?? character.maxHp,
       temporaryHp: overrides.temporaryHp ?? character.temporaryHp,
       bonusSlots: overrides.bonusSlots ?? character.bonusSlots,
+      bonusAc: overrides.bonusAc ?? character.bonusAc,
+      bonusAttackRoll: overrides.bonusAttackRoll ?? character.bonusAttackRoll,
+      bonusDamage: overrides.bonusDamage ?? character.bonusDamage,
+      luckTokens: overrides.luckTokens ?? character.luckTokens,
       ancestry: character.ancestry,
       className: character.className,
       level: character.level,
@@ -4446,6 +4466,50 @@ function App() {
       )
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić bonusowych slotów.')
+    }
+  }
+
+  async function setCharacterSheetModifierValue(
+    character: Character,
+    field: 'bonusAc' | 'bonusAttackRoll' | 'bonusDamage' | 'luckTokens',
+    value: number
+  ) {
+    const nextValue =
+      field === 'luckTokens'
+        ? Math.max(0, Math.floor(value))
+        : Math.floor(value)
+
+    if (nextValue === character[field]) return
+
+    const labels = {
+      bonusAc: 'bonusowe AC',
+      bonusAttackRoll: 'bonusowy ATT ROLL',
+      bonusDamage: 'bonusowy DMG',
+      luckTokens: 'Luck Tokeny',
+    } as const
+
+    try {
+      await updateCharacter(
+        character.id,
+        fullCharacterChanges(character, { [field]: nextValue })
+      )
+      await refreshCharacters()
+      flash(
+        `${character.name}: ${labels[field]} ${character[field]} → ${nextValue}.`,
+        'character',
+        {
+          kind: 'character_patch',
+          characterId: character.id,
+          before: { [field]: character[field] },
+          after: { [field]: nextValue },
+        }
+      )
+    } catch (e: any) {
+      setError(
+        e?.message ||
+          e?.details ||
+          `Nie udało się zmienić wartości: ${labels[field]}.`
+      )
     }
   }
 
@@ -4877,7 +4941,7 @@ function App() {
         return sum + (match ? Number(match[0]) : 0)
       }, 0)
 
-    return baseAc + shieldBonus
+    return baseAc + shieldBonus + character.bonusAc
   }
 
   async function toggleEquippedItem(
@@ -9465,6 +9529,63 @@ function App() {
                                     Fighter: możesz wpisać tutaj modyfikator CON ({formatModifier(statModifier(character.constitution))}).
                                   </span>
                                 </div>
+
+                                <div
+                                  style={{
+                                    marginTop: 6,
+                                    paddingTop: 8,
+                                    borderTop: '1px solid rgba(180, 135, 60, 0.24)',
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                                    gap: 10,
+                                  }}
+                                >
+                                  <div>
+                                    <span className="muted" style={{ display: 'block', marginBottom: 5 }}>
+                                      Bonusowe AC
+                                    </span>
+                                    <InventoryQuantityInput
+                                      value={character.bonusAc}
+                                      onCommit={value =>
+                                        setCharacterSheetModifierValue(character, 'bonusAc', value)
+                                      }
+                                    />
+                                  </div>
+                                  <div>
+                                    <span className="muted" style={{ display: 'block', marginBottom: 5 }}>
+                                      Bonusowy ATT ROLL
+                                    </span>
+                                    <InventoryQuantityInput
+                                      value={character.bonusAttackRoll}
+                                      onCommit={value =>
+                                        setCharacterSheetModifierValue(character, 'bonusAttackRoll', value)
+                                      }
+                                    />
+                                  </div>
+                                  <div>
+                                    <span className="muted" style={{ display: 'block', marginBottom: 5 }}>
+                                      Bonusowy DMG
+                                    </span>
+                                    <InventoryQuantityInput
+                                      value={character.bonusDamage}
+                                      onCommit={value =>
+                                        setCharacterSheetModifierValue(character, 'bonusDamage', value)
+                                      }
+                                    />
+                                  </div>
+                                  <div>
+                                    <span className="muted" style={{ display: 'block', marginBottom: 5 }}>
+                                      Luck Tokeny
+                                    </span>
+                                    <InventoryQuantityInput
+                                      value={character.luckTokens}
+                                      onCommit={value =>
+                                        setCharacterSheetModifierValue(character, 'luckTokens', value)
+                                      }
+                                    />
+                                  </div>
+                                </div>
+
                                 <div className="progress small">
                                   <i
                                     style={{
