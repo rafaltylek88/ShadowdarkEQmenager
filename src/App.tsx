@@ -2631,7 +2631,7 @@ function App() {
   const expeditionWarnings = useMemo(() => {
     const result: Array<{ key: string; severity: 'warning' | 'danger'; text: string }> = []
 
-    for (const character of characters) {
+    for (const character of activeCharacters) {
       const used = usedSlotsForCharacter(character.id)
       const max =
         Math.max(10, character.strength) +
@@ -2688,7 +2688,7 @@ function App() {
 
     return result
   }, [
-    characters,
+    activeCharacters,
     npcs,
     items,
     characterRationCounts,
@@ -7990,13 +7990,6 @@ function App() {
             ))}
           </nav>
 
-          <div className="sidebar-footer">
-            <Home size={16} />
-
-            <span>
-              Etap MAP-1 • kalibracja mapy</span>
-          </div>
-
         </aside>
 
         <main>
@@ -8926,9 +8919,18 @@ function App() {
                 .character-hero-clean::before {
                   display: none !important;
                   content: none !important;
+                  background: none !important;
+                  background-image: none !important;
                 }
               `}</style>
-              <section className="hero parchment-panel character-hero-clean">
+              <section
+                className="hero parchment-panel character-hero-clean"
+                style={{
+                  backgroundImage: 'none',
+                  background:
+                    'linear-gradient(180deg, rgba(48, 36, 22, 0.96), rgba(29, 23, 16, 0.98))',
+                }}
+              >
                 <div>
                   <p className="eyebrow">POSTACIE</p>
                   <h1>{active?.name ?? 'Brak kampanii'}</h1>
