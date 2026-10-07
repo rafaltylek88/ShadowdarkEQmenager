@@ -872,7 +872,7 @@ function App() {
       setCharacterReserves(await loadCharacterReserves(activeId))
     } catch (e: any) {
       console.error('LOAD INN ERROR:', e)
-      setError(e?.message || e?.details || 'Nie udało się pobrać Karczmy na Rozstajach.')
+      setError(e?.message || e?.details || 'Nie udało się pobrać Akademii Bohaterów.')
     } finally {
       setInnLoading(false)
     }
@@ -4787,7 +4787,7 @@ function App() {
   async function moveCharacterToInn(character: Character) {
     if (!activeId) return
     const confirmed = window.confirm(
-      `Wysłać postać „${character.name}” do Karczmy na Rozstajach? Postać przestanie być członkiem aktywnej drużyny.`
+      `Wysłać postać „${character.name}” do Akademii Bohaterów? Postać przestanie być członkiem aktywnej drużyny.`
     )
     if (!confirmed) return
 
@@ -4799,9 +4799,9 @@ function App() {
       await sendCharacterToInn(activeId, character.id)
       if (selectedCharacterId === character.id) setSelectedCharacterId(null)
       await refreshInn()
-      flash(`${character.name} czeka teraz w Karczmie na Rozstajach.`, 'character')
+      flash(`${character.name} czeka teraz w Akademii Bohaterów.`, 'character')
     } catch (e: any) {
-      setError(e?.message || e?.details || 'Nie udało się wysłać postaci do Karczmy.')
+      setError(e?.message || e?.details || 'Nie udało się wysłać postaci do Akademii Bohaterów.')
     }
   }
 
@@ -5070,6 +5070,7 @@ function App() {
       const undoPayload = await finalizeUndoScopes(undoBefore)
       flash(`Usunięto Postać: ${character.name}.`, 'character', undoPayload)
       await refreshCharacters()
+      await refreshInn()
     } catch (e: any) {
       console.error('DELETE CHARACTER ERROR:', e)
       setError(e?.message || e?.details || 'Nie udało się usunąć postaci.')
@@ -9199,7 +9200,7 @@ function App() {
                               <button
                                 className="secondary"
                                 onClick={() => void moveCharacterToInn(character)}
-                                title="Przenieś postać do Karczmy na Rozstajach"
+                                title="Przenieś postać do Akademii Bohaterów"
                               >
                                 <Building2 size={15} />
                                 Wyślij do Akademii
@@ -12295,12 +12296,12 @@ function App() {
               <section className="inn-scene">
                 {innLoading || charactersLoading || itemsLoading ? (
                   <p className="muted" style={{ padding: 24 }}>
-                    Ładowanie Karczmy na Rozstajach…
+                    Ładowanie Akademii Bohaterów…
                   </p>
                 ) : innCharacters.length === 0 ? (
                   <div className="empty-state" style={{ margin: 24 }}>
                     <Building2 size={42} style={{ opacity: .55 }} />
-                    <p>W Karczmie nie ma obecnie żadnych postaci zapasowych.</p>
+                    <p>W Akademii nie ma obecnie żadnych postaci zapasowych.</p>
                     <span className="muted">
                       Otwórz aktywną kartę postaci i wybierz „Wyślij do Akademii”.
                     </span>
@@ -12381,15 +12382,41 @@ function App() {
                           </div>
 
                           <div className="muted" style={{ marginTop: 12, fontSize: 11 }}>
-                            W Karczmie od:{' '}
+                            W Akademii od:{' '}
                             {reserve?.sentAt
                               ? new Date(reserve.sentAt).toLocaleString('pl-PL')
                               : '—'}
                           </div>
 
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1fr 1fr',
+                              gap: 8,
+                              marginTop: 14,
+                            }}
+                          >
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={() => openEditCharacter(character)}
+                            >
+                              <Pencil size={15} />
+                              Edytuj
+                            </button>
+                            <button
+                              type="button"
+                              className="danger"
+                              onClick={() => void removeCharacter(character)}
+                            >
+                              <Trash2 size={15} />
+                              Usuń
+                            </button>
+                          </div>
+
                           <button
                             className="primary full"
-                            style={{ marginTop: 14 }}
+                            style={{ marginTop: 8 }}
                             onClick={() => void activateInnCharacter(character)}
                           >
                             <Users size={16} />
