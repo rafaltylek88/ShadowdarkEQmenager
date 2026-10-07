@@ -196,6 +196,7 @@ const nav = [
   ['Biblioteka', Package],
   ['Kronika', ScrollText],
   ['Cmentarz', Skull],
+  ['Skrzynia ze skarbami', Coins],
   ['Historia', ArrowRightLeft],
   ['Podsumowanie', Coins],
 ] as const
@@ -7935,7 +7936,9 @@ function App() {
                 border-radius: 999px;
               }
             `}</style>
-            {nav.map(([label, Icon]) => (
+            {nav.map(([label, Icon]) => {
+              if (label === 'Skrzynia ze skarbami') return null
+              return (
               <div key={label}>
                 <button
                   className={activeView === label ? 'nav-active' : ''}
@@ -7989,7 +7992,8 @@ function App() {
                       >
                         {character.name}
                       </button>
-                    ))}
+                    )
+            })}
 
                     <button
                       onClick={openAllCharacters}
