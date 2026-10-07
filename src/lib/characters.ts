@@ -16,6 +16,10 @@ export type Character = {
   maxHp: number
   temporaryHp: number
   bonusSlots: number
+  bonusAc: number
+  bonusAttackRoll: number
+  bonusDamage: number
+  luckTokens: number
   ancestry: string
   className: string
   level: number
@@ -51,6 +55,10 @@ function mapCharacter(row: any): Character {
     maxHp: Math.max(1, Number(row.max_hp ?? 1)),
     temporaryHp: Math.max(0, Number(row.temporary_hp ?? 0)),
     bonusSlots: Math.max(0, Number(row.bonus_slots ?? 0)),
+    bonusAc: Math.floor(Number(row.bonus_ac ?? 0)),
+    bonusAttackRoll: Math.floor(Number(row.bonus_attack_roll ?? 0)),
+    bonusDamage: Math.floor(Number(row.bonus_damage ?? 0)),
+    luckTokens: Math.max(0, Math.floor(Number(row.luck_tokens ?? 0))),
     ancestry: row.ancestry ?? '',
     className: row.class_name ?? '',
     level: Math.max(1, Number(row.level ?? 1)),
@@ -94,6 +102,10 @@ export async function createCharacter(
     maxHp?: number
     temporaryHp?: number
     bonusSlots?: number
+    bonusAc?: number
+    bonusAttackRoll?: number
+    bonusDamage?: number
+    luckTokens?: number
     ancestry?: string
     className?: string
     level?: number
@@ -125,6 +137,10 @@ export async function createCharacter(
     max_hp: Math.max(1, Math.floor(stats?.maxHp ?? 1)),
     temporary_hp: Math.max(0, Math.floor(stats?.temporaryHp ?? 0)),
     bonus_slots: Math.max(0, Math.floor(stats?.bonusSlots ?? 0)),
+    bonus_ac: Math.floor(stats?.bonusAc ?? 0),
+    bonus_attack_roll: Math.floor(stats?.bonusAttackRoll ?? 0),
+    bonus_damage: Math.floor(stats?.bonusDamage ?? 0),
+    luck_tokens: Math.max(0, Math.floor(stats?.luckTokens ?? 0)),
     current_hp: Math.min(
       Math.max(0, Math.floor(stats?.currentHp ?? stats?.maxHp ?? 1)),
       Math.max(1, Math.floor(stats?.maxHp ?? 1)) +
@@ -165,6 +181,10 @@ export async function updateCharacter(
     maxHp: number
     temporaryHp: number
     bonusSlots: number
+    bonusAc: number
+    bonusAttackRoll: number
+    bonusDamage: number
+    luckTokens: number
     ancestry: string
     className: string
     level: number
@@ -193,6 +213,10 @@ export async function updateCharacter(
     max_hp: Math.max(1, Math.floor(changes.maxHp)),
     temporary_hp: Math.max(0, Math.floor(changes.temporaryHp)),
     bonus_slots: Math.max(0, Math.floor(changes.bonusSlots)),
+    bonus_ac: Math.floor(changes.bonusAc),
+    bonus_attack_roll: Math.floor(changes.bonusAttackRoll),
+    bonus_damage: Math.floor(changes.bonusDamage),
+    luck_tokens: Math.max(0, Math.floor(changes.luckTokens)),
     current_hp: Math.min(
       Math.max(0, Math.floor(changes.currentHp)),
       Math.max(1, Math.floor(changes.maxHp)) +
