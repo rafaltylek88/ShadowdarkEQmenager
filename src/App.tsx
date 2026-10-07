@@ -8958,28 +8958,19 @@ function App() {
 
           {activeView === 'Postacie' && (
             <>
-              <style>{`
-                section.hero.parchment-panel.character-hero-clean::after,
-                section.hero.parchment-panel.character-hero-clean::before,
-                .character-hero-clean::after,
-                .character-hero-clean::before {
-                  display: none !important;
-                  visibility: hidden !important;
-                  opacity: 0 !important;
-                  content: none !important;
-                  background: none !important;
-                  background-image: none !important;
-                }
-                .character-hero-clean {
-                  overflow: hidden !important;
-                }
-              `}</style>
               <section
-                className="hero parchment-panel character-hero-clean"
+                className="character-header-clean"
                 style={{
+                  position: 'relative',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 20,
+                  padding: '18px 26px',
+                  border: '1px solid rgba(151, 108, 42, .55)',
+                  background: 'transparent',
                   backgroundImage: 'none',
-                  background:
-                    'linear-gradient(180deg, rgba(48, 36, 22, 0.96), rgba(29, 23, 16, 0.98))',
+                  boxShadow: 'none',
                 }}
               >
                 <div>
@@ -9013,21 +9004,6 @@ function App() {
                     Nowa postać
                   </button>
                 </div>
-              
-                <div
-                  aria-hidden="true"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    right: 0,
-                    width: 112,
-                    height: 112,
-                    zIndex: 20,
-                    pointerEvents: 'none',
-                    background:
-                      'linear-gradient(180deg, rgba(48,36,22,1), rgba(38,29,19,1))',
-                  }}
-                />
 </section>
 
               <section className="dashboard-grid">
