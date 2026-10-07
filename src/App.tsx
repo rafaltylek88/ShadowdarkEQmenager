@@ -7936,9 +7936,9 @@ function App() {
                 border-radius: 999px;
               }
             `}</style>
-            {nav.map(([label, Icon]) => {
-              if (label === 'Skrzynia ze skarbami') return null
-              return (
+            {nav
+              .filter(([label]) => label !== 'Skrzynia ze skarbami')
+              .map(([label, Icon]) => (
               <div key={label}>
                 <button
                   className={activeView === label ? 'nav-active' : ''}
