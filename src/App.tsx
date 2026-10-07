@@ -317,6 +317,7 @@ function App() {
   const [cemeterySelectedCharacterId, setCemeterySelectedCharacterId] = useState<string | null>(null)
   const [characterReserves, setCharacterReserves] = useState<CharacterReserve[]>([])
   const [innLoading, setInnLoading] = useState(false)
+  const [createCharacterForInn, setCreateCharacterForInn] = useState(false)
   const [treasureItems, setTreasureItems] = useState<TreasureItem[]>([])
   const [treasureLoading, setTreasureLoading] = useState(false)
   const [showTreasureAdd, setShowTreasureAdd] = useState(false)
@@ -3974,6 +3975,7 @@ function App() {
   }
 
   function openNewCharacter() {
+    setCreateCharacterForInn(false)
     setEditingCharacter(null)
     setCharacterName('')
     setCharacterStrength(10)
@@ -4000,6 +4002,11 @@ function App() {
     setCharacterBackstory('')
     setCharacterPortraitUrl('')
     setShowCharacter(true)
+  }
+
+  function openNewInnCharacter() {
+    openNewCharacter()
+    setCreateCharacterForInn(true)
   }
 
   function openEditCharacter(character: Character) {
@@ -4225,7 +4232,7 @@ function App() {
           }
         )
       } else {
-        await createCharacter(activeId, characterName, characterStrength, characterGold, {
+        const createdCharacter = await createCharacter(activeId, characterName, characterStrength, characterGold, {
           dexterity: characterDexterity,
           constitution: characterConstitution,
           intelligence: characterIntelligence,
@@ -4251,9 +4258,17 @@ function App() {
           backstory: characterBackstory,
           portraitUrl: characterPortraitUrl,
         })
-        flash(`Dodano Postać: ${characterName}.`, 'character')
+
+        if (createCharacterForInn) {
+          await sendCharacterToInn(activeId, createdCharacter.id)
+          await refreshInn()
+          flash(`Dodano postać zapasową: ${characterName}.`, 'character')
+        } else {
+          flash(`Dodano Postać: ${characterName}.`, 'character')
+        }
       }
 
+      setCreateCharacterForInn(false)
       setShowCharacter(false)
       setEditingCharacter(null)
       await refreshCharacters()
@@ -8906,7 +8921,14 @@ function App() {
 
           {activeView === 'Postacie' && (
             <>
-              <section className="hero parchment-panel">
+              <style>{`
+                .character-hero-clean::after,
+                .character-hero-clean::before {
+                  display: none !important;
+                  content: none !important;
+                }
+              `}</style>
+              <section className="hero parchment-panel character-hero-clean">
                 <div>
                   <p className="eyebrow">POSTACIE</p>
                   <h1>{active?.name ?? 'Brak kampanii'}</h1>
@@ -11996,7 +12018,13 @@ function App() {
                     zasobów, światła, prowiantu ani aktywnej drużyny.
                   </p>
                 </div>
-                <Building2 size={42} style={{ opacity: .72 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <button className="primary" onClick={openNewInnCharacter}>
+                    <Plus size={16} />
+                    Nowa postać
+                  </button>
+                  <Building2 size={42} style={{ opacity: .72 }} />
+                </div>
               </section>
 
               <section className="inn-scene">
