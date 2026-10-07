@@ -318,6 +318,7 @@ function App() {
   const [characterReserves, setCharacterReserves] = useState<CharacterReserve[]>([])
   const [innLoading, setInnLoading] = useState(false)
   const [createCharacterForInn, setCreateCharacterForInn] = useState(false)
+  const [characterModifierDescription, setCharacterModifierDescription] = useState<null | { title: string; text: string }>(null)
   const [treasureItems, setTreasureItems] = useState<TreasureItem[]>([])
   const [treasureLoading, setTreasureLoading] = useState(false)
   const [showTreasureAdd, setShowTreasureAdd] = useState(false)
@@ -9552,58 +9553,108 @@ function App() {
                                     <span className="muted" style={{ display: 'block', marginBottom: 5 }}>
                                       Bonusowe AC
                                     </span>
-                                    <InventoryQuantityInput
-                                      value={character.bonusAc}
-                                      onCommit={value =>
-                                        setCharacterSheetModifierValue(character, 'bonusAc', value)
-                                      }
-                                    />
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                      <InventoryQuantityInput
+                                        value={character.bonusAc}
+                                        onCommit={value =>
+                                          setCharacterSheetModifierValue(character, 'bonusAc', value)
+                                        }
+                                      />
+                                      <button
+                                        type="button"
+                                        className="secondary"
+                                        style={{ minHeight: 31, padding: '4px 9px', fontSize: 11 }}
+                                        onClick={() =>
+                                          setCharacterModifierDescription({
+                                            title: 'Bonusowe AC',
+                                            text: 'Stały modyfikator Klasy Pancerza (AC). Użyj go, gdy postać otrzymuje premię lub karę do AC wynikającą z talentu, zdolności klasowej, efektu magicznego lub innej trwałej cechy. Wartość jest doliczana do wyliczanego AC postaci.',
+                                          })
+                                        }
+                                      >
+                                        Opis
+                                      </button>
+                                    </span>
                                   </div>
                                   <div>
                                     <span className="muted" style={{ display: 'block', marginBottom: 5 }}>
                                       Bonusowy ATT ROLL
                                     </span>
-                                    <InventoryQuantityInput
-                                      value={character.bonusAttackRoll}
-                                      onCommit={value =>
-                                        setCharacterSheetModifierValue(character, 'bonusAttackRoll', value)
-                                      }
-                                    />
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                      <InventoryQuantityInput
+                                        value={character.bonusAttackRoll}
+                                        onCommit={value =>
+                                          setCharacterSheetModifierValue(character, 'bonusAttackRoll', value)
+                                        }
+                                      />
+                                      <button
+                                        type="button"
+                                        className="secondary"
+                                        style={{ minHeight: 31, padding: '4px 9px', fontSize: 11 }}
+                                        onClick={() =>
+                                          setCharacterModifierDescription({
+                                            title: 'Bonusowy ATT ROLL',
+                                            text: 'Stały modyfikator do rzutu ataku (ATT ROLL). Wpisz tutaj premię lub karę wynikającą z talentu, zdolności klasowej, efektu magicznego albo innej cechy postaci. Pole służy do zapamiętania modyfikatora na karcie.',
+                                          })
+                                        }
+                                      >
+                                        Opis
+                                      </button>
+                                    </span>
                                   </div>
                                   <div>
                                     <span className="muted" style={{ display: 'block', marginBottom: 5 }}>
                                       Bonusowy DMG
                                     </span>
-                                    <InventoryQuantityInput
-                                      value={character.bonusDamage}
-                                      onCommit={value =>
-                                        setCharacterSheetModifierValue(character, 'bonusDamage', value)
-                                      }
-                                    />
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                      <InventoryQuantityInput
+                                        value={character.bonusDamage}
+                                        onCommit={value =>
+                                          setCharacterSheetModifierValue(character, 'bonusDamage', value)
+                                        }
+                                      />
+                                      <button
+                                        type="button"
+                                        className="secondary"
+                                        style={{ minHeight: 31, padding: '4px 9px', fontSize: 11 }}
+                                        onClick={() =>
+                                          setCharacterModifierDescription({
+                                            title: 'Bonusowy DMG',
+                                            text: 'Stały modyfikator obrażeń (DMG). Wpisz tutaj premię lub karę do obrażeń wynikającą z talentu, zdolności klasowej, efektu magicznego albo innej cechy postaci. Pole służy do zapamiętania modyfikatora na karcie.',
+                                          })
+                                        }
+                                      >
+                                        Opis
+                                      </button>
+                                    </span>
                                   </div>
                                   <div>
                                     <span className="muted" style={{ display: 'block', marginBottom: 5 }}>
                                       Luck Tokeny
                                     </span>
-                                    <InventoryQuantityInput
-                                      value={character.luckTokens}
-                                      onCommit={value =>
-                                        setCharacterSheetModifierValue(character, 'luckTokens', value)
-                                      }
-                                    />
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                      <InventoryQuantityInput
+                                        value={character.luckTokens}
+                                        onCommit={value =>
+                                          setCharacterSheetModifierValue(character, 'luckTokens', value)
+                                        }
+                                      />
+                                      <button
+                                        type="button"
+                                        className="secondary"
+                                        style={{ minHeight: 31, padding: '4px 9px', fontSize: 11 }}
+                                        onClick={() =>
+                                          setCharacterModifierDescription({
+                                            title: 'Luck Tokeny',
+                                            text: 'Licznik Luck Tokenów posiadanych przez postać. Zapisuj tutaj aktualną liczbę tokenów szczęścia przyznanych postaci w trakcie gry. Licznik nie może spaść poniżej zera.',
+                                          })
+                                        }
+                                      >
+                                        Opis
+                                      </button>
+                                    </span>
                                   </div>
                                 </div>
 
-                                <div className="progress small">
-                                  <i
-                                    style={{
-                                      width: `${Math.min(
-                                        100,
-                                        maxSlots > 0 ? (usedSlots / maxSlots) * 100 : 0
-                                      )}%`,
-                                    }}
-                                  />
-                                </div>
                               </div>
                             </div>
                           </div>
@@ -15448,6 +15499,25 @@ function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {characterModifierDescription && (
+        <Modal onClose={() => setCharacterModifierDescription(null)}>
+          <p className="eyebrow">MODYFIKATOR POSTACI</p>
+          <h2>{characterModifierDescription.title}</h2>
+          <p style={{ maxWidth: 560, lineHeight: 1.7 }}>
+            {characterModifierDescription.text}
+          </p>
+          <div className="actions">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => setCharacterModifierDescription(null)}
+            >
+              Zamknij
+            </button>
+          </div>
+        </Modal>
       )}
 
       {showItem && (
