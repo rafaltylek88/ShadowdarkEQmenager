@@ -59,6 +59,12 @@ import {
 } from './lib/cemetery'
 import type { CharacterMemorial } from './lib/cemetery'
 import {
+  loadCharacterReserves,
+  sendCharacterToInn,
+  returnCharacterFromInn,
+} from './lib/inn'
+import type { CharacterReserve } from './lib/inn'
+import {
   createTreasureItem,
   deleteTreasureItem,
   loadTreasureItems,
@@ -181,6 +187,7 @@ const initialCampaigns: Campaign[] = [
 const nav = [
   ['Dashboard', Gauge],
   ['Postacie', Users],
+  ['Karczma na Rozstajach', Building2],
   ['NPC', Shield],
   ['Postacie Fabularne', UserPlus],
   ['Zwierzęta', Beef],
@@ -308,6 +315,8 @@ function App() {
   const [characterMemorials, setCharacterMemorials] = useState<CharacterMemorial[]>([])
   const [cemeteryLoading, setCemeteryLoading] = useState(false)
   const [cemeterySelectedCharacterId, setCemeterySelectedCharacterId] = useState<string | null>(null)
+  const [characterReserves, setCharacterReserves] = useState<CharacterReserve[]>([])
+  const [innLoading, setInnLoading] = useState(false)
   const [treasureItems, setTreasureItems] = useState<TreasureItem[]>([])
   const [treasureLoading, setTreasureLoading] = useState(false)
   const [showTreasureAdd, setShowTreasureAdd] = useState(false)
@@ -327,9 +336,33 @@ function App() {
     [characterMemorials]
   )
 
+  const reserveCharacterIds = useMemo(
+    () => new Set(characterReserves.map(reserve => reserve.characterId)),
+    [characterReserves]
+  )
+
   const activeCharacters = useMemo(
-    () => characters.filter(character => !deadCharacterIds.has(character.id)),
-    [characters, deadCharacterIds]
+    () =>
+      characters.filter(
+        character =>
+          !deadCharacterIds.has(character.id) &&
+          !reserveCharacterIds.has(character.id)
+      ),
+    [characters, deadCharacterIds, reserveCharacterIds]
+  )
+
+  const innCharacters = useMemo(
+    () =>
+      characters
+        .filter(
+          character =>
+            reserveCharacterIds.has(character.id) &&
+            !deadCharacterIds.has(character.id)
+        )
+        .sort((a, b) =>
+          a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' })
+        ),
+    [characters, reserveCharacterIds, deadCharacterIds]
   )
 
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
@@ -822,6 +855,22 @@ function App() {
     }
   }, [activeId, isCloudMode])
 
+  const refreshInn = useCallback(async () => {
+    if (!activeId || !isCloudMode) {
+      setCharacterReserves([])
+      return
+    }
+    setInnLoading(true)
+    try {
+      setCharacterReserves(await loadCharacterReserves(activeId))
+    } catch (e: any) {
+      console.error('LOAD INN ERROR:', e)
+      setError(e?.message || e?.details || 'Nie udało się pobrać Karczmy na Rozstajach.')
+    } finally {
+      setInnLoading(false)
+    }
+  }, [activeId, isCloudMode])
+
   const refreshCharacters = useCallback(async () => {
     if (!activeId || !isCloudMode) {
       setCharacters([])
@@ -1279,6 +1328,29 @@ function App() {
       .subscribe()
     return () => { sb.removeChannel(channel) }
   }, [session, activeId, refreshCemetery])
+
+  useEffect(() => {
+    refreshInn()
+  }, [refreshInn])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+    const channel = sb
+      .channel(`campaign-inn-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'character_reserves',
+          filter: `campaign_id=eq.${activeId}`,
+        },
+        refreshInn
+      )
+      .subscribe()
+    return () => { sb.removeChannel(channel) }
+  }, [session, activeId, refreshInn])
 
   useEffect(() => {
     refreshCharacters()
@@ -2382,8 +2454,8 @@ function App() {
   }
 
   const charactersWealth = useMemo(
-    () => characters.reduce((sum, character) => sum + character.gold, 0),
-    [characters]
+    () => activeCharacters.reduce((sum, character) => sum + character.gold, 0),
+    [activeCharacters]
   )
 
   const npcCoins = useMemo(
@@ -2834,13 +2906,6 @@ function App() {
       return
     }
 
-    if (deadCharacterIds.size > 0) {
-      setError(
-        'Automatyczne karmienie całej ekspedycji jest zablokowane przy postaciach na Cmentarzu, aby nie zużyć ich racji. Racje żywych możesz przekazywać z panelu racji.'
-      )
-      return
-    }
-
     const undoBefore = await captureUndoScopes([
       { table: 'characters', filters: { campaign_id: activeId } },
       { table: 'npcs', filters: { campaign_id: activeId } },
@@ -3017,6 +3082,7 @@ function App() {
         refreshMapMarkers(),
         refreshMapHexes(),
         refreshCemetery(),
+        refreshInn(),
         refreshTreasure(),
       ])
 
@@ -3052,6 +3118,7 @@ function App() {
         .filter(
           item =>
             !deadCharacterIds.has(item.characterId) &&
+            !reserveCharacterIds.has(item.characterId) &&
             item.category === 'light' &&
             !item.isActiveLight &&
             item.quantity > 0 &&
@@ -3090,7 +3157,7 @@ function App() {
           catalogItemId: item.catalogItemId,
         })),
     ],
-    [items, activeCharacters, deadCharacterIds, npcItems, npcs]
+    [items, activeCharacters, deadCharacterIds, reserveCharacterIds, npcItems, npcs]
   )
 
   const lightCarrierChoices = useMemo(() => {
@@ -3615,7 +3682,7 @@ function App() {
 
   const characterLightSeconds = useMemo(
     () =>
-      characters.reduce((sum, character) => {
+      activeCharacters.reduce((sum, character) => {
         const ownerItems = itemsForCharacter(character.id)
         const active =
           lightState?.carrierType === 'character' &&
@@ -3631,7 +3698,7 @@ function App() {
         )
       }, 0),
     [
-      characters,
+      activeCharacters,
       itemsForCharacter,
       lightState,
       calculateLightSecondsForOwner,
@@ -4593,6 +4660,42 @@ function App() {
       flash(`${character.name} wrócił do aktywnej drużyny.`, 'character')
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się przywrócić postaci.')
+    }
+  }
+
+  async function moveCharacterToInn(character: Character) {
+    if (!activeId) return
+    const confirmed = window.confirm(
+      `Wysłać postać „${character.name}” do Karczmy na Rozstajach? Postać przestanie być członkiem aktywnej drużyny.`
+    )
+    if (!confirmed) return
+
+    try {
+      if (lightState?.carrierType === 'character' && lightState.characterId === character.id) {
+        await extinguishCampaignLight(activeId)
+        await refreshLight()
+      }
+      await sendCharacterToInn(activeId, character.id)
+      if (selectedCharacterId === character.id) setSelectedCharacterId(null)
+      await refreshInn()
+      flash(`${character.name} czeka teraz w Karczmie na Rozstajach.`, 'character')
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się wysłać postaci do Karczmy.')
+    }
+  }
+
+  async function activateInnCharacter(character: Character) {
+    const confirmed = window.confirm(
+      `Dołączyć postać „${character.name}” do aktywnej drużyny?`
+    )
+    if (!confirmed) return
+
+    try {
+      await returnCharacterFromInn(character.id)
+      await refreshInn()
+      flash(`${character.name} dołączył do aktywnej drużyny.`, 'character')
+    } catch (e: any) {
+      setError(e?.message || e?.details || 'Nie udało się przywrócić postaci do drużyny.')
     }
   }
 
@@ -8517,7 +8620,7 @@ function App() {
                 onClick={handleFeedExpedition}
                 disabled={
                   feedingExpedition ||
-                  characters.length === 0 ||
+                  expeditionMembers.length === 0 ||
                   membersMissingRations.length > 0
                 }
               >
@@ -8915,6 +9018,15 @@ function App() {
                               >
                                 <Pencil size={15} />
                                 Edytuj kartę
+                              </button>
+
+                              <button
+                                className="secondary"
+                                onClick={() => void moveCharacterToInn(character)}
+                                title="Przenieś postać do Karczmy na Rozstajach"
+                              >
+                                <Building2 size={15} />
+                                Wyślij do Karczmy
                               </button>
 
                               <button
@@ -11808,6 +11920,191 @@ function App() {
                         </div>
                       </article>
                     ))}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
+          {activeView === 'Karczma na Rozstajach' && (
+            <>
+              <style>{`
+                .inn-scene {
+                  position: relative;
+                  overflow: hidden;
+                  min-height: 680px;
+                  border: 1px solid rgba(178,129,52,.38);
+                  border-radius: 14px;
+                  background:
+                    radial-gradient(circle at 50% 18%, rgba(119,76,27,.20), transparent 42%),
+                    linear-gradient(180deg, rgba(25,17,10,.72), rgba(8,7,6,.96));
+                  box-shadow: inset 0 0 90px rgba(0,0,0,.58);
+                }
+                .inn-grid {
+                  position: relative;
+                  z-index: 1;
+                  display: grid;
+                  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+                  gap: 18px;
+                  padding: 24px;
+                }
+                .inn-card {
+                  border: 1px solid rgba(190,145,65,.42);
+                  border-radius: 10px;
+                  padding: 18px;
+                  background:
+                    linear-gradient(180deg, rgba(61,42,23,.82), rgba(20,16,12,.96));
+                  box-shadow: 0 14px 30px rgba(0,0,0,.32), inset 0 1px rgba(255,224,164,.05);
+                }
+                .inn-card h3 {
+                  margin: 0;
+                  color: #e2c47f;
+                  font-family: Georgia, serif;
+                  font-size: 22px;
+                }
+                .inn-status {
+                  display: inline-flex;
+                  margin-top: 7px;
+                  padding: 4px 8px;
+                  border: 1px solid rgba(199,151,69,.38);
+                  border-radius: 999px;
+                  color: #cda85f;
+                  font-size: 11px;
+                  font-weight: 800;
+                  letter-spacing: .08em;
+                }
+                .inn-inventory {
+                  margin-top: 14px;
+                  padding-top: 12px;
+                  border-top: 1px solid rgba(190,145,65,.22);
+                }
+                .inn-item-row {
+                  display: flex;
+                  justify-content: space-between;
+                  gap: 12px;
+                  padding: 6px 0;
+                  border-bottom: 1px solid rgba(255,255,255,.045);
+                }
+              `}</style>
+
+              <section className="hero parchment-panel">
+                <div>
+                  <p className="eyebrow">KARCZMA NA ROZSTAJACH</p>
+                  <h1>Postacie zapasowe</h1>
+                  <p>
+                    Bohaterowie oczekujący na swoją wyprawę. Nie są liczeni do
+                    zasobów, światła, prowiantu ani aktywnej drużyny.
+                  </p>
+                </div>
+                <Building2 size={42} style={{ opacity: .72 }} />
+              </section>
+
+              <section className="inn-scene">
+                {innLoading || charactersLoading || itemsLoading ? (
+                  <p className="muted" style={{ padding: 24 }}>
+                    Ładowanie Karczmy na Rozstajach…
+                  </p>
+                ) : innCharacters.length === 0 ? (
+                  <div className="empty-state" style={{ margin: 24 }}>
+                    <Building2 size={42} style={{ opacity: .55 }} />
+                    <p>W Karczmie nie ma obecnie żadnych postaci zapasowych.</p>
+                    <span className="muted">
+                      Otwórz aktywną kartę postaci i wybierz „Wyślij do Karczmy”.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="inn-grid">
+                    {innCharacters.map(character => {
+                      const characterItems = itemsForCharacter(character.id)
+                      const reserve = characterReserves.find(
+                        entry => entry.characterId === character.id
+                      )
+
+                      return (
+                        <article className="inn-card" key={character.id}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 12,
+                              alignItems: 'flex-start',
+                            }}
+                          >
+                            <div>
+                              <h3>{character.name}</h3>
+                              <div className="inn-status">POSTAĆ ZAPASOWA</div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div className="muted">
+                                {character.className || '—'} • Poziom {character.level}
+                              </div>
+                              <div className="muted" style={{ marginTop: 4 }}>
+                                HP {character.currentHp}/{effectiveMaxHp(character)}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(3, 1fr)',
+                              gap: 8,
+                              marginTop: 14,
+                            }}
+                          >
+                            <div style={{ border: '1px solid rgba(180,135,60,.28)', borderRadius: 6, padding: '8px 10px', background: 'rgba(12,11,9,.5)', textAlign: 'center' }}>
+                              <span className="muted">AC</span>
+                              <strong style={{ display: 'block' }}>
+                                {armorClassForCharacter(character)}
+                              </strong>
+                            </div>
+                            <div style={{ border: '1px solid rgba(180,135,60,.28)', borderRadius: 6, padding: '8px 10px', background: 'rgba(12,11,9,.5)', textAlign: 'center' }}>
+                              <span className="muted">Sloty</span>
+                              <strong style={{ display: 'block' }}>
+                                {Number(usedSlotsForCharacter(character.id).toFixed(2))}/
+                                {Math.max(10, character.strength) + Math.max(0, character.bonusSlots)}
+                              </strong>
+                            </div>
+                            <div style={{ border: '1px solid rgba(180,135,60,.28)', borderRadius: 6, padding: '8px 10px', background: 'rgba(12,11,9,.5)', textAlign: 'center' }}>
+                              <span className="muted">Złoto</span>
+                              <strong style={{ display: 'block' }}>{character.gold} gp</strong>
+                            </div>
+                          </div>
+
+                          <div className="inn-inventory">
+                            <strong>Ekwipunek ({characterItems.length})</strong>
+                            {characterItems.length === 0 ? (
+                              <p className="muted">Brak przedmiotów.</p>
+                            ) : (
+                              <div style={{ marginTop: 7, maxHeight: 190, overflowY: 'auto' }}>
+                                {characterItems.map(item => (
+                                  <div className="inn-item-row" key={item.id}>
+                                    <span>{item.name}</span>
+                                    <strong>× {item.quantity}</strong>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="muted" style={{ marginTop: 12, fontSize: 11 }}>
+                            W Karczmie od:{' '}
+                            {reserve?.sentAt
+                              ? new Date(reserve.sentAt).toLocaleString('pl-PL')
+                              : '—'}
+                          </div>
+
+                          <button
+                            className="primary full"
+                            style={{ marginTop: 14 }}
+                            onClick={() => void activateInnCharacter(character)}
+                          >
+                            <Users size={16} />
+                            Dołącz do drużyny
+                          </button>
+                        </article>
+                      )
+                    })}
                   </div>
                 )}
               </section>
