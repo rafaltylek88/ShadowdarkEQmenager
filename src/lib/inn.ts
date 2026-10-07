@@ -35,12 +35,10 @@ export async function sendCharacterToInn(
   characterId: string
 ) {
   const sb = requireSupabase()
-  const { error } = await sb
-    .from('character_reserves')
-    .insert({
-      campaign_id: campaignId,
-      character_id: characterId,
-    })
+  const { error } = await sb.rpc('send_character_to_reserve', {
+    p_campaign_id: campaignId,
+    p_character_id: characterId,
+  })
 
   if (error) throw error
 }
