@@ -187,7 +187,7 @@ const initialCampaigns: Campaign[] = [
 const nav = [
   ['Dashboard', Gauge],
   ['Postacie', Users],
-  ['Karczma na Rozstajach', Building2],
+  ['Akademia Bohaterów', Building2],
   ['NPC', Shield],
   ['Postacie Fabularne', UserPlus],
   ['Zwierzęta', Beef],
@@ -9092,7 +9092,7 @@ function App() {
                                 title="Przenieś postać do Karczmy na Rozstajach"
                               >
                                 <Building2 size={15} />
-                                Wyślij do Karczmy
+                                Wyślij do Akademii
                               </button>
 
                               <button
@@ -11992,7 +11992,7 @@ function App() {
             </>
           )}
 
-          {activeView === 'Karczma na Rozstajach' && (
+          {activeView === 'Akademia Bohaterów' && (
             <>
               <style>{`
                 .inn-scene {
@@ -12055,7 +12055,7 @@ function App() {
 
               <section className="hero parchment-panel">
                 <div>
-                  <p className="eyebrow">KARCZMA NA ROZSTAJACH</p>
+                  <p className="eyebrow">AKADEMIA BOHATERÓW</p>
                   <h1>Postacie zapasowe</h1>
                   <p>
                     Bohaterowie oczekujący na swoją wyprawę. Nie są liczeni do
@@ -12081,7 +12081,7 @@ function App() {
                     <Building2 size={42} style={{ opacity: .55 }} />
                     <p>W Karczmie nie ma obecnie żadnych postaci zapasowych.</p>
                     <span className="muted">
-                      Otwórz aktywną kartę postaci i wybierz „Wyślij do Karczmy”.
+                      Otwórz aktywną kartę postaci i wybierz „Wyślij do Akademii”.
                     </span>
                   </div>
                 ) : (
