@@ -7992,8 +7992,7 @@ function App() {
                       >
                         {character.name}
                       </button>
-                    )
-            })}
+                    ))}
 
                     <button
                       onClick={openAllCharacters}
