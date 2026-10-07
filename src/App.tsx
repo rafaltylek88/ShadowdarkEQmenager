@@ -318,7 +318,12 @@ function App() {
   const [characterReserves, setCharacterReserves] = useState<CharacterReserve[]>([])
   const [innLoading, setInnLoading] = useState(false)
   const [createCharacterForInn, setCreateCharacterForInn] = useState(false)
-  const [characterModifierDescription, setCharacterModifierDescription] = useState<null | { title: string; text: string }>(null)
+  const [characterModifierDescription, setCharacterModifierDescription] = useState<null | {
+    characterId: string
+    field: 'bonusAc' | 'bonusAttackRoll' | 'bonusDamage' | 'luckTokens'
+    title: string
+    text: string
+  }>(null)
   const [treasureItems, setTreasureItems] = useState<TreasureItem[]>([])
   const [treasureLoading, setTreasureLoading] = useState(false)
   const [showTreasureAdd, setShowTreasureAdd] = useState(false)
@@ -4472,6 +4477,38 @@ function App() {
     } catch (e: any) {
       setError(e?.message || e?.details || 'Nie udało się zmienić bonusowych slotów.')
     }
+  }
+
+  function characterModifierDescriptionKey(
+    characterId: string,
+    field: 'bonusAc' | 'bonusAttackRoll' | 'bonusDamage' | 'luckTokens'
+  ) {
+    return `shadowdark:modifier-description:${activeId ?? 'no-campaign'}:${characterId}:${field}`
+  }
+
+  function openCharacterModifierDescription(
+    character: Character,
+    field: 'bonusAc' | 'bonusAttackRoll' | 'bonusDamage' | 'luckTokens',
+    title: string
+  ) {
+    const key = characterModifierDescriptionKey(character.id, field)
+    setCharacterModifierDescription({
+      characterId: character.id,
+      field,
+      title,
+      text: localStorage.getItem(key) ?? '',
+    })
+  }
+
+  function saveCharacterModifierDescription() {
+    if (!characterModifierDescription) return
+    const key = characterModifierDescriptionKey(
+      characterModifierDescription.characterId,
+      characterModifierDescription.field
+    )
+    localStorage.setItem(key, characterModifierDescription.text)
+    setCharacterModifierDescription(null)
+    flash('Opis modyfikatora został zapisany.', 'character')
   }
 
   async function setCharacterSheetModifierValue(
@@ -9565,10 +9602,11 @@ function App() {
                                         className="secondary"
                                         style={{ minHeight: 31, padding: '4px 9px', fontSize: 11 }}
                                         onClick={() =>
-                                          setCharacterModifierDescription({
-                                            title: 'Bonusowe AC',
-                                            text: 'Stały modyfikator Klasy Pancerza (AC). Użyj go, gdy postać otrzymuje premię lub karę do AC wynikającą z talentu, zdolności klasowej, efektu magicznego lub innej trwałej cechy. Wartość jest doliczana do wyliczanego AC postaci.',
-                                          })
+                                          openCharacterModifierDescription(
+                                            character,
+                                            'bonusAc',
+                                            'Bonusowe AC'
+                                          )
                                         }
                                       >
                                         Opis
@@ -9591,10 +9629,11 @@ function App() {
                                         className="secondary"
                                         style={{ minHeight: 31, padding: '4px 9px', fontSize: 11 }}
                                         onClick={() =>
-                                          setCharacterModifierDescription({
-                                            title: 'Bonusowy ATT ROLL',
-                                            text: 'Stały modyfikator do rzutu ataku (ATT ROLL). Wpisz tutaj premię lub karę wynikającą z talentu, zdolności klasowej, efektu magicznego albo innej cechy postaci. Pole służy do zapamiętania modyfikatora na karcie.',
-                                          })
+                                          openCharacterModifierDescription(
+                                            character,
+                                            'bonusAttackRoll',
+                                            'Bonusowy ATT ROLL'
+                                          )
                                         }
                                       >
                                         Opis
@@ -9617,10 +9656,11 @@ function App() {
                                         className="secondary"
                                         style={{ minHeight: 31, padding: '4px 9px', fontSize: 11 }}
                                         onClick={() =>
-                                          setCharacterModifierDescription({
-                                            title: 'Bonusowy DMG',
-                                            text: 'Stały modyfikator obrażeń (DMG). Wpisz tutaj premię lub karę do obrażeń wynikającą z talentu, zdolności klasowej, efektu magicznego albo innej cechy postaci. Pole służy do zapamiętania modyfikatora na karcie.',
-                                          })
+                                          openCharacterModifierDescription(
+                                            character,
+                                            'bonusDamage',
+                                            'Bonusowy DMG'
+                                          )
                                         }
                                       >
                                         Opis
@@ -9643,10 +9683,11 @@ function App() {
                                         className="secondary"
                                         style={{ minHeight: 31, padding: '4px 9px', fontSize: 11 }}
                                         onClick={() =>
-                                          setCharacterModifierDescription({
-                                            title: 'Luck Tokeny',
-                                            text: 'Licznik Luck Tokenów posiadanych przez postać. Zapisuj tutaj aktualną liczbę tokenów szczęścia przyznanych postaci w trakcie gry. Licznik nie może spaść poniżej zera.',
-                                          })
+                                          openCharacterModifierDescription(
+                                            character,
+                                            'luckTokens',
+                                            'Luck Tokeny'
+                                          )
                                         }
                                       >
                                         Opis
@@ -15500,21 +15541,40 @@ function App() {
           </div>
         </div>
       )}
-
       {characterModifierDescription && (
         <Modal onClose={() => setCharacterModifierDescription(null)}>
-          <p className="eyebrow">MODYFIKATOR POSTACI</p>
+          <p className="eyebrow">OPIS GRACZA</p>
           <h2>{characterModifierDescription.title}</h2>
-          <p style={{ maxWidth: 560, lineHeight: 1.7 }}>
-            {characterModifierDescription.text}
-          </p>
+          <label>
+            Opis — czego dotyczy i skąd wynika
+            <textarea
+              value={characterModifierDescription.text}
+              onChange={event =>
+                setCharacterModifierDescription(current =>
+                  current
+                    ? { ...current, text: event.target.value }
+                    : current
+                )
+              }
+              placeholder="Np. +1 AC z talentu; +1 ATT ROLL z cechy klasowej; dodatkowe obrażenia z magicznego przedmiotu..."
+              rows={7}
+              style={{ width: '100%', minHeight: 150, resize: 'vertical' }}
+            />
+          </label>
           <div className="actions">
             <button
               type="button"
               className="primary"
+              onClick={saveCharacterModifierDescription}
+            >
+              Zapisz opis
+            </button>
+            <button
+              type="button"
+              className="secondary"
               onClick={() => setCharacterModifierDescription(null)}
             >
-              Zamknij
+              Anuluj
             </button>
           </div>
         </Modal>
