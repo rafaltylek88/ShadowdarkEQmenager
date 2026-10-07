@@ -196,7 +196,6 @@ const nav = [
   ['Biblioteka', Package],
   ['Kronika', ScrollText],
   ['Cmentarz', Skull],
-  ['Skrzynia ze skarbami', Coins],
   ['Historia', ArrowRightLeft],
   ['Podsumowanie', Coins],
 ] as const
@@ -7842,6 +7841,13 @@ function App() {
           className={`sidebar ${
             mobileNav ? 'open' : ''
           }`}
+          style={{
+            height: 'calc(100vh - 66px)',
+            minHeight: 0,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
         >
 
           <div className="campaign-label">
@@ -7905,7 +7911,30 @@ function App() {
               Kopia zapasowa
             </button>
 
-          <nav>
+          <nav
+            className="sidebar-scroll-nav"
+            style={{
+              flex: '1 1 auto',
+              minHeight: 0,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              paddingBottom: 18,
+            }}
+          >
+            <style>{`
+              .sidebar-scroll-nav {
+                scrollbar-width: thin;
+                scrollbar-color: rgba(190,145,65,.78) rgba(20,16,11,.42);
+              }
+              .sidebar-scroll-nav::-webkit-scrollbar { width: 8px; }
+              .sidebar-scroll-nav::-webkit-scrollbar-track {
+                background: rgba(20,16,11,.42);
+              }
+              .sidebar-scroll-nav::-webkit-scrollbar-thumb {
+                background: rgba(190,145,65,.78);
+                border-radius: 999px;
+              }
+            `}</style>
             {nav.map(([label, Icon]) => (
               <div key={label}>
                 <button
@@ -7988,6 +8017,18 @@ function App() {
                 )}
               </div>
             ))}
+
+            <button
+              className={activeView === 'Skrzynia ze skarbami' ? 'nav-active' : ''}
+              onClick={() => {
+                setActiveView('Skrzynia ze skarbami')
+                setMobileNav(false)
+              }}
+              type="button"
+            >
+              <Coins size={17} />
+              Skrzynia ze skarbami
+            </button>
           </nav>
 
         </aside>
@@ -8915,12 +8956,19 @@ function App() {
           {activeView === 'Postacie' && (
             <>
               <style>{`
+                section.hero.parchment-panel.character-hero-clean::after,
+                section.hero.parchment-panel.character-hero-clean::before,
                 .character-hero-clean::after,
                 .character-hero-clean::before {
                   display: none !important;
+                  visibility: hidden !important;
+                  opacity: 0 !important;
                   content: none !important;
                   background: none !important;
                   background-image: none !important;
+                }
+                .character-hero-clean {
+                  overflow: hidden !important;
                 }
               `}</style>
               <section
@@ -8962,7 +9010,22 @@ function App() {
                     Nowa postać
                   </button>
                 </div>
-              </section>
+              
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    width: 112,
+                    height: 112,
+                    zIndex: 20,
+                    pointerEvents: 'none',
+                    background:
+                      'linear-gradient(180deg, rgba(48,36,22,1), rgba(38,29,19,1))',
+                  }}
+                />
+</section>
 
               <section className="dashboard-grid">
                 <div className="panel wide">
