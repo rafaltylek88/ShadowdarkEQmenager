@@ -3471,22 +3471,38 @@ function App() {
       }
 
       if (selectedLightChoice.memberType === 'character') {
-        const handConflict = canCharacterCarryActiveLight(
-          selectedLightChoice.memberId
-        )
+        const selectedCharacterItem =
+          items.find(item => item.id === selectedLightChoice.itemId) ?? null
+        const lanternUsesHand =
+          isLanternItem(selectedCharacterItem) &&
+          !characterHasLanternHook(selectedLightChoice.memberId)
+
+        const handConflict = lanternUsesHand
+          ? canCharacterCarryActiveLight(selectedLightChoice.memberId)
+          : null
+
         if (handConflict) {
           setError(handConflict)
           return
         }
       }
 
-      setLightState(
-        await startCampaignLight(
-          activeId,
-          selectedLightChoice.memberType,
-          selectedLightChoice.itemId
-        )
+      const nextLightState = await startCampaignLight(
+        activeId,
+        selectedLightChoice.memberType,
+        selectedLightChoice.itemId
       )
+      setLightState(nextLightState)
+
+      if (selectedLightChoice.memberType === 'character') {
+        const selectedCharacterItem =
+          items.find(item => item.id === selectedLightChoice.itemId) ?? null
+
+        if (isLanternItem(selectedCharacterItem) && !selectedCharacterItem?.isEquipped) {
+          await setCharacterItemEquipped(selectedLightChoice.itemId, true)
+        }
+      }
+
       setLightNow(Date.now())
       await Promise.all([
         refreshItems(),
@@ -4878,6 +4894,18 @@ function App() {
     return !!item && item.name.trim().toLowerCase() === 'lantern'
   }
 
+  function isLanternHookItem(item: CharacterItem | null | undefined) {
+    if (!item) return false
+    const name = item.name.trim().toLowerCase().replace(/[-_]+/g, ' ')
+    return name === 'lantern hook'
+  }
+
+  function characterHasLanternHook(characterId: string) {
+    return itemsForCharacter(characterId).some(
+      item => item.quantity > 0 && isLanternHookItem(item)
+    )
+  }
+
   function equippedLanternForCharacter(
     characterId: string
   ): CharacterItem | null {
@@ -4926,10 +4954,13 @@ function App() {
     }
     if (isLanternItem(nextItem)) light = nextItem ?? null
 
+    const lightHands =
+      light && !characterHasLanternHook(characterId) ? 1 : 0
+
     const used =
       (weapon ? weaponHandsRequired(weapon) : 0) +
       (shield ? 1 : 0) +
-      (light ? 1 : 0)
+      lightHands
 
     if (used <= 2) return null
     if (weapon && weaponHandsRequired(weapon) === 2 && shield) {
@@ -4942,6 +4973,8 @@ function App() {
   }
 
   function canCharacterCarryActiveLight(characterId: string) {
+    if (characterHasLanternHook(characterId)) return null
+
     const weapon = equippedWeaponForCharacter(characterId)
     const shield = equippedShieldForCharacter(characterId)
     const used = (weapon ? weaponHandsRequired(weapon) : 0) + (shield ? 1 : 0)
@@ -4961,7 +4994,13 @@ function App() {
 
     if (weapon) parts.push(`${weapon.name}${weapon.weaponDamage ? ` (${weapon.weaponDamage})` : ''}`)
     if (shield) parts.push(shield.name)
-    if (light) parts.push(light.name)
+    if (light) {
+      parts.push(
+        characterHasLanternHook(characterId)
+          ? `${light.name} (Lantern Hook)`
+          : light.name
+      )
+    }
 
     return parts.length ? parts.join(' + ') : '—'
   }
@@ -5022,6 +5061,17 @@ function App() {
     }
 
     try {
+      if (
+        item.isEquipped &&
+        isLanternItem(item) &&
+        item.isActiveLight &&
+        activeId
+      ) {
+        const nextLightState = await extinguishCampaignLight(activeId)
+        setLightState(nextLightState)
+        setLightNow(Date.now())
+      }
+
       await setCharacterItemEquipped(item.id, !item.isEquipped)
       await refreshItems()
 
