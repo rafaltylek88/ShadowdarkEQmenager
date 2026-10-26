@@ -4878,19 +4878,22 @@ function App() {
     return !!item && item.name.trim().toLowerCase() === 'lantern'
   }
 
-  function equippedLanternForCharacter(characterId: string) {
+  function equippedLanternForCharacter(
+    characterId: string
+  ): CharacterItem | null {
     return (
       equippedItemsForCharacter(characterId).find(item => isLanternItem(item)) ??
       null
     )
   }
 
-  function lightInHandForCharacter(characterId: string) {
+  function lightInHandForCharacter(
+    characterId: string
+  ): CharacterItem | null {
     const equippedLantern = equippedLanternForCharacter(characterId)
     if (equippedLantern) return equippedLantern
 
-    const activeLight = activeLightForCharacter(characterId)
-    return activeLight ?? null
+    return activeLightForCharacter(characterId) ?? null
   }
 
   function weaponHandsRequired(item: CharacterItem | null): 1 | 2 {
@@ -4921,7 +4924,7 @@ function App() {
     if (nextItem?.category === 'armor' && /^\s*\+/.test(nextItem.armorClass ?? '')) {
       shield = nextItem
     }
-    if (isLanternItem(nextItem)) light = nextItem
+    if (isLanternItem(nextItem)) light = nextItem ?? null
 
     const used =
       (weapon ? weaponHandsRequired(weapon) : 0) +
