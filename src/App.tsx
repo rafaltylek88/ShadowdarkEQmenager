@@ -4874,6 +4874,25 @@ function App() {
     return itemsForCharacter(characterId).find(item => item.isActiveLight) ?? null
   }
 
+  function isLanternItem(item: CharacterItem | null) {
+    return !!item && item.name.trim().toLowerCase() === 'lantern'
+  }
+
+  function equippedLanternForCharacter(characterId: string) {
+    return (
+      equippedItemsForCharacter(characterId).find(item => isLanternItem(item)) ??
+      null
+    )
+  }
+
+  function lightInHandForCharacter(characterId: string) {
+    const equippedLantern = equippedLanternForCharacter(characterId)
+    if (equippedLantern) return equippedLantern
+
+    const activeLight = activeLightForCharacter(characterId)
+    return activeLight ?? null
+  }
+
   function weaponHandsRequired(item: CharacterItem | null): 1 | 2 {
     if (!item || item.category !== 'weapon') return 1
 
@@ -4896,12 +4915,13 @@ function App() {
   function handConflictForLoadout(characterId: string, nextItem?: CharacterItem) {
     let weapon = equippedWeaponForCharacter(characterId)
     let shield = equippedShieldForCharacter(characterId)
-    const light = activeLightForCharacter(characterId)
+    let light = lightInHandForCharacter(characterId)
 
     if (nextItem?.category === 'weapon') weapon = nextItem
     if (nextItem?.category === 'armor' && /^\s*\+/.test(nextItem.armorClass ?? '')) {
       shield = nextItem
     }
+    if (isLanternItem(nextItem)) light = nextItem
 
     const used =
       (weapon ? weaponHandsRequired(weapon) : 0) +
@@ -4933,7 +4953,7 @@ function App() {
   function handsDisplayForCharacter(characterId: string) {
     const weapon = equippedWeaponForCharacter(characterId)
     const shield = equippedShieldForCharacter(characterId)
-    const light = activeLightForCharacter(characterId)
+    const light = lightInHandForCharacter(characterId)
     const parts: string[] = []
 
     if (weapon) parts.push(`${weapon.name}${weapon.weaponDamage ? ` (${weapon.weaponDamage})` : ''}`)
@@ -9976,7 +9996,8 @@ function App() {
 
                                       <div className="button-row">
                                         {(item.category === 'weapon' ||
-                                          item.category === 'armor') && (
+                                          item.category === 'armor' ||
+                                          isLanternItem(item)) && (
                                           <button
                                             className="secondary"
                                             onClick={() =>
@@ -9989,7 +10010,9 @@ function App() {
                                             <Hand size={14} />
                                             {item.isEquipped
                                               ? 'Zdejmij'
-                                              : 'Wyposaż'}
+                                              : isLanternItem(item)
+                                                ? 'Załóż'
+                                                : 'Wyposaż'}
                                           </button>
                                         )}
 
@@ -10596,7 +10619,8 @@ function App() {
                                         )}
 
                                         {(item.category === 'weapon' ||
-                                          item.category === 'armor') && (
+                                          item.category === 'armor' ||
+                                          isLanternItem(item)) && (
                                           <button
                                             className="secondary"
                                             onClick={() =>
@@ -10607,11 +10631,17 @@ function App() {
                                                 ? 'Zdejmij / odłóż'
                                                 : item.category === 'weapon'
                                                   ? 'Ustaw jako aktywną broń'
-                                                  : 'Załóż pancerz / tarczę'
+                                                  : isLanternItem(item)
+                                                    ? 'Weź latarnię do ręki'
+                                                    : 'Załóż pancerz / tarczę'
                                             }
                                           >
                                             <Shield size={14} />
-                                            {item.isEquipped ? 'Zdejmij' : 'Wyposaż'}
+                                            {item.isEquipped
+                                              ? 'Zdejmij'
+                                              : isLanternItem(item)
+                                                ? 'Załóż'
+                                                : 'Wyposaż'}
                                           </button>
                                         )}
 
