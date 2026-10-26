@@ -4874,7 +4874,7 @@ function App() {
     return itemsForCharacter(characterId).find(item => item.isActiveLight) ?? null
   }
 
-  function isLanternItem(item: CharacterItem | null) {
+  function isLanternItem(item: CharacterItem | null | undefined) {
     return !!item && item.name.trim().toLowerCase() === 'lantern'
   }
 
