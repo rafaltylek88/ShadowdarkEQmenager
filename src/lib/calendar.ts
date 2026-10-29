@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
-export const GLOAMING_MONTHS=[['Brzask','Wiosna'],['Rosa','Wiosna'],['Głóg','Wiosna'],['Zenit','Lato'],['Żar','Lato'],['Złoto','Lato'],['Szkarłat','Jesień'],['Popiół','Jesień'],['Mgła','Jesień'],['Zmierzch','Zima'],['Szron','Zima'],['Wilk','Zima'],['Cisza','Zima']].map(([name,season])=>({name,season}))
+export type GloamingMonth = { name: string; season: string; description: string }
+export const GLOAMING_MONTHS: GloamingMonth[]=[['Brzask','Wiosna'],['Rosa','Wiosna'],['Głóg','Wiosna'],['Zenit','Lato'],['Żar','Lato'],['Złoto','Lato'],['Szkarłat','Jesień'],['Popiół','Jesień'],['Mgła','Jesień'],['Zmierzch','Zima'],['Szron','Zima'],['Wilk','Zima'],['Cisza','Zima']].map(([name,season])=>({name,season,description:''}))
 export const GLOAMING_WEEKDAYS=['Poniedziałek','Wtorek','Środa','Czwartek','Piątek','Sobota','Niedziela']
 export type CalendarState={campaignId:string;year:number;month:number;day:number;kytheros:boolean}
 export type CalendarEvent={id:string;campaignId:string;year:number|null;month:number;day:number;title:string;description:string;createdAt:string}
