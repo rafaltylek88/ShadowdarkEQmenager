@@ -8,6 +8,12 @@ import {
   BookOpen,
   Building2,
   Castle,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   Coins,
   Copy,
   Download,
@@ -52,6 +58,10 @@ import {
   updateChronicleEntry,
 } from './lib/chronicle'
 import type { ChronicleEntry, ChronicleSeason } from './lib/chronicle'
+import { GLOAMING_MONTHS, GLOAMING_HOLIDAYS, createCalendarEvent, deleteCalendarEvent, loadCalendarEvents, loadCalendarState, moonPhase, saveCalendarState, weekday } from './lib/calendar'
+import type { CalendarEvent, CalendarState } from './lib/calendar'
+import { GLOAMING_MONTHS, GLOAMING_HOLIDAYS, createCalendarEvent, deleteCalendarEvent, loadCalendarEvents, loadCalendarState, moonPhase, saveCalendarState, weekday } from './lib/calendar'
+import type { CalendarEvent, CalendarState } from './lib/calendar'
 import {
   loadCharacterMemorials,
   markCharacterDead,
@@ -195,6 +205,8 @@ const nav = [
   ['Mapa', MapIcon],
   ['Biblioteka', Package],
   ['Kronika', ScrollText],
+  ['Kalendarz', CalendarDays],
+  ['Kalendarz', CalendarDays],
   ['Cmentarz', Skull],
   ['Skrzynia ze skarbami', Coins],
   ['Historia', ArrowRightLeft],
@@ -292,6 +304,22 @@ function App() {
   const [chronicleMentionCursor, setChronicleMentionCursor] = useState(0)
   const [chronicleLinkedStoryCharacter, setChronicleLinkedStoryCharacter] = useState<StoryCharacter | null>(null)
   const [chronicleLinkedMarker, setChronicleLinkedMarker] = useState<CampaignMapMarker | null>(null)
+  const [calendarState, setCalendarState] = useState<CalendarState | null>(null)
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [calendarLoading, setCalendarLoading] = useState(false)
+  const [calendarDisplayMonth, setCalendarDisplayMonth] = useState(3)
+  const [calendarSelectedDay, setCalendarSelectedDay] = useState(8)
+  const [showCalendarEventEditor, setShowCalendarEventEditor] = useState(false)
+  const [calendarEventTitle, setCalendarEventTitle] = useState('')
+  const [calendarEventDescription, setCalendarEventDescription] = useState('')
+  const [calendarState, setCalendarState] = useState<CalendarState | null>(null)
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [calendarLoading, setCalendarLoading] = useState(false)
+  const [calendarDisplayMonth, setCalendarDisplayMonth] = useState(3)
+  const [calendarSelectedDay, setCalendarSelectedDay] = useState(8)
+  const [showCalendarEventEditor, setShowCalendarEventEditor] = useState(false)
+  const [calendarEventTitle, setCalendarEventTitle] = useState('')
+  const [calendarEventDescription, setCalendarEventDescription] = useState('')
 
 
 
@@ -731,6 +759,51 @@ function App() {
       setChronicleLoading(false)
     }
   }, [activeId, isCloudMode])
+
+  const refreshCalendar = useCallback(async () => {
+    if (!activeId || !isCloudMode) { setCalendarState(null); setCalendarEvents([]); return }
+    setCalendarLoading(true)
+    try {
+      const [state, events] = await Promise.all([loadCalendarState(activeId), loadCalendarEvents(activeId)])
+      setCalendarState(state); setCalendarEvents(events); setCalendarDisplayMonth(state.month); setCalendarSelectedDay(state.day)
+    } catch (e:any) { setError(e?.message || e?.details || 'Nie udało się pobrać Kalendarza.') }
+    finally { setCalendarLoading(false) }
+  }, [activeId, isCloudMode])
+
+  async function moveCalendarDay(direction: 1 | -1) {
+    if (!calendarState) return
+    let next = { ...calendarState }
+    if (direction === 1) {
+      if (next.kytheros) { next = {...next, year:next.year + 1, month:1, day:1, kytheros:false} }
+      else if (next.month === 13 && next.day === 28) { next = {...next, kytheros:true} }
+      else if (next.day === 28) { next = {...next, month:next.month + 1, day:1} }
+      else next.day += 1
+    } else {
+      if (next.kytheros) next = {...next, month:13, day:28, kytheros:false}
+      else if (next.month === 1 && next.day === 1) next = {...next, year:Math.max(1,next.year-1), month:13, day:28, kytheros:true}
+      else if (next.day === 1) next = {...next, month:next.month-1, day:28}
+      else next.day -= 1
+    }
+    try { await saveCalendarState(next); setCalendarState(next); if(!next.kytheros){setCalendarDisplayMonth(next.month);setCalendarSelectedDay(next.day)} }
+    catch(e:any){ setError(e?.message || e?.details || 'Nie udało się zmienić daty.') }
+  }
+
+  async function saveCustomCalendarEvent() {
+    if (!activeId || !calendarEventTitle.trim()) return
+    try { await createCalendarEvent(activeId,{year:calendarState?.year ?? 1,month:calendarDisplayMonth,day:calendarSelectedDay,title:calendarEventTitle.trim(),description:calendarEventDescription.trim()}); setShowCalendarEventEditor(false); setCalendarEventTitle(''); setCalendarEventDescription(''); await refreshCalendar() }
+    catch(e:any){ setError(e?.message || e?.details || 'Nie udało się dodać wydarzenia.') }
+  }
+
+  const refreshCalendar = useCallback(async () => {
+    if (!activeId || !isCloudMode) { setCalendarState(null); setCalendarEvents([]); return }
+    setCalendarLoading(true)
+    try { const [state,events]=await Promise.all([loadCalendarState(activeId),loadCalendarEvents(activeId)]); setCalendarState(state);setCalendarEvents(events);setCalendarDisplayMonth(state.month);setCalendarSelectedDay(state.day) }
+    catch(e:any){setError(e?.message||e?.details||'Nie udało się pobrać Kalendarza.')} finally{setCalendarLoading(false)}
+  },[activeId,isCloudMode])
+
+  async function moveCalendarDay(direction:1|-1){ if(!calendarState)return; let n={...calendarState}; if(direction===1){if(n.kytheros)n={...n,year:n.year+1,month:1,day:1,kytheros:false};else if(n.month===13&&n.day===28)n={...n,kytheros:true};else if(n.day===28)n={...n,month:n.month+1,day:1};else n.day++}else{if(n.kytheros)n={...n,month:13,day:28,kytheros:false};else if(n.month===1&&n.day===1)n={...n,year:Math.max(1,n.year-1),month:13,day:28,kytheros:true};else if(n.day===1)n={...n,month:n.month-1,day:28};else n.day--} try{await saveCalendarState(n);setCalendarState(n);if(!n.kytheros){setCalendarDisplayMonth(n.month);setCalendarSelectedDay(n.day)}}catch(e:any){setError(e?.message||'Nie udało się zmienić daty.')} }
+
+  async function saveCustomCalendarEvent(){if(!activeId||!calendarEventTitle.trim())return;try{await createCalendarEvent(activeId,{year:calendarState?.year??1,month:calendarDisplayMonth,day:calendarSelectedDay,title:calendarEventTitle.trim(),description:calendarEventDescription.trim()});setShowCalendarEventEditor(false);setCalendarEventTitle('');setCalendarEventDescription('');await refreshCalendar()}catch(e:any){setError(e?.message||'Nie udało się dodać wydarzenia.')}}
 
   function openNewChronicleEntry() {
     const latest = chronicleEntries[chronicleEntries.length - 1]
@@ -1285,6 +1358,21 @@ function App() {
       sb.removeChannel(channel)
     }
   }, [session, activeId, refreshChronicle])
+
+  useEffect(() => { refreshCalendar() }, [refreshCalendar])
+
+  useEffect(() => {
+    if (!supabase || !session || !activeId) return
+    const sb = supabase
+    const channel = sb.channel(`campaign-calendar-${activeId}`)
+      .on('postgres_changes',{event:'*',schema:'public',table:'campaign_calendar_state',filter:`campaign_id=eq.${activeId}`},refreshCalendar)
+      .on('postgres_changes',{event:'*',schema:'public',table:'campaign_calendar_events',filter:`campaign_id=eq.${activeId}`},refreshCalendar)
+      .subscribe()
+    return () => { sb.removeChannel(channel) }
+  }, [session, activeId, refreshCalendar])
+
+  useEffect(()=>{refreshCalendar()},[refreshCalendar])
+  useEffect(()=>{if(!supabase||!session||!activeId)return;const sb=supabase;const c=sb.channel(`campaign-calendar-${activeId}`).on('postgres_changes',{event:'*',schema:'public',table:'campaign_calendar_state',filter:`campaign_id=eq.${activeId}`},refreshCalendar).on('postgres_changes',{event:'*',schema:'public',table:'campaign_calendar_events',filter:`campaign_id=eq.${activeId}`},refreshCalendar).subscribe();return()=>{sb.removeChannel(c)}},[session,activeId,refreshCalendar])
 
   useEffect(() => {
     refreshMapHexes()
@@ -12660,6 +12748,73 @@ function App() {
             </>
           )}
 
+          {activeView === 'Kalendarz' && (
+            <>
+              <style>{`
+                .gloaming-calendar { background: radial-gradient(circle at 50% 0%, rgba(116,83,35,.13), transparent 42%), #15110d; }
+                .gloaming-day { min-height: 108px; padding: 10px; border: 1px solid rgba(181,132,55,.28); background: rgba(20,16,12,.78); color: #e8dcc4; cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:5px; }
+                .gloaming-day:hover { border-color:#b98a42; background:rgba(55,40,22,.72); }
+                .gloaming-day.today { box-shadow: inset 0 0 0 2px #d0a252, 0 0 18px rgba(208,162,82,.12); background:rgba(68,47,23,.7); }
+                .gloaming-day.selected { outline:1px solid #d0a252; }
+              `}</style>
+              <section className="hero parchment-panel">
+                <div><p className="eyebrow">RACHUBA CZASU MARCHII</p><h1>Kalendarz Gloaming</h1><p>13 miesięcy po 28 dni. Cztery tygodnie w miesiącu. Jeden dzień poza czasem.</p></div>
+                <div style={{display:'flex',gap:8}}><button className="secondary" onClick={()=>moveCalendarDay(-1)} disabled={!calendarState}>← Poprzedni dzień</button><button className="primary" onClick={()=>moveCalendarDay(1)} disabled={!calendarState}>Następny dzień →</button></div>
+              </section>
+              {calendarState && <section className="panel gloaming-calendar">
+                <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 320px',gap:18}}>
+                  <div>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:16}}>
+                      <button className="secondary" onClick={()=>setCalendarDisplayMonth(m=>m===1?13:m-1)}><ChevronLeft size={17}/></button>
+                      <div style={{textAlign:'center'}}><p className="eyebrow" style={{margin:0}}>{GLOAMING_MONTHS[calendarDisplayMonth-1].season} • ROK {calendarState.year}</p><h2 style={{margin:'4px 0',fontSize:34}}>{GLOAMING_MONTHS[calendarDisplayMonth-1].name}</h2><span className="muted">Miesiąc {calendarDisplayMonth} z 13</span></div>
+                      <button className="secondary" onClick={()=>setCalendarDisplayMonth(m=>m===13?1:m+1)}><ChevronRight size={17}/></button>
+                    </div>
+                    <p className="muted" style={{fontFamily:'Georgia,serif',fontStyle:'italic',lineHeight:1.6}}>{GLOAMING_MONTHS[calendarDisplayMonth-1].description}</p>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',gap:4,marginTop:16}}>
+                      {['Pn','Wt','Śr','Cz','Pt','So','Nd'].map(d=><div key={d} style={{textAlign:'center',padding:8,color:'#c99a4d',fontWeight:800,fontFamily:'Georgia,serif'}}>{d}</div>)}
+                      {Array.from({length:28},(_,i)=>i+1).map(day=>{
+                        const holidays=GLOAMING_HOLIDAYS.filter(h=>h.month===calendarDisplayMonth&&h.day===day)
+                        const custom=calendarEvents.filter(e=>e.month===calendarDisplayMonth&&e.day===day&&(e.year===null||e.year===calendarState.year))
+                        const today=!calendarState.kytheros&&calendarState.month===calendarDisplayMonth&&calendarState.day===day
+                        const selected=calendarSelectedDay===day
+                        return <button key={day} className={`gloaming-day${today?' today':''}${selected?' selected':''}`} onClick={()=>setCalendarSelectedDay(day)}>
+                          <div style={{display:'flex',justifyContent:'space-between',width:'100%'}}><strong style={{fontSize:18,color:today?'#f2c968':'#e8dcc4'}}>{day}</strong><span>{moonPhase(day).split(' ')[0]}</span></div>
+                          {holidays.slice(0,2).map(h=><span key={h.title} style={{fontSize:11,color:'#d5ad63',lineHeight:1.25}}>{h.mark} {h.title}</span>)}
+                          {custom.slice(0,2).map(e=><span key={e.id} style={{fontSize:11,color:'#a8c98d',lineHeight:1.25}}>◆ {e.title}</span>)}
+                        </button>
+                      })}
+                    </div>
+                  </div>
+                  <aside style={{borderLeft:'1px solid rgba(185,138,66,.35)',paddingLeft:18}}>
+                    <p className="eyebrow">DZISIAJ W KAMPANII</p>
+                    {calendarState.kytheros ? <><h2>Dzień Kytherosa</h2><p className="muted">Po 28 Ciszy, przed 1 Brzasku. Nie należy do żadnego miesiąca ani tygodnia.</p><p>Dzień, którego nie ma. Mówi się, że Kytheros, Pan Czasu, zatrzymał go dla siebie.</p></> : <><h2 style={{marginBottom:4}}>{weekday(calendarState.day)}, {calendarState.day} {GLOAMING_MONTHS[calendarState.month-1].name}</h2><div style={{color:'#d0a252',fontWeight:800}}>{GLOAMING_MONTHS[calendarState.month-1].season} {moonPhase(calendarState.day) && `• ${moonPhase(calendarState.day)}`}</div></>}
+                    {!calendarState.kytheros && <><hr style={{borderColor:'rgba(185,138,66,.25)',margin:'18px 0'}}/><p className="eyebrow">WYBRANY DZIEŃ</p><h3>{weekday(calendarSelectedDay)}, {calendarSelectedDay} {GLOAMING_MONTHS[calendarDisplayMonth-1].name}</h3>{moonPhase(calendarSelectedDay)&&<p style={{color:'#d0a252'}}>{moonPhase(calendarSelectedDay)}</p>}
+                      {[...GLOAMING_HOLIDAYS.filter(h=>h.month===calendarDisplayMonth&&h.day===calendarSelectedDay)].map(h=><div key={h.title} style={{padding:'10px 0',borderTop:'1px solid rgba(185,138,66,.18)'}}><strong style={{color:'#e2bd72'}}>{h.mark} {h.title}</strong><p className="muted" style={{lineHeight:1.5}}>{h.description}</p></div>)}
+                      {calendarEvents.filter(e=>e.month===calendarDisplayMonth&&e.day===calendarSelectedDay&&(e.year===null||e.year===calendarState.year)).map(e=><div key={e.id} style={{padding:'10px 0',borderTop:'1px solid rgba(185,138,66,.18)'}}><div style={{display:'flex',justifyContent:'space-between',gap:8}}><strong style={{color:'#b7d69d'}}>◆ {e.title}</strong><button className="danger" style={{padding:'4px 6px'}} onClick={async()=>{await deleteCalendarEvent(e.id);await refreshCalendar()}}><Trash2 size={13}/></button></div>{e.description&&<p className="muted">{e.description}</p>}</div>)}
+                      <button className="secondary full" style={{marginTop:12}} onClick={()=>setShowCalendarEventEditor(true)}><Plus size={15}/> Dodaj wydarzenie</button></>}
+                  </aside>
+                </div>
+              </section>}
+              {calendarLoading && <section className="panel"><span className="muted">Ładowanie kalendarza…</span></section>}
+            </>
+          )}
+
+          {activeView === 'Kalendarz' && calendarState && (
+            <>
+              <style>{`.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}.cal-day{min-height:104px;padding:9px;border:1px solid rgba(185,138,66,.3);background:#15110d;color:#e9dec9;text-align:left;display:flex;flex-direction:column;gap:5px;cursor:pointer}.cal-day:hover,.cal-day.sel{border-color:#d0a252;background:#2a2014}.cal-day.today{box-shadow:inset 0 0 0 2px #d0a252;background:#352617}`}</style>
+              <section className="hero parchment-panel"><div><p className="eyebrow">RACHUBA CZASU MARCHII</p><h1>Kalendarz Gloaming</h1><p>13 miesięcy po 28 dni • 4 tygodnie • Dzień Kytherosa poza czasem.</p></div><div style={{display:'flex',gap:8}}><button className="secondary" onClick={()=>moveCalendarDay(-1)}>← Poprzedni dzień</button><button className="primary" onClick={()=>moveCalendarDay(1)}>Następny dzień →</button></div></section>
+              <section className="panel" style={{background:'radial-gradient(circle at top,rgba(115,78,30,.16),transparent 40%),#14100c'}}>
+                <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 330px',gap:20}}>
+                  <div><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><button className="secondary" onClick={()=>setCalendarDisplayMonth(m=>m===1?13:m-1)}><ChevronLeft size={17}/></button><div style={{textAlign:'center'}}><p className="eyebrow">{GLOAMING_MONTHS[calendarDisplayMonth-1].season} • ROK {calendarState.year}</p><h2 style={{fontSize:36,margin:0}}>{GLOAMING_MONTHS[calendarDisplayMonth-1].name}</h2><span className="muted">miesiąc {calendarDisplayMonth} z 13</span></div><button className="secondary" onClick={()=>setCalendarDisplayMonth(m=>m===13?1:m+1)}><ChevronRight size={17}/></button></div>
+                    <div className="cal-grid" style={{marginTop:18}}>{['Pn','Wt','Śr','Cz','Pt','So','Nd'].map(d=><b key={d} style={{textAlign:'center',padding:8,color:'#d0a252'}}>{d}</b>)}{Array.from({length:28},(_,i)=>i+1).map(day=>{const hs=GLOAMING_HOLIDAYS.filter(h=>h.month===calendarDisplayMonth&&h.day===day);const es=calendarEvents.filter(e=>e.month===calendarDisplayMonth&&e.day===day&&(e.year===null||e.year===calendarState.year));const today=!calendarState.kytheros&&calendarState.month===calendarDisplayMonth&&calendarState.day===day;return <button key={day} className={`cal-day${today?' today':''}${calendarSelectedDay===day?' sel':''}`} onClick={()=>setCalendarSelectedDay(day)}><span style={{display:'flex',justifyContent:'space-between'}}><b style={{fontSize:18}}>{day}</b><span>{moonPhase(day).split(' ')[0]}</span></span>{hs.slice(0,2).map(h=><small key={h.title} style={{color:'#d8b46c'}}>{h.mark} {h.title}</small>)}{es.slice(0,2).map(e=><small key={e.id} style={{color:'#a8c98d'}}>◆ {e.title}</small>)}</button>})}</div>
+                  </div>
+                  <aside style={{borderLeft:'1px solid rgba(185,138,66,.35)',paddingLeft:18}}><p className="eyebrow">DZISIAJ W KAMPANII</p>{calendarState.kytheros?<><h2>Dzień Kytherosa</h2><p className="muted">Po 28 Ciszy, przed 1 Brzasku. Nie należy do żadnego miesiąca ani tygodnia.</p></>:<><h2>{weekday(calendarState.day)}, {calendarState.day} {GLOAMING_MONTHS[calendarState.month-1].name}</h2><p style={{color:'#d0a252'}}>{GLOAMING_MONTHS[calendarState.month-1].season}{moonPhase(calendarState.day)?` • ${moonPhase(calendarState.day)}`:''}</p></>}<hr style={{borderColor:'rgba(185,138,66,.25)',margin:'18px 0'}}/><p className="eyebrow">WYBRANY DZIEŃ</p><h3>{weekday(calendarSelectedDay)}, {calendarSelectedDay} {GLOAMING_MONTHS[calendarDisplayMonth-1].name}</h3>{moonPhase(calendarSelectedDay)&&<p style={{color:'#d0a252'}}>{moonPhase(calendarSelectedDay)}</p>}{GLOAMING_HOLIDAYS.filter(h=>h.month===calendarDisplayMonth&&h.day===calendarSelectedDay).map(h=><div key={h.title} style={{borderTop:'1px solid #4b3820',padding:'10px 0'}}><b style={{color:'#e2bd72'}}>{h.mark} {h.title}</b><p className="muted">{h.description}</p></div>)}{calendarEvents.filter(e=>e.month===calendarDisplayMonth&&e.day===calendarSelectedDay&&(e.year===null||e.year===calendarState.year)).map(e=><div key={e.id} style={{borderTop:'1px solid #4b3820',padding:'10px 0'}}><div style={{display:'flex',justifyContent:'space-between'}}><b style={{color:'#a8c98d'}}>◆ {e.title}</b><button className="danger" style={{padding:5}} onClick={async()=>{await deleteCalendarEvent(e.id);await refreshCalendar()}}><Trash2 size={13}/></button></div><p className="muted">{e.description}</p></div>)}<button className="secondary full" onClick={()=>setShowCalendarEventEditor(true)}><Plus size={15}/> Dodaj wydarzenie</button></aside>
+                </div>
+              </section>
+            </>
+          )}
+          {activeView === 'Kalendarz' && calendarLoading && !calendarState && <section className="panel">Ładowanie kalendarza…</section>}
+
           {activeView === 'Kronika' && (
             <>
               <style>{`
@@ -13393,6 +13548,16 @@ function App() {
                 </button>
               </div>
             </Modal>
+          )}
+
+          {showCalendarEventEditor && (
+            <Modal width="min(720px, calc(100vw - 48px))" onClose={()=>setShowCalendarEventEditor(false)}>
+              <div style={{display:'grid',gap:14}}><div><p className="eyebrow">KALENDARZ • {calendarSelectedDay} {GLOAMING_MONTHS[calendarDisplayMonth-1].name}</p><h2 style={{margin:0}}>Nowe wydarzenie kampanii</h2></div><label>Nazwa wydarzenia<input value={calendarEventTitle} onChange={e=>setCalendarEventTitle(e.target.value)} maxLength={120}/></label><label>Opis<textarea rows={8} value={calendarEventDescription} onChange={e=>setCalendarEventDescription(e.target.value)} placeholder="Co wydarzy się tego dnia?"/></label><div style={{display:'flex',gap:8}}><button className="primary" onClick={saveCustomCalendarEvent} disabled={!calendarEventTitle.trim()}><Save size={15}/> Zapisz wydarzenie</button><button className="secondary" onClick={()=>setShowCalendarEventEditor(false)}>Anuluj</button></div></div>
+            </Modal>
+          )}
+
+          {showCalendarEventEditor && (
+            <Modal width="min(720px, calc(100vw - 48px))" onClose={()=>setShowCalendarEventEditor(false)}><div style={{display:'grid',gap:14}}><div><p className="eyebrow">KALENDARZ • {calendarSelectedDay} {GLOAMING_MONTHS[calendarDisplayMonth-1].name}</p><h2 style={{margin:0}}>Nowe wydarzenie kampanii</h2></div><label>Nazwa wydarzenia<input value={calendarEventTitle} onChange={e=>setCalendarEventTitle(e.target.value)} maxLength={120}/></label><label>Opis<textarea rows={8} value={calendarEventDescription} onChange={e=>setCalendarEventDescription(e.target.value)} /></label><button className="primary" onClick={saveCustomCalendarEvent} disabled={!calendarEventTitle.trim()}><Save size={15}/> Zapisz wydarzenie</button></div></Modal>
           )}
 
           {showChronicleEditor && (
