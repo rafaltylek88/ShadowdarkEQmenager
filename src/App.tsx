@@ -150,7 +150,7 @@ import {
   setBastionHp,
 } from './lib/bastions'
 import type { Bastion, BastionTypeId, BastionUpgrade } from './lib/bastions'
-import { SHIP_TYPES, loadShips, createShip, updateShip, deleteShip, loadShipCabins, assignShipCabin, loadShipItems, createShipItem, updateShipItem, deleteShipItem, shipItemSlots, shipLocationName } from './lib/ships'
+import { SHIP_TYPES, loadShips, createShip, updateShip, deleteShip, loadShipCabins, assignShipCabin, loadShipItems, createShipItem, updateShipItem, deleteShipItem, shipItemSlots, shipLocationName, transferCharacterItemToShip, transferShipItem, buyShipItem } from './lib/ships'
 import type { Ship as Vessel, ShipCabin, ShipItem, ShipTypeId } from './lib/ships'
 import { loadBastionItems } from './lib/bastionItems'
 import type { BastionItem } from './lib/bastionItems'
@@ -553,12 +553,17 @@ function App() {
   const [shipItems, setShipItems] = useState<ShipItem[]>([])
   const [newShipName, setNewShipName] = useState('')
   const [newShipType, setNewShipType] = useState<ShipTypeId>('sloop')
-  const [shipItemShipId, setShipItemShipId] = useState('')
-  const [shipItemLocation, setShipItemLocation] = useState(0)
-  const [shipItemCatalogId, setShipItemCatalogId] = useState('')
-  const [shipItemCustomName, setShipItemCustomName] = useState('')
-  const [shipItemQuantity, setShipItemQuantity] = useState(1)
   const [shipCargoSummaryId, setShipCargoSummaryId] = useState<string | null>(null)
+  const [shipHpDrafts, setShipHpDrafts] = useState<Record<string,string>>({})
+  const [itemShipTarget, setItemShipTarget] = useState<{shipId:string;location:number}|null>(null)
+  const [shipBuyTarget, setShipBuyTarget] = useState<{shipId:string;location:number}|null>(null)
+  const [shipBuyCatalogId, setShipBuyCatalogId] = useState('')
+  const [shipBuyBuyerId, setShipBuyBuyerId] = useState('')
+  const [shipBuyQuantity, setShipBuyQuantity] = useState(1)
+  const [shipBuyGp, setShipBuyGp] = useState(0)
+  const [shipBuySp, setShipBuySp] = useState(0)
+  const [shipBuyCp, setShipBuyCp] = useState(0)
+
   const [bastions, setBastions] = useState<Bastion[]>([])
   const [bastionUpgrades, setBastionUpgrades] = useState<BastionUpgrade[]>([])
   const [bastionsLoading, setBastionsLoading] = useState(false)
@@ -608,6 +613,7 @@ function App() {
   const [shopCharacterId, setShopCharacterId] = useState('')
 
   const [showTransferItem, setShowTransferItem] = useState(false)
+  const [shipTransferSource, setShipTransferSource] = useState<{shipId:string;location:number}|null>(null)
   const [transferFromType, setTransferFromType] = useState<InventoryOwnerType>('character')
   const [transferFromOwnerId, setTransferFromOwnerId] = useState('')
   const [transferItemId, setTransferItemId] = useState('')
@@ -5284,7 +5290,15 @@ function App() {
     setItemArmorProperties(entry.armorProperties ?? '')
   }
 
+  function openNewShipItem(shipId:string, location:number) {
+    setItemShipTarget({shipId,location})
+    setEditingItem(null)
+    setItemCharacterId('')
+    resetItemDetails()
+    setShowItem(true)
+  }
   function openNewItem(characterId: string) {
+    setItemShipTarget(null)
     setEditingItem(null)
     setItemCharacterId(characterId)
     resetItemDetails()
@@ -5655,6 +5669,22 @@ function App() {
   }
 
   async function saveItem() {
+    if (itemShipTarget && activeId) {
+      if (!itemName.trim()) { setError('Wybierz przedmiot z katalogu.'); return }
+      const payload = {campaignId:activeId,shipId:itemShipTarget.shipId,location:itemShipTarget.location,
+        catalogItemId:itemCatalogItemId||null,name:itemName,quantity:Math.max(1,itemQuantity),
+        slotsPerUnit:itemSlotsPerUnit,slotGroupSize:itemSlotGroupSize,freeQuantity:itemFreeQuantity,category:itemCategory,
+        lightMinutes:itemCategory==='light'?itemLightMinutes:null,weaponDamage:itemWeaponDamage,weaponRange:itemWeaponRange,
+        weaponProperties:itemWeaponProperties,armorClass:itemArmorClass,armorProperties:itemArmorProperties,
+        maxUses:catalog.find(c=>c.id===itemCatalogItemId)?.maxUses??0}
+      const ship=ships.find(v=>v.id===itemShipTarget.shipId)
+      const capacity=SHIP_TYPES.find(t=>t.id===ship?.typeId)?.slots??0
+      const occupied=shipItems.filter(i=>i.shipId===itemShipTarget.shipId).reduce((sum,i)=>sum+shipItemSlots(i),0)
+      if(occupied+shipItemSlots({...payload,id:''})>capacity){setError('Brak wolnych slotów na statku.');return}
+      try {await createShipItem(payload);await refreshShips();setShowItem(false);setItemShipTarget(null);flash('Dodano przedmiot do ekwipunku statku.','inventory')}
+      catch(e:any){setError(e?.message||'Nie udało się dodać przedmiotu na statek.')}
+      return
+    }
     if (!activeId || !itemCharacterId) {
       setError('Najpierw wybierz kampanię i postać.')
       return
@@ -6031,11 +6061,22 @@ function App() {
     [activeCharacters, npcs, animals, bastions, bastionUpgrades]
   )
 
+  function openShipTransferItem(item: ShipItem) {
+    setShipTransferSource({shipId:item.shipId,location:item.location})
+    setTransferItemId(item.id)
+    setTransferItemName(item.name)
+    setTransferMaxQuantity(item.quantity)
+    setTransferQuantity(1)
+    setTransferToKey('')
+    setShowTransferItem(true)
+  }
+
   function openTransferItem(
     fromType: InventoryOwnerType,
     fromOwnerId: string,
     item: { id: string; name: string; quantity: number }
   ) {
+    setShipTransferSource(null)
     setTransferFromType(fromType)
     setTransferFromOwnerId(fromOwnerId)
     setTransferItemId(item.id)
@@ -6056,6 +6097,37 @@ function App() {
   async function executeTransferItem() {
     if (!activeId || !transferItemId || !transferToKey) {
       setError('Wybierz ekwipunek docelowy.')
+      return
+    }
+
+    if (shipTransferSource) {
+      const destination = transferToKey.startsWith('ship:') ? transferToKey.split(':') : null
+      const characterId = transferToKey.startsWith('character:') ? transferToKey.slice('character:'.length) : null
+      if (!destination && !characterId) {setError('Ze statku można przekazać przedmiot do kajuty, ładowni albo aktywnej postaci.');return}
+      if (destination && destination[1]===shipTransferSource.shipId && Number(destination[2])===shipTransferSource.location) {setError('Wybierz inne pomieszczenie.');return}
+      setTransferringItem(true)
+      try {
+        await transferShipItem({campaignId:activeId,itemId:transferItemId,quantity:Math.min(transferMaxQuantity,Math.max(1,transferQuantity)),targetShipId:destination?.[1]??null,targetLocation:destination?Number(destination[2]):null,targetCharacterId:characterId})
+        await Promise.all([refreshShips(),refreshItems(),refreshCharacters()])
+        setShowTransferItem(false)
+        setShipTransferSource(null)
+        flash(`Przeniesiono ${transferQuantity} × ${transferItemName}.`,'inventory')
+      } catch(e:any) {setError(e?.message||'Nie udało się przenieść ładunku.')}
+      finally {setTransferringItem(false)}
+      return
+    }
+
+    if (transferToKey.startsWith('ship:')) {
+      if (transferFromType !== 'character') { setError('Na statek można przekazać przedmiot z ekwipunku postaci.'); return }
+      const [, shipId, locationText] = transferToKey.split(':')
+      setTransferringItem(true)
+      try {
+        await transferCharacterItemToShip({ campaignId: activeId, itemId: transferItemId, shipId, location: Number(locationText), quantity: Math.min(transferMaxQuantity, Math.max(1, transferQuantity)) })
+        await Promise.all([refreshShips(), refreshItems(), refreshCharacters()])
+        setShowTransferItem(false)
+        flash(`Przeniesiono ${transferQuantity} × ${transferItemName} na statek.`, 'inventory')
+      } catch (e: any) { setError(e?.message || 'Nie udało się przenieść przedmiotu na statek.') }
+      finally { setTransferringItem(false) }
       return
     }
 
@@ -6755,24 +6827,29 @@ function App() {
     try { await action(); await refreshShips() }
     catch (e: any) { setError(e?.message || 'Nie udało się zapisać zmian statku.') }
   }
-  async function addShipCargo() {
-    if (!activeId || !shipItemShipId) return
-    const entry = catalog.find(item => item.id === shipItemCatalogId)
-    const name = entry?.name ?? shipItemCustomName.trim()
-    if (!name) { setError('Wybierz przedmiot z Biblioteki lub wpisz nazwę.'); return }
-    const quantity = Math.max(1, Math.floor(shipItemQuantity))
-    const newItem = { campaignId: activeId, shipId: shipItemShipId, location: shipItemLocation, catalogItemId: entry?.id ?? null,
-      name, quantity, slotsPerUnit: entry?.slotsPerUnit ?? 1, slotGroupSize: entry?.slotGroupSize ?? 1,
-      freeQuantity: entry?.freeQuantity ?? 0, category: entry?.category ?? 'normal' as const }
-    const ship = ships.find(s => s.id === shipItemShipId)
-    const capacity = SHIP_TYPES.find(t => t.id === ship?.typeId)?.slots ?? 0
-    const occupied = shipItems.filter(i => i.shipId === shipItemShipId).reduce((sum, i) => sum + shipItemSlots(i), 0)
-    const extra = shipItemSlots({ ...newItem, id: '' })
-    if (occupied + extra > capacity) { setError(`Brak miejsca na statku: ${occupied + extra}/${capacity} slotów.`); return }
-    await shipAction(() => createShipItem(newItem))
-    setShipItemCustomName(''); setShipItemQuantity(1)
+  async function executeShipPurchase() {
+    if (!activeId || !shipBuyTarget || !shipBuyCatalogId || !shipBuyBuyerId) { setError('Wybierz przedmiot i płatnika.'); return }
+    try {
+      await buyShipItem({campaignId:activeId,shipId:shipBuyTarget.shipId,location:shipBuyTarget.location,buyerId:shipBuyBuyerId,catalogItemId:shipBuyCatalogId,quantity:Math.max(1,Math.floor(shipBuyQuantity)),priceCp:moneyToCp(shipBuyGp,shipBuySp,shipBuyCp)})
+      await Promise.all([refreshShips(),refreshCharacters()])
+      setShipBuyTarget(null)
+      flash('Zakupiono przedmiot i umieszczono go na statku.', 'trade')
+    } catch(e:any) { setError(e?.message || 'Nie udało się kupić przedmiotu.') }
   }
-
+  async function uploadShipPortrait(vessel: Vessel, file: File) {
+    if (!supabase || !activeId) return
+    if (!file.type.startsWith('image/')) { setError('Wybierz plik graficzny.'); return }
+    if (file.size > 5 * 1024 * 1024) { setError('Ilustracja może mieć maksymalnie 5 MB.'); return }
+    const extension = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+    const path = `${activeId}/ships/${vessel.id}/${Date.now()}.${extension}`
+    try {
+      const { error } = await supabase.storage.from('character-portraits').upload(path, file, { contentType: file.type, upsert: false })
+      if (error) throw error
+      const { data } = supabase.storage.from('character-portraits').getPublicUrl(path)
+      await updateShip(vessel.id, { imageUrl: data.publicUrl })
+      await refreshShips()
+    } catch (e: any) { setError(e?.message || 'Nie udało się przesłać ilustracji statku.') }
+  }
   function bastionTypeFor(bastion: Bastion) {
     return BASTION_TYPES.find(type => type.id === bastion.typeId) ?? BASTION_TYPES[0]
   }
@@ -11745,7 +11822,7 @@ function App() {
                 <div className="panel-title"><Ship size={18}/> Nowy statek</div>
                 <div style={{display:'flex', gap:10, flexWrap:'wrap', alignItems:'center'}}>
                   <input value={newShipName} onChange={e=>setNewShipName(e.target.value)} placeholder="Nazwa statku" aria-label="Nazwa statku" />
-                  <select value={newShipType} onChange={e=>setNewShipType(e.target.value as ShipTypeId)}>{SHIP_TYPES.map(t=><option key={t.id} value={t.id}>{t.name} · {t.cost} gp · {t.slots} slotów</option>)}</select>
+                  <FantasySelect value={newShipType} onChange={v=>setNewShipType(v as ShipTypeId)} options={SHIP_TYPES.map(t=>({value:t.id,label:`${t.name} · ${t.cost} gp · ${t.slots} slotów`}))}/>
                   <button className="primary" disabled={!activeId || !newShipName.trim()} onClick={()=>shipAction(async()=>{await createShip(activeId,newShipName.trim(),newShipType);setNewShipName('')})}><Plus size={16}/> Dodaj statek</button>
                 </div>
               </section>
@@ -11759,13 +11836,15 @@ function App() {
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16}}>
                     <div>
                       {vessel.imageUrl ? <img src={vessel.imageUrl} alt={`Statek ${vessel.name}`} style={{width:'100%',maxHeight:220,objectFit:'cover',borderRadius:8}}/> : <div style={{minHeight:160,display:'grid',placeItems:'center',border:'1px solid #806337',borderRadius:8}}><Ship size={58}/></div>}
-                      <label style={{display:'block',marginTop:8}}>Adres ilustracji (URL)</label>
-                      <input style={{width:'100%'}} defaultValue={vessel.imageUrl} key={vessel.id+vessel.imageUrl} placeholder="https://..." onBlur={e=>{if(e.target.value!==vessel.imageUrl)shipAction(()=>updateShip(vessel.id,{imageUrl:e.target.value}))}}/>
+                      <label className="secondary" style={{display:'flex',justifyContent:'center',gap:8,alignItems:'center',cursor:'pointer',marginTop:8}}><Upload size={15}/> Zmień ilustrację
+                        <input type="file" accept="image/png,image/jpeg,image/webp" style={{display:'none'}} onChange={e=>{const file=e.target.files?.[0];if(file)void uploadShipPortrait(vessel,file);e.currentTarget.value=''}} />
+                      </label>
+                      <div className="muted" style={{fontSize:11,textAlign:'center',marginTop:5}}>PNG / JPG / WEBP • maks. 5 MB</div>
                       <label style={{display:'block',marginTop:8}}>Opis / historia statku</label>
                       <textarea style={{width:'100%',minHeight:72}} defaultValue={vessel.description} key={vessel.id+vessel.description} onBlur={e=>{if(e.target.value!==vessel.description)shipAction(()=>updateShip(vessel.id,{description:e.target.value}))}} />
                     </div>
                     <div>
-                      <div className="entity-card"><strong>Statystyki</strong><p>Speed: {type.speed} · AC: {type.ac} · HP maks.: {type.hp}</p><p>Właściwości: {type.properties}</p><p>Sloty: <strong>{used} / {type.slots}</strong></p><label>Aktualne HP: <input type="number" min={0} max={type.hp} style={{width:90}} value={vessel.currentHp} onChange={e=>{const hp=Math.max(0,Math.min(type.hp,Number(e.target.value)));setShips(prev=>prev.map(s=>s.id===vessel.id?{...s,currentHp:hp}:s))}} onBlur={e=>shipAction(()=>updateShip(vessel.id,{currentHp:Number(e.target.value)}))}/></label></div>
+                      <div className="entity-card"><strong>Statystyki</strong><p>Speed: {type.speed} · AC: {type.ac} · HP maks.: {type.hp}</p><p>Właściwości: {type.properties}</p><p>Sloty: <strong>{used} / {type.slots}</strong></p><div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><strong>HP: {vessel.currentHp}/{type.hp}</strong><input style={{width:70}} type="text" inputMode="numeric" placeholder="wartość" value={shipHpDrafts[vessel.id]??''} onChange={e=>setShipHpDrafts(p=>({...p,[vessel.id]:e.target.value.replace(/[^0-9]/g,'')}))}/>{([-1,1] as const).map(sign=><button key={sign} className="secondary" disabled={!Number(shipHpDrafts[vessel.id])} onClick={()=>{const delta=Number(shipHpDrafts[vessel.id]);const hp=Math.max(0,Math.min(type.hp,vessel.currentHp+sign*delta));void shipAction(()=>updateShip(vessel.id,{currentHp:hp}));setShipHpDrafts(p=>({...p,[vessel.id]:''}))}}>{sign>0?'+':'−'}</button>)}</div></div>
                       <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}><button className="secondary" onClick={()=>setShipCargoSummaryId(shipCargoSummaryId===vessel.id?null:vessel.id)}><Package size={16}/> Podsumowanie ładunku</button><button className="danger" onClick={()=>{if(window.confirm(`Usunąć statek „${vessel.name}” wraz z całym ładunkiem?`))shipAction(()=>deleteShip(vessel.id))}}><Trash2 size={16}/> Usuń</button></div>
                     </div>
                   </div>
@@ -11775,13 +11854,14 @@ function App() {
                       const roomItems=cargo.filter(i=>i.location===location)
                       return <article className="entity-card" key={location}>
                         <div className="entity-head"><strong>{shipLocationName(location)}</strong><span>{roomItems.reduce((sum,i)=>sum+shipItemSlots(i),0)} slotów</span></div>
-                        {location!==0 && <select style={{width:'100%',margin:'8px 0'}} value={cabin?.characterId && activeCharacters.some(c=>c.id===cabin.characterId)?cabin.characterId:''} disabled={!cabin} onChange={e=>{const charId=e.target.value||null; if(charId && shipCabins.some(c=>c.characterId===charId && c.id!==cabin?.id)){setError('Ta postać zajmuje już inną kajutę.');return} if(cabin)shipAction(()=>assignShipCabin(cabin.id,charId))}}><option value="">— Wolna kajuta —</option>{activeCharacters.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
-                        {roomItems.length===0?<p className="muted">Brak przedmiotów.</p>:roomItems.map(item=><div key={item.id} style={{display:'flex',alignItems:'center',gap:6,justifyContent:'space-between',marginTop:8,flexWrap:'wrap'}}><span>{item.name} · {shipItemSlots(item)} sl.</span><div style={{display:'flex',alignItems:'center',gap:5}}><button className="secondary" title="Zmniejsz ilość" onClick={()=>shipAction(()=>item.quantity===1?deleteShipItem(item.id):updateShipItem(item.id,item.quantity-1))}>−</button><b>×{item.quantity}</b><button className="secondary" title="Zwiększ ilość" onClick={()=>{const next={...item,quantity:item.quantity+1};if(used-shipItemSlots(item)+shipItemSlots(next)>type.slots){setError('Brak wolnych slotów.');return}shipAction(()=>updateShipItem(item.id,item.quantity+1))}}>+</button><button className="danger" title="Usuń przedmiot" onClick={()=>shipAction(()=>deleteShipItem(item.id))}><Trash2 size={13}/></button></div></div>)}
-                        <button className="secondary" style={{marginTop:12}} onClick={()=>{setShipItemShipId(vessel.id);setShipItemLocation(location);setShipItemCatalogId('');setShipItemCustomName('');setShipItemQuantity(1)}}><Plus size={14}/> Dodaj przedmiot</button>
+                        {location!==0 && <FantasySelect value={cabin?.characterId && activeCharacters.some(c=>c.id===cabin.characterId)?cabin.characterId:''} disabled={!cabin} onChange={v=>{const charId=v||null;if(charId&&shipCabins.some(c=>c.characterId===charId&&c.id!==cabin?.id)){setError('Ta postać zajmuje już inną kajutę.');return}if(cabin)void shipAction(()=>assignShipCabin(cabin.id,charId))}} options={[{value:'',label:'— Wolna kajuta —'},...activeCharacters.map(c=>({value:c.id,label:c.name}))]}/>}
+                        {roomItems.length===0?<p className="muted">Brak przedmiotów.</p>:roomItems.map(item=><div key={item.id} style={{display:'flex',alignItems:'center',gap:6,justifyContent:'space-between',marginTop:8,flexWrap:'wrap'}}><span>{item.name} · {shipItemSlots(item)} sl.</span><div style={{display:'flex',alignItems:'center',gap:5}}><button className="secondary" title="Zmniejsz ilość" onClick={()=>shipAction(()=>item.quantity===1?deleteShipItem(item.id):updateShipItem(item.id,item.quantity-1))}>−</button><b>×{item.quantity}</b><button className="secondary" title="Zwiększ ilość" onClick={()=>{const next={...item,quantity:item.quantity+1};if(used-shipItemSlots(item)+shipItemSlots(next)>type.slots){setError('Brak wolnych slotów.');return}shipAction(()=>updateShipItem(item.id,item.quantity+1))}}>+</button><button className="secondary" title="Przekaż przedmiot" onClick={()=>openShipTransferItem(item)}><ArrowRightLeft size={13}/> Daj</button><button className="danger" title="Usuń przedmiot" onClick={()=>shipAction(()=>deleteShipItem(item.id))}><Trash2 size={13}/></button></div></div>)}
+                        <button className="secondary" style={{marginTop:12}} onClick={()=>openNewShipItem(vessel.id,location)}><Plus size={14}/> Dodaj przedmiot</button>
+                        <button className="secondary" style={{marginTop:8,marginLeft:8}} onClick={()=>{setShipBuyTarget({shipId:vessel.id,location});setShipBuyCatalogId('');setShipBuyBuyerId(activeCharacters[0]?.id??'');setShipBuyQuantity(1);setShipBuyGp(0);setShipBuySp(0);setShipBuyCp(0)}}><Coins size={14}/> Kup (Sklep)</button>
                       </article>
                     })}
                   </div>
-                  {shipItemShipId===vessel.id && <div className="entity-card" style={{marginTop:14}}><strong>Nowy przedmiot → {shipLocationName(shipItemLocation)}</strong><div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginTop:10}}><select value={shipItemCatalogId} onChange={e=>setShipItemCatalogId(e.target.value)}><option value="">Przedmiot własny</option>{catalog.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>{!shipItemCatalogId&&<input placeholder="Nazwa przedmiotu" value={shipItemCustomName} onChange={e=>setShipItemCustomName(e.target.value)}/>}<label>Ilość <input type="number" min={1} style={{width:70}} value={shipItemQuantity} onChange={e=>setShipItemQuantity(Number(e.target.value))}/></label><button className="primary" onClick={addShipCargo}><Save size={15}/> Zapisz</button><button className="secondary" onClick={()=>setShipItemShipId('')}>Anuluj</button></div></div>}
+
                   {shipCargoSummaryId===vessel.id && <div className="entity-card" style={{marginTop:14}}><strong>Ładunek „{vessel.name}” — {used}/{type.slots} slotów</strong>{Array.from({length:6},(_,n)=>n).map(location=><div key={location} style={{marginTop:10}}><b>{shipLocationName(location)}</b>{cargo.filter(i=>i.location===location).length===0?<p className="muted">Pusto</p>:cargo.filter(i=>i.location===location).map(i=><p key={i.id}>{i.name} × {i.quantity} · {shipItemSlots(i)} slotów</p>)}</div>)}</div>}
                 </section>
               })}
@@ -14166,8 +14246,25 @@ function App() {
 
       </div>
 
+      {shipBuyTarget && (
+        <Modal onClose={()=>setShipBuyTarget(null)}>
+          <p className="eyebrow">SKLEP • ZAKUP NA STATEK</p>
+          <h2>{ships.find(s=>s.id===shipBuyTarget.shipId)?.name} — {shipLocationName(shipBuyTarget.location)}</h2>
+          <label>Przedmiot z Biblioteki
+            <FantasySelect value={shipBuyCatalogId} onChange={setShipBuyCatalogId} options={[{value:'',label:'— wybierz —'},...shopCatalogOptions.map(c=>({value:c.id,label:c.name}))]}/>
+          </label>
+          <label>Płatnik
+            <FantasySelect value={shipBuyBuyerId} onChange={setShipBuyBuyerId} options={[{value:'',label:'— wybierz postać —'},...activeCharacters.map(c=>({value:c.id,label:`${c.name} • ${c.gold} GP`}))]}/>
+          </label>
+          <label>Ilość<input type="number" min={1} value={shipBuyQuantity} onChange={e=>setShipBuyQuantity(Math.max(1,Number(e.target.value)||1))}/></label>
+          <div className="button-row"><label>GP<input type="number" min={0} value={shipBuyGp} onChange={e=>setShipBuyGp(Number(e.target.value)||0)}/></label><label>SP<input type="number" min={0} value={shipBuySp} onChange={e=>setShipBuySp(Number(e.target.value)||0)}/></label><label>CP<input type="number" min={0} value={shipBuyCp} onChange={e=>setShipBuyCp(Number(e.target.value)||0)}/></label></div>
+          <p className="muted">Zakup pobiera złoto od wybranej postaci. Przedmiot trafia bezpośrednio do wskazanej kajuty lub ładowni.</p>
+          <button className="primary full" disabled={!shipBuyCatalogId||!shipBuyBuyerId} onClick={()=>void executeShipPurchase()}><Coins size={15}/> Kup i umieść na statku</button>
+        </Modal>
+      )}
+
       {showTransferItem && (
-        <Modal onClose={() => setShowTransferItem(false)}>
+        <Modal onClose={() => {setShowTransferItem(false);setShipTransferSource(null)}}>
           <p className="eyebrow">PRZENOSZENIE</p>
           <h2>Przenieś: {transferItemName}</h2>
 
@@ -14191,35 +14288,11 @@ function App() {
 
           <label>
             Do ekwipunku
-            <select
-              value={transferToKey}
-              onChange={e => setTransferToKey(e.target.value)}
-            >
-              <option value="">— wybierz —</option>
-              {inventoryDestinations
-                .filter(destination => {
-                  if (
-                    destination.key ===
-                    `${transferFromType}:${transferFromOwnerId}`
-                  ) {
-                    return false
-                  }
-
-                  if (
-                    isWagonName(transferItemName) &&
-                    destination.type !== 'animal'
-                  ) {
-                    return false
-                  }
-
-                  return true
-                })
-                .map(destination => (
-                  <option key={destination.key} value={destination.key}>
-                    {destination.label}
-                  </option>
-                ))}
-            </select>
+            <FantasySelect value={transferToKey} onChange={setTransferToKey} options={[
+              {value:'',label:'— wybierz —'},
+              ...ships.flatMap(vessel=>Array.from({length:6},(_,location)=>({value:`ship:${vessel.id}:${location}`,label:`${vessel.name} • ${shipLocationName(location)}`}))).filter(option=>!isWagonName(transferItemName)&&(!shipTransferSource||option.value!==`ship:${shipTransferSource.shipId}:${shipTransferSource.location}`)),
+              ...inventoryDestinations.filter(destination=>shipTransferSource?destination.type==='character':destination.key!==`${transferFromType}:${transferFromOwnerId}`&&(!isWagonName(transferItemName)||destination.type==='animal')).map(destination=>({value:destination.key,label:destination.label}))
+            ]}/>
           </label>
 
           <p className="muted">
@@ -15933,9 +16006,9 @@ function App() {
           }}
         >
           <p className="eyebrow">
-            {editingItem ? 'EDYCJA PRZEDMIOTU' : 'PODNIEŚ PRZEDMIOT'}
+            {editingItem ? 'EDYCJA PRZEDMIOTU' : itemShipTarget ? 'EKWIPUNEK STATKU' : 'PODNIEŚ PRZEDMIOT'}
           </p>
-          <h2>{editingItem ? 'Edytuj przedmiot' : 'Dodaj do ekwipunku'}</h2>
+          <h2>{editingItem ? 'Edytuj przedmiot' : itemShipTarget ? `Dodaj do ${shipLocationName(itemShipTarget.location)}` : 'Dodaj do ekwipunku'}</h2>
 
           {!editingItem && (
             <>
@@ -15994,7 +16067,7 @@ function App() {
           </label>
 
           <button className="primary full" onClick={saveItem} disabled={!itemName.trim()}>
-            {editingItem ? 'Zapisz zmiany' : 'Podnieś przedmiot'}
+            {editingItem ? 'Zapisz zmiany' : itemShipTarget ? 'Dodaj na statek' : 'Podnieś przedmiot'}
           </button>
         </Modal>
       )}
@@ -16739,3 +16812,18 @@ function Metric({
 }
 
 export default App
+
+function FantasySelect({value,onChange,options,disabled=false}:{value:string;onChange:(value:string)=>void;options:{value:string;label:string}[];disabled?:boolean}) {
+  const [open,setOpen]=useState(false)
+  const selected=options.find(option=>option.value===value)
+  return <div style={{position:'relative',width:'100%',minWidth:170,flex:'1 1 170px'}}>
+    <button type="button" disabled={disabled} aria-expanded={open} aria-haspopup="listbox" className="secondary"
+      style={{width:'100%',justifyContent:'space-between',display:'flex',alignItems:'center',textAlign:'left',gap:10,background:'linear-gradient(180deg,#332718,#1c1711)',color:'#f0d8a0',border:'1px solid #8c6b3a',padding:'9px 12px'}}
+      onClick={()=>setOpen(v=>!v)}>{selected?.label??'— wybierz —'} <ChevronRight size={14} style={{transform:open?'rotate(90deg)':'rotate(0deg)'}}/></button>
+    {open&&<><button type="button" aria-label="Zamknij wybór" onClick={()=>setOpen(false)} style={{position:'fixed',inset:0,zIndex:9990,background:'transparent',border:0,cursor:'default'}}/>
+      <div role="listbox" style={{position:'absolute',top:'100%',left:0,right:0,zIndex:9991,maxHeight:260,overflowY:'auto',background:'#211a12',border:'1px solid #aa8548',boxShadow:'0 10px 28px #000b',borderRadius:6,padding:4}}>
+      {options.map(option=><button type="button" role="option" aria-selected={option.value===value} key={option.value} onClick={()=>{onChange(option.value);setOpen(false)}}
+        style={{display:'block',width:'100%',textAlign:'left',padding:'9px 10px',border:'none',borderBottom:'1px solid #483821',borderRadius:3,background:option.value===value?'#604726':'transparent',color:option.value===value?'#ffe6ac':'#d6c29e',cursor:'pointer'}}>{option.label}</button>)}
+      </div></>}
+  </div>
+}
