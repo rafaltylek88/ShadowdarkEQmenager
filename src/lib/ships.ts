@@ -9,12 +9,12 @@ export const SHIP_TYPES = [
   { id: 'raft', name: 'Raft', cost: 40, speed: 2, ac: 9, hp: 10, slots: 20, properties: 'U' },
   { id: 'rowboat', name: 'Rowboat', cost: 200, speed: 4, ac: 12, hp: 10, slots: 30, properties: 'U' },
   { id: 'sailboat', name: 'Sailboat', cost: 700, speed: 8, ac: 15, hp: 60, slots: 200, properties: 'C, F, W' },
-  { id: 'sloop', name: 'Sloop', cost: 400, speed: 8, ac: 15, hp: 30, slots: 200, properties: 'C' },
+  { id: 'sloop', name: 'Sloop', cost: 400, speed: 8, ac: 15, hp: 30, slots: 300, properties: 'C' },
 ] as const
 export type ShipTypeId = typeof SHIP_TYPES[number]['id']
 export type Ship = { id: string; campaignId: string; name: string; typeId: ShipTypeId; currentHp: number; imageUrl: string; description: string }
 export type ShipCabin = { id: string; shipId: string; number: number; characterId: string | null }
-export type ShipItem = { id: string; campaignId: string; shipId: string; location: number; catalogItemId: string | null; name: string; quantity: number; slotsPerUnit: number; slotGroupSize: number; freeQuantity: number; category: ItemCategory }
+export type ShipItem = { id: string; campaignId: string; shipId: string; location: number; catalogItemId: string | null; name: string; quantity: number; slotsPerUnit: number; slotGroupSize: number; freeQuantity: number; category: ItemCategory; lightMinutes?: number | null; weaponDamage?: string | null; weaponRange?: string | null; weaponProperties?: string | null; armorClass?: string | null; armorProperties?: string | null; maxUses?: number; usesRemaining?: number }
 const check = (error: any) => { if (error) throw error }
 export async function loadShips(campaignId: string): Promise<Ship[]> {
   if (!supabase) return []
@@ -58,11 +58,11 @@ export async function loadShipItems(campaignId: string): Promise<ShipItem[]> {
   if (!supabase) return []
   const { data, error } = await supabase.from('ship_items').select('*').eq('campaign_id', campaignId).order('created_at')
   check(error)
-  return (data ?? []).map((r: any) => ({ id: r.id, campaignId: r.campaign_id, shipId: r.ship_id, location: r.location, catalogItemId: r.catalog_item_id, name: r.name, quantity: Number(r.quantity), slotsPerUnit: Number(r.slots_per_unit), slotGroupSize: Number(r.slot_group_size), freeQuantity: Number(r.free_quantity), category: r.category }))
+  return (data ?? []).map((r: any) => ({ id: r.id, campaignId: r.campaign_id, shipId: r.ship_id, location: r.location, catalogItemId: r.catalog_item_id, name: r.name, quantity: Number(r.quantity), slotsPerUnit: Number(r.slots_per_unit), slotGroupSize: Number(r.slot_group_size), freeQuantity: Number(r.free_quantity), category: r.category, lightMinutes:r.light_minutes, weaponDamage:r.weapon_damage, weaponRange:r.weapon_range, weaponProperties:r.weapon_properties, armorClass:r.armor_class, armorProperties:r.armor_properties, maxUses:r.max_uses, usesRemaining:r.uses_remaining }))
 }
 export async function createShipItem(item: Omit<ShipItem, 'id'>) {
   if (!supabase) return
-  const { error } = await supabase.from('ship_items').insert({ campaign_id: item.campaignId, ship_id: item.shipId, location: item.location, catalog_item_id: item.catalogItemId, name: item.name, quantity: item.quantity, slots_per_unit: item.slotsPerUnit, slot_group_size: item.slotGroupSize, free_quantity: item.freeQuantity, category: item.category })
+  const { error } = await supabase.from('ship_items').insert({ campaign_id: item.campaignId, ship_id: item.shipId, location: item.location, catalog_item_id: item.catalogItemId, name: item.name, quantity: item.quantity, slots_per_unit: item.slotsPerUnit, slot_group_size: item.slotGroupSize, free_quantity: item.freeQuantity, category: item.category, light_minutes:item.lightMinutes??null, weapon_damage:item.weaponDamage??null, weapon_range:item.weaponRange??null, weapon_properties:item.weaponProperties??null, armor_class:item.armorClass??null, armor_properties:item.armorProperties??null, max_uses:item.maxUses??0, uses_remaining:item.usesRemaining??item.maxUses??0 })
   check(error)
 }
 export async function updateShipItem(id: string, quantity: number) {
@@ -79,3 +79,34 @@ export function shipItemSlots(item: ShipItem) {
   return Math.ceil(Math.max(0, item.quantity - item.freeQuantity) / Math.max(1, item.slotGroupSize)) * item.slotsPerUnit
 }
 export function shipLocationName(location: number) { return location === 0 ? 'Ładownia' : `Kajuta ${location}` }
+
+/** Atomowy transfer z ekwipunku postaci na pokład; walidacja limitu w bazie. */
+export async function transferCharacterItemToShip(input: { campaignId: string; itemId: string; shipId: string; location: number; quantity: number }) {
+  if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
+  const { error } = await supabase.rpc('transfer_character_item_to_ship', {
+    p_campaign_id: input.campaignId, p_item_id: input.itemId, p_ship_id: input.shipId,
+    p_location: input.location, p_quantity: input.quantity,
+  })
+  check(error)
+}
+
+export async function buyShipItem(input: { campaignId: string; shipId: string; location: number; buyerId: string; catalogItemId: string; quantity: number; priceCp: number }) {
+  if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
+  const { error } = await supabase.rpc('buy_ship_item', {
+    p_campaign_id: input.campaignId, p_ship_id: input.shipId, p_location: input.location,
+    p_buyer_id: input.buyerId, p_catalog_item_id: input.catalogItemId,
+    p_quantity: input.quantity, p_price_cp: input.priceCp,
+  })
+  check(error)
+}
+
+/** Atomowy transfer ładunku: statek → postać albo statek → inna kajuta/ładownia. */
+export async function transferShipItem(input: {campaignId:string;itemId:string;quantity:number;targetShipId:string|null;targetLocation:number|null;targetCharacterId:string|null}) {
+  if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
+  const {error} = await supabase.rpc('transfer_ship_item',{
+    p_campaign_id:input.campaignId,p_item_id:input.itemId,p_quantity:input.quantity,
+    p_target_ship_id:input.targetShipId,p_target_location:input.targetLocation,
+    p_target_character_id:input.targetCharacterId,
+  })
+  check(error)
+}
