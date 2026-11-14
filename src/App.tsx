@@ -8,6 +8,7 @@ import {
   BookOpen,
   Building2,
   Castle,
+  Ship,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -149,6 +150,8 @@ import {
   setBastionHp,
 } from './lib/bastions'
 import type { Bastion, BastionTypeId, BastionUpgrade } from './lib/bastions'
+import { SHIP_TYPES, loadShips, createShip, updateShip, deleteShip, loadShipCabins, assignShipCabin, loadShipItems, createShipItem, updateShipItem, deleteShipItem, shipItemSlots, shipLocationName } from './lib/ships'
+import type { Ship as Vessel, ShipCabin, ShipItem, ShipTypeId } from './lib/ships'
 import { loadBastionItems } from './lib/bastionItems'
 import type { BastionItem } from './lib/bastionItems'
 import { buyInventoryItem, sellInventoryItem } from './lib/trade'
@@ -197,6 +200,7 @@ const nav = [
   ['Postacie Fabularne', UserPlus],
   ['Zwierzęta', Beef],
   ['Bastiony', Castle],
+  ['Statki', Ship],
   ['Mapa', MapIcon],
   ['Biblioteka', Package],
   ['Kronika', ScrollText],
@@ -544,6 +548,17 @@ function App() {
   const [rationTransferFromKey, setRationTransferFromKey] = useState('')
   const [rationTransferToKey, setRationTransferToKey] = useState('')
 
+  const [ships, setShips] = useState<Vessel[]>([])
+  const [shipCabins, setShipCabins] = useState<ShipCabin[]>([])
+  const [shipItems, setShipItems] = useState<ShipItem[]>([])
+  const [newShipName, setNewShipName] = useState('')
+  const [newShipType, setNewShipType] = useState<ShipTypeId>('sloop')
+  const [shipItemShipId, setShipItemShipId] = useState('')
+  const [shipItemLocation, setShipItemLocation] = useState(0)
+  const [shipItemCatalogId, setShipItemCatalogId] = useState('')
+  const [shipItemCustomName, setShipItemCustomName] = useState('')
+  const [shipItemQuantity, setShipItemQuantity] = useState(1)
+  const [shipCargoSummaryId, setShipCargoSummaryId] = useState<string | null>(null)
   const [bastions, setBastions] = useState<Bastion[]>([])
   const [bastionUpgrades, setBastionUpgrades] = useState<BastionUpgrade[]>([])
   const [bastionsLoading, setBastionsLoading] = useState(false)
@@ -1027,6 +1042,14 @@ function App() {
     }
   }, [activeId, isCloudMode])
 
+  const refreshShips = useCallback(async () => {
+    if (!activeId) { setShips([]); setShipCabins([]); setShipItems([]); return }
+    try {
+      const [nextShips, nextCabins, nextItems] = await Promise.all([loadShips(activeId), loadShipCabins(activeId), loadShipItems(activeId)])
+      setShips(nextShips); setShipCabins(nextCabins); setShipItems(nextItems)
+    } catch (e: any) { setError(e?.message || 'Nie udało się pobrać statków.') }
+  }, [activeId])
+
   const refreshBastions = useCallback(async () => {
     if (!activeId || !isCloudMode) {
       setBastions([])
@@ -1456,6 +1479,16 @@ function App() {
   useEffect(() => {
     refreshAnimalItems()
   }, [refreshAnimalItems])
+
+  useEffect(() => { refreshShips() }, [refreshShips])
+
+  useEffect(() => {
+    if (!session || !activeId || charactersLoading || !characters.length || !shipCabins.length) return
+    const inactive = shipCabins.filter(c => c.characterId && (deadCharacterIds.has(c.characterId) || reserveCharacterIds.has(c.characterId)))
+    if (inactive.length) Promise.all(inactive.map(c => assignShipCabin(c.id, null))).then(refreshShips).catch((e: any) => setError(e?.message || 'Nie udało się zwolnić kajuty.'))
+  }, [session, activeId, charactersLoading, characters, shipCabins, deadCharacterIds, reserveCharacterIds, refreshShips])
+
+
 
   useEffect(() => {
     refreshBastions()
@@ -2542,6 +2575,8 @@ function App() {
     [animalItems, catalog]
   )
 
+  const shipCoins = useMemo(() => shipItems.filter(item => isCoinInventoryItem(item)).reduce((sum, item) => sum + item.quantity, 0), [shipItems, catalog])
+
   const bastionCoins = useMemo(
     () =>
       bastionItems
@@ -2551,14 +2586,14 @@ function App() {
   )
 
   const expeditionGold = charactersWealth + npcCoins + animalCoins
-  const totalWealth = expeditionGold + bastionCoins
+  const totalWealth = expeditionGold + bastionCoins + shipCoins
 
 
   const inventorySummary = useMemo(() => {
     type SummaryOwner = {
       key: string
       owner: string
-      ownerType: 'Postać' | 'NPC' | 'Zwierzę' | 'Bastion'
+      ownerType: 'Postać' | 'NPC' | 'Zwierzę' | 'Bastion' | 'Statek'
       quantity: number
     }
 
@@ -2629,6 +2664,13 @@ function App() {
         owner?.name ?? 'Nieznany bastion', 'Bastion', `bastion:${item.bastionId}`)
     })
 
+    shipItems.forEach(item => {
+      const ship = ships.find(vessel => vessel.id === item.shipId)
+      add(item.name, item.quantity, item.category, item.catalogItemId,
+        `${ship?.name ?? 'Nieznany statek'} → ${shipLocationName(item.location)}`,
+        'Statek', `ship:${item.shipId}:${item.location}`)
+    })
+
     return Array.from(groups.values())
       .map(group => ({
         ...group,
@@ -2639,7 +2681,7 @@ function App() {
       .sort((a, b) =>
         a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' })
       )
-  }, [items, activeCharacters, deadCharacterIds, npcItems, npcs, animalItems, animals, bastionItems, bastions])
+  }, [items, activeCharacters, deadCharacterIds, npcItems, npcs, animalItems, animals, bastionItems, bastions, shipItems, ships])
 
   const questItemSummary = useMemo(
     () =>
@@ -6707,6 +6749,28 @@ function App() {
     } finally {
       setSellingItem(false)
     }
+  }
+
+  async function shipAction(action: () => Promise<unknown>) {
+    try { await action(); await refreshShips() }
+    catch (e: any) { setError(e?.message || 'Nie udało się zapisać zmian statku.') }
+  }
+  async function addShipCargo() {
+    if (!activeId || !shipItemShipId) return
+    const entry = catalog.find(item => item.id === shipItemCatalogId)
+    const name = entry?.name ?? shipItemCustomName.trim()
+    if (!name) { setError('Wybierz przedmiot z Biblioteki lub wpisz nazwę.'); return }
+    const quantity = Math.max(1, Math.floor(shipItemQuantity))
+    const newItem = { campaignId: activeId, shipId: shipItemShipId, location: shipItemLocation, catalogItemId: entry?.id ?? null,
+      name, quantity, slotsPerUnit: entry?.slotsPerUnit ?? 1, slotGroupSize: entry?.slotGroupSize ?? 1,
+      freeQuantity: entry?.freeQuantity ?? 0, category: entry?.category ?? 'normal' as const }
+    const ship = ships.find(s => s.id === shipItemShipId)
+    const capacity = SHIP_TYPES.find(t => t.id === ship?.typeId)?.slots ?? 0
+    const occupied = shipItems.filter(i => i.shipId === shipItemShipId).reduce((sum, i) => sum + shipItemSlots(i), 0)
+    const extra = shipItemSlots({ ...newItem, id: '' })
+    if (occupied + extra > capacity) { setError(`Brak miejsca na statku: ${occupied + extra}/${capacity} slotów.`); return }
+    await shipAction(() => createShipItem(newItem))
+    setShipItemCustomName(''); setShipItemQuantity(1)
   }
 
   function bastionTypeFor(bastion: Bastion) {
@@ -11672,6 +11736,59 @@ function App() {
             </>
           )}
 
+          {activeView === 'Statki' && (
+            <>
+              <section className="hero parchment-panel">
+                <div><p className="eyebrow">FLOTA KAMPANII</p><h1>Statki</h1><p>Pięć prywatnych kajut i wspólna ładownia. Wyposażenie pozostaje na pokładzie po zwolnieniu kajuty. Sloty statków nie obciążają drużyny.</p></div>
+              </section>
+              <section className="panel" style={{ marginTop: 16 }}>
+                <div className="panel-title"><Ship size={18}/> Nowy statek</div>
+                <div style={{display:'flex', gap:10, flexWrap:'wrap', alignItems:'center'}}>
+                  <input value={newShipName} onChange={e=>setNewShipName(e.target.value)} placeholder="Nazwa statku" aria-label="Nazwa statku" />
+                  <select value={newShipType} onChange={e=>setNewShipType(e.target.value as ShipTypeId)}>{SHIP_TYPES.map(t=><option key={t.id} value={t.id}>{t.name} · {t.cost} gp · {t.slots} slotów</option>)}</select>
+                  <button className="primary" disabled={!activeId || !newShipName.trim()} onClick={()=>shipAction(async()=>{await createShip(activeId,newShipName.trim(),newShipType);setNewShipName('')})}><Plus size={16}/> Dodaj statek</button>
+                </div>
+              </section>
+              {ships.map(vessel=>{
+                const type = SHIP_TYPES.find(t=>t.id===vessel.typeId) ?? SHIP_TYPES[0]
+                const cargo = shipItems.filter(i=>i.shipId===vessel.id)
+                const used = cargo.reduce((sum,i)=>sum+shipItemSlots(i),0)
+                const cabins = shipCabins.filter(c=>c.shipId===vessel.id).sort((a,b)=>a.number-b.number)
+                return <section className="panel" key={vessel.id} style={{marginTop:16}}>
+                  <div className="panel-title"><Ship size={18}/>{vessel.name} <span style={{marginLeft:'auto'}}>{type.name} · {type.cost.toLocaleString('pl-PL')} gp</span></div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16}}>
+                    <div>
+                      {vessel.imageUrl ? <img src={vessel.imageUrl} alt={`Statek ${vessel.name}`} style={{width:'100%',maxHeight:220,objectFit:'cover',borderRadius:8}}/> : <div style={{minHeight:160,display:'grid',placeItems:'center',border:'1px solid #806337',borderRadius:8}}><Ship size={58}/></div>}
+                      <label style={{display:'block',marginTop:8}}>Adres ilustracji (URL)</label>
+                      <input style={{width:'100%'}} defaultValue={vessel.imageUrl} key={vessel.id+vessel.imageUrl} placeholder="https://..." onBlur={e=>{if(e.target.value!==vessel.imageUrl)shipAction(()=>updateShip(vessel.id,{imageUrl:e.target.value}))}}/>
+                      <label style={{display:'block',marginTop:8}}>Opis / historia statku</label>
+                      <textarea style={{width:'100%',minHeight:72}} defaultValue={vessel.description} key={vessel.id+vessel.description} onBlur={e=>{if(e.target.value!==vessel.description)shipAction(()=>updateShip(vessel.id,{description:e.target.value}))}} />
+                    </div>
+                    <div>
+                      <div className="entity-card"><strong>Statystyki</strong><p>Speed: {type.speed} · AC: {type.ac} · HP maks.: {type.hp}</p><p>Właściwości: {type.properties}</p><p>Sloty: <strong>{used} / {type.slots}</strong></p><label>Aktualne HP: <input type="number" min={0} max={type.hp} style={{width:90}} value={vessel.currentHp} onChange={e=>{const hp=Math.max(0,Math.min(type.hp,Number(e.target.value)));setShips(prev=>prev.map(s=>s.id===vessel.id?{...s,currentHp:hp}:s))}} onBlur={e=>shipAction(()=>updateShip(vessel.id,{currentHp:Number(e.target.value)}))}/></label></div>
+                      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}><button className="secondary" onClick={()=>setShipCargoSummaryId(shipCargoSummaryId===vessel.id?null:vessel.id)}><Package size={16}/> Podsumowanie ładunku</button><button className="danger" onClick={()=>{if(window.confirm(`Usunąć statek „${vessel.name}” wraz z całym ładunkiem?`))shipAction(()=>deleteShip(vessel.id))}}><Trash2 size={16}/> Usuń</button></div>
+                    </div>
+                  </div>
+                  <div className="entity-grid" style={{marginTop:16}}>
+                    {Array.from({length:6},(_,n)=>n).map(location=>{
+                      const cabin = cabins.find(c=>c.number===location)
+                      const roomItems=cargo.filter(i=>i.location===location)
+                      return <article className="entity-card" key={location}>
+                        <div className="entity-head"><strong>{shipLocationName(location)}</strong><span>{roomItems.reduce((sum,i)=>sum+shipItemSlots(i),0)} slotów</span></div>
+                        {location!==0 && <select style={{width:'100%',margin:'8px 0'}} value={cabin?.characterId && activeCharacters.some(c=>c.id===cabin.characterId)?cabin.characterId:''} disabled={!cabin} onChange={e=>{const charId=e.target.value||null; if(charId && shipCabins.some(c=>c.characterId===charId && c.id!==cabin?.id)){setError('Ta postać zajmuje już inną kajutę.');return} if(cabin)shipAction(()=>assignShipCabin(cabin.id,charId))}}><option value="">— Wolna kajuta —</option>{activeCharacters.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+                        {roomItems.length===0?<p className="muted">Brak przedmiotów.</p>:roomItems.map(item=><div key={item.id} style={{display:'flex',alignItems:'center',gap:6,justifyContent:'space-between',marginTop:8,flexWrap:'wrap'}}><span>{item.name} · {shipItemSlots(item)} sl.</span><div style={{display:'flex',alignItems:'center',gap:5}}><button className="secondary" title="Zmniejsz ilość" onClick={()=>shipAction(()=>item.quantity===1?deleteShipItem(item.id):updateShipItem(item.id,item.quantity-1))}>−</button><b>×{item.quantity}</b><button className="secondary" title="Zwiększ ilość" onClick={()=>{const next={...item,quantity:item.quantity+1};if(used-shipItemSlots(item)+shipItemSlots(next)>type.slots){setError('Brak wolnych slotów.');return}shipAction(()=>updateShipItem(item.id,item.quantity+1))}}>+</button><button className="danger" title="Usuń przedmiot" onClick={()=>shipAction(()=>deleteShipItem(item.id))}><Trash2 size={13}/></button></div></div>)}
+                        <button className="secondary" style={{marginTop:12}} onClick={()=>{setShipItemShipId(vessel.id);setShipItemLocation(location);setShipItemCatalogId('');setShipItemCustomName('');setShipItemQuantity(1)}}><Plus size={14}/> Dodaj przedmiot</button>
+                      </article>
+                    })}
+                  </div>
+                  {shipItemShipId===vessel.id && <div className="entity-card" style={{marginTop:14}}><strong>Nowy przedmiot → {shipLocationName(shipItemLocation)}</strong><div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginTop:10}}><select value={shipItemCatalogId} onChange={e=>setShipItemCatalogId(e.target.value)}><option value="">Przedmiot własny</option>{catalog.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>{!shipItemCatalogId&&<input placeholder="Nazwa przedmiotu" value={shipItemCustomName} onChange={e=>setShipItemCustomName(e.target.value)}/>}<label>Ilość <input type="number" min={1} style={{width:70}} value={shipItemQuantity} onChange={e=>setShipItemQuantity(Number(e.target.value))}/></label><button className="primary" onClick={addShipCargo}><Save size={15}/> Zapisz</button><button className="secondary" onClick={()=>setShipItemShipId('')}>Anuluj</button></div></div>}
+                  {shipCargoSummaryId===vessel.id && <div className="entity-card" style={{marginTop:14}}><strong>Ładunek „{vessel.name}” — {used}/{type.slots} slotów</strong>{Array.from({length:6},(_,n)=>n).map(location=><div key={location} style={{marginTop:10}}><b>{shipLocationName(location)}</b>{cargo.filter(i=>i.location===location).length===0?<p className="muted">Pusto</p>:cargo.filter(i=>i.location===location).map(i=><p key={i.id}>{i.name} × {i.quantity} · {shipItemSlots(i)} slotów</p>)}</div>)}</div>}
+                </section>
+              })}
+              {ships.length===0 && <section className="panel" style={{marginTop:16}}><p className="muted">Flota jest pusta. Utwórz pierwszy statek.</p></section>}
+            </>
+          )}
+
           {activeView === 'Mapa' && (
             <>
               <section className="hero parchment-panel">
@@ -13843,7 +13960,7 @@ function App() {
                   <p className="eyebrow">PODSUMOWANIE EKWIPUNKU</p>
                   <h1>{active?.name ?? 'Brak aktywnej kampanii'}</h1>
                   <p>
-                    Wszystkie przedmioty Postaci, NPC, Zwierząt i Bastionów.
+                    Wszystkie przedmioty Postaci, NPC, Zwierząt, Bastionów i Statków.
                     Lista jest alfabetyczna i pokazuje dokładnie kto posiada dany przedmiot oraz w jakiej ilości.
                   </p>
                 </div>
