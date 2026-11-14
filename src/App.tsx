@@ -11815,13 +11815,28 @@ function App() {
 
           {activeView === 'Statki' && (
             <>
+              <style>{`
+                .ship-dark-field {
+                  background: #211a13 !important;
+                  color: #f0dfbd !important;
+                  border: 1px solid #6b512e !important;
+                  border-radius: 5px !important;
+                  box-shadow: inset 0 1px 3px #0007 !important;
+                  padding: 9px 11px !important;
+                  font: inherit !important;
+                  color-scheme: dark;
+                }
+                .ship-dark-field::placeholder { color: #a18c70 !important; opacity: 1; }
+                .ship-dark-field:focus { outline: 2px solid #a9874c !important; outline-offset: 1px; border-color: #c39a57 !important; }
+                textarea.ship-dark-field { resize: vertical; line-height: 1.5; }
+              `}</style>
               <section className="hero parchment-panel">
                 <div><p className="eyebrow">FLOTA KAMPANII</p><h1>Statki</h1><p>Pięć prywatnych kajut i wspólna ładownia. Wyposażenie pozostaje na pokładzie po zwolnieniu kajuty. Sloty statków nie obciążają drużyny.</p></div>
               </section>
               <section className="panel" style={{ marginTop: 16 }}>
                 <div className="panel-title"><Ship size={18}/> Nowy statek</div>
                 <div style={{display:'flex', gap:10, flexWrap:'wrap', alignItems:'center'}}>
-                  <input value={newShipName} onChange={e=>setNewShipName(e.target.value)} placeholder="Nazwa statku" aria-label="Nazwa statku" />
+                  <input className="ship-dark-field" value={newShipName} onChange={e=>setNewShipName(e.target.value)} placeholder="Nazwa statku" aria-label="Nazwa statku" />
                   <FantasySelect value={newShipType} onChange={v=>setNewShipType(v as ShipTypeId)} options={SHIP_TYPES.map(t=>({value:t.id,label:`${t.name} · ${t.cost} gp · ${t.slots} slotów`}))}/>
                   <button className="primary" disabled={!activeId || !newShipName.trim()} onClick={()=>shipAction(async()=>{await createShip(activeId,newShipName.trim(),newShipType);setNewShipName('')})}><Plus size={16}/> Dodaj statek</button>
                 </div>
@@ -11841,10 +11856,10 @@ function App() {
                       </label>
                       <div className="muted" style={{fontSize:11,textAlign:'center',marginTop:5}}>PNG / JPG / WEBP • maks. 5 MB</div>
                       <label style={{display:'block',marginTop:8}}>Opis / historia statku</label>
-                      <textarea style={{width:'100%',minHeight:72}} defaultValue={vessel.description} key={vessel.id+vessel.description} onBlur={e=>{if(e.target.value!==vessel.description)shipAction(()=>updateShip(vessel.id,{description:e.target.value}))}} />
+                      <textarea className="ship-dark-field" style={{width:'100%',minHeight:90}} defaultValue={vessel.description} key={vessel.id+vessel.description} onBlur={e=>{if(e.target.value!==vessel.description)shipAction(()=>updateShip(vessel.id,{description:e.target.value}))}} />
                     </div>
                     <div>
-                      <div className="entity-card"><strong>Statystyki</strong><p>Speed: {type.speed} · AC: {type.ac} · HP maks.: {type.hp}</p><p>Właściwości: {type.properties}</p><p>Sloty: <strong>{used} / {type.slots}</strong></p><div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><strong>HP: {vessel.currentHp}/{type.hp}</strong><input style={{width:70}} type="text" inputMode="numeric" placeholder="wartość" value={shipHpDrafts[vessel.id]??''} onChange={e=>setShipHpDrafts(p=>({...p,[vessel.id]:e.target.value.replace(/[^0-9]/g,'')}))}/>{([-1,1] as const).map(sign=><button key={sign} className="secondary" disabled={!Number(shipHpDrafts[vessel.id])} onClick={()=>{const delta=Number(shipHpDrafts[vessel.id]);const hp=Math.max(0,Math.min(type.hp,vessel.currentHp+sign*delta));void shipAction(()=>updateShip(vessel.id,{currentHp:hp}));setShipHpDrafts(p=>({...p,[vessel.id]:''}))}}>{sign>0?'+':'−'}</button>)}</div></div>
+                      <div className="entity-card"><strong>Statystyki</strong><p>Speed: {type.speed} · AC: {type.ac} · HP maks.: {type.hp}</p><p>Właściwości: {type.properties}</p><p>Sloty: <strong>{used} / {type.slots}</strong></p><div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><strong>HP: {vessel.currentHp}/{type.hp}</strong><input className="ship-dark-field" style={{width:92}} type="text" inputMode="numeric" placeholder="wartość" value={shipHpDrafts[vessel.id]??''} onChange={e=>setShipHpDrafts(p=>({...p,[vessel.id]:e.target.value.replace(/[^0-9]/g,'')}))}/>{([-1,1] as const).map(sign=><button key={sign} className="secondary" disabled={!Number(shipHpDrafts[vessel.id])} onClick={()=>{const delta=Number(shipHpDrafts[vessel.id]);const hp=Math.max(0,Math.min(type.hp,vessel.currentHp+sign*delta));void shipAction(()=>updateShip(vessel.id,{currentHp:hp}));setShipHpDrafts(p=>({...p,[vessel.id]:''}))}}>{sign>0?'+':'−'}</button>)}</div></div>
                       <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}><button className="secondary" onClick={()=>setShipCargoSummaryId(shipCargoSummaryId===vessel.id?null:vessel.id)}><Package size={16}/> Podsumowanie ładunku</button><button className="danger" onClick={()=>{if(window.confirm(`Usunąć statek „${vessel.name}” wraz z całym ładunkiem?`))shipAction(()=>deleteShip(vessel.id))}}><Trash2 size={16}/> Usuń</button></div>
                     </div>
                   </div>
